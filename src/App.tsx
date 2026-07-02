@@ -2,9 +2,12 @@ import { useMemo, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import "./App.css";
 
-type Producto = {
+type ProductoBase = {
   codigo: string;
-  nombre: string;
+  producto: string;
+  marca: string;
+  presentacion: string;
+  especificacion: string;
 };
 
 type Lote = {
@@ -13,46 +16,78 @@ type Lote = {
   cantidad: string;
 };
 
-type EstadoProducto = "sin_codigo" | "encontrado" | "nuevo";
+type EstadoProducto = "sin_codigo" | "existente" | "nuevo";
 
 type MovimientoGuardado = {
   codigo: string;
-  nombre: string;
+  producto: string;
+  marca: string;
+  presentacion: string;
+  especificacion: string;
+  nombreMaster: string;
   ubicacion: string;
   sinVencimiento: boolean;
   productoNuevo: boolean;
   lotes: Lote[];
 };
 
-const productosBase: Producto[] = [
+const productosBase: ProductoBase[] = [
   {
     codigo: "7790895000434",
-    nombre: "Leche La Serenísima Entera 1L",
+    producto: "Leche",
+    marca: "La Serenísima",
+    especificacion: "Entera",
+    presentacion: "1L",
   },
   {
     codigo: "7790040115106",
-    nombre: "Coca-Cola Original 2.25L",
+    producto: "Coca-Cola",
+    marca: "Coca-Cola",
+    especificacion: "Original",
+    presentacion: "2.25L",
   },
   {
     codigo: "7790580110017",
-    nombre: "Arroz Gallo Oro 1kg",
+    producto: "Arroz",
+    marca: "Gallo Oro",
+    especificacion: "",
+    presentacion: "1kg",
   },
   {
     codigo: "7790070411209",
-    nombre: "Yerba Mate Taragüi 1kg",
+    producto: "Yerba Mate",
+    marca: "Taragüi",
+    especificacion: "",
+    presentacion: "1kg",
   },
 ];
 
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
+function armarNombreMaster(
+  producto: string,
+  marca: string,
+  especificacion: string,
+  presentacion: string
+) {
+  return [producto, marca, especificacion, presentacion]
+    .map((valor) => valor.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 function App() {
   const [codigo, setCodigo] = useState("");
-  const [nombre, setNombre] = useState("");
+  const [producto, setProducto] = useState("");
+  const [marca, setMarca] = useState("");
+  const [presentacion, setPresentacion] = useState("");
+  const [especificacion, setEspecificacion] = useState("");
   const [ubicacion, setUbicacion] = useState("Galpón");
   const [sinVencimiento, setSinVencimiento] = useState(false);
   const [scannerAbierto, setScannerAbierto] = useState(false);
   const [mensaje, setMensaje] = useState("");
-  const [ultimoMovimiento, setUltimoMovimiento] = useState<MovimientoGuardado | null>(null);
+  const [ultimoMovimiento, setUltimoMovimiento] =
+    useState<MovimientoGuardado | null>(null);
 
   const [lotes, setLotes] = useState<Lote[]>([
     {
@@ -67,30 +102,46 @@ function App() {
 
     if (!codigoLimpio) return undefined;
 
-    return productosBase.find((producto) => producto.codigo === codigoLimpio);
+    return productosBase.find((item) => item.codigo === codigoLimpio);
   }, [codigo]);
 
   const estadoProducto: EstadoProducto = useMemo(() => {
     if (!codigo.trim()) return "sin_codigo";
-    if (productoEncontrado) return "encontrado";
+    if (productoEncontrado) return "existente";
     return "nuevo";
   }, [codigo, productoEncontrado]);
+
+  const nombreMaster = useMemo(() => {
+    return armarNombreMaster(producto, marca, especificacion, presentacion);
+  }, [producto, marca, especificacion, presentacion]);
+
+  function cargarProductoEncontrado(productoBase: ProductoBase) {
+    setProducto(productoBase.producto);
+    setMarca(productoBase.marca);
+    setPresentacion(productoBase.presentacion);
+    setEspecificacion(productoBase.especificacion);
+  }
+
+  function limpiarDatosProducto() {
+    setProducto("");
+    setMarca("");
+    setPresentacion("");
+    setEspecificacion("");
+  }
 
   function buscarProductoPorCodigo(codigoIngresado: string) {
     const codigoLimpio = codigoIngresado.trim();
 
     setCodigo(codigoLimpio);
+    setMensaje("");
+    setUltimoMovimiento(null);
 
-    const producto = productosBase.find(
-      (producto) => producto.codigo === codigoLimpio
-    );
+    const encontrado = productosBase.find((item) => item.codigo === codigoLimpio);
 
-    if (producto) {
-      setNombre(producto.nombre);
-      setMensaje("Producto encontrado automáticamente.");
+    if (encontrado) {
+      cargarProductoEncontrado(encontrado);
     } else {
-      setNombre("");
-      setMensaje("Producto no encontrado. Cargá el nombre para registrarlo como nuevo.");
+      limpiarDatosProducto();
     }
   }
 
@@ -102,20 +153,16 @@ function App() {
     setUltimoMovimiento(null);
 
     if (!codigoLimpio) {
-      setNombre("");
+      limpiarDatosProducto();
       return;
     }
 
-    const producto = productosBase.find(
-      (producto) => producto.codigo === codigoLimpio
-    );
+    const encontrado = productosBase.find((item) => item.codigo === codigoLimpio);
 
-    if (producto) {
-      setNombre(producto.nombre);
-      setMensaje("Producto encontrado automáticamente.");
+    if (encontrado) {
+      cargarProductoEncontrado(encontrado);
     } else {
-      setNombre("");
-      setMensaje("Producto no encontrado. Cargá el nombre para registrarlo como nuevo.");
+      limpiarDatosProducto();
     }
   }
 
@@ -170,8 +217,16 @@ function App() {
       return "El código de barras es obligatorio.";
     }
 
-    if (!nombre.trim()) {
-      return "El nombre del producto es obligatorio.";
+    if (!producto.trim()) {
+      return "El campo Producto es obligatorio.";
+    }
+
+    if (estadoProducto === "nuevo" && !marca.trim()) {
+      return "El campo Marca es obligatorio para productos nuevos.";
+    }
+
+    if (estadoProducto === "nuevo" && !presentacion.trim()) {
+      return "El campo Presentación es obligatorio para productos nuevos.";
     }
 
     if (!ubicacion.trim()) {
@@ -201,7 +256,11 @@ function App() {
 
     const movimiento: MovimientoGuardado = {
       codigo: codigo.trim(),
-      nombre: nombre.trim(),
+      producto: producto.trim(),
+      marca: marca.trim(),
+      presentacion: presentacion.trim(),
+      especificacion: especificacion.trim(),
+      nombreMaster,
       ubicacion,
       sinVencimiento,
       productoNuevo: estadoProducto === "nuevo",
@@ -216,7 +275,7 @@ function App() {
 
   function limpiarFormulario() {
     setCodigo("");
-    setNombre("");
+    limpiarDatosProducto();
     setUbicacion("Galpón");
     setSinVencimiento(false);
     setLotes([
@@ -260,7 +319,7 @@ function App() {
           </div>
 
           <div className="field-group">
-            <label htmlFor="codigo">Código de barras</label>
+            <label htmlFor="codigo">Código</label>
 
             <div className="barcode-row">
               <input
@@ -282,46 +341,72 @@ function App() {
             </div>
           </div>
 
-          {estadoProducto === "encontrado" && (
-            <div className="product-status product-status-success">
-              <strong>Producto encontrado</strong>
-              <span>{productoEncontrado?.nombre}</span>
-            </div>
-          )}
-
           {estadoProducto === "nuevo" && (
-            <div className="product-status product-status-warning">
+            <div className="product-new-box">
               <strong>Producto nuevo</strong>
-              <span>
-                Este código todavía no existe en la base local. Cargá el nombre del
-                producto para poder guardar el movimiento.
-              </span>
+              <span>Complete los datos para crearlo:</span>
             </div>
           )}
 
-          <div className="field-group">
-            <label htmlFor="nombre">Nombre del producto</label>
-            <input
-              id="nombre"
-              type="text"
-              value={nombre}
-              onChange={(event) => setNombre(event.target.value)}
-              placeholder="Nombre del producto"
-              readOnly={estadoProducto === "encontrado"}
-            />
+          {estadoProducto !== "sin_codigo" && (
+            <section className="product-data-section">
+              <div className="field-group">
+                <label htmlFor="producto">Producto</label>
+                <input
+                  id="producto"
+                  type="text"
+                  value={producto}
+                  onChange={(event) => setProducto(event.target.value)}
+                  placeholder="Ej: Leche"
+                  readOnly={estadoProducto === "existente"}
+                />
+              </div>
 
-            {estadoProducto === "encontrado" && (
-              <p className="helper success">
-                El nombre se completó automáticamente desde la base local.
-              </p>
-            )}
+              {estadoProducto === "nuevo" && (
+                <div className="product-grid">
+                  <div className="field-group">
+                    <label htmlFor="marca">Marca</label>
+                    <input
+                      id="marca"
+                      type="text"
+                      value={marca}
+                      onChange={(event) => setMarca(event.target.value)}
+                      placeholder="Ej: La Serenísima"
+                    />
+                  </div>
 
-            {estadoProducto === "nuevo" && (
-              <p className="helper warning">
-                Más adelante este producto se va a poder crear automáticamente en Airtable.
-              </p>
-            )}
-          </div>
+                  <div className="field-group">
+                    <label htmlFor="presentacion">Presentación</label>
+                    <input
+                      id="presentacion"
+                      type="text"
+                      value={presentacion}
+                      onChange={(event) => setPresentacion(event.target.value)}
+                      placeholder="Ej: 1L"
+                    />
+                  </div>
+
+                  <div className="field-group">
+                    <label htmlFor="especificacion">Especificación</label>
+                    <input
+                      id="especificacion"
+                      type="text"
+                      value={especificacion}
+                      onChange={(event) => setEspecificacion(event.target.value)}
+                      placeholder="Ej: Entera / Sin TACC / 0000"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {nombreMaster && (
+                <div className="nombre-master-preview">
+                  <span>Nombre master</span>
+                  <strong>{nombreMaster}</strong>
+                </div>
+              )}
+            </section>
+          )}
 
           <div className="checkbox-row">
             <input
@@ -366,7 +451,9 @@ function App() {
 
                 {!sinVencimiento && (
                   <div className="field-group">
-                    <label htmlFor={`vencimiento-${lote.id}`}>Fecha de vencimiento</label>
+                    <label htmlFor={`vencimiento-${lote.id}`}>
+                      Fecha de vencimiento
+                    </label>
                     <input
                       id={`vencimiento-${lote.id}`}
                       type="date"
@@ -417,7 +504,7 @@ function App() {
             </p>
 
             <p>
-              <strong>Producto:</strong> {ultimoMovimiento.nombre}
+              <strong>Nombre master:</strong> {ultimoMovimiento.nombreMaster}
             </p>
 
             <p>

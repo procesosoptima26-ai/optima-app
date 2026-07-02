@@ -7,75 +7,98 @@ type BarcodeScannerProps = {
   onClose: () => void;
 };
 
-const READER_ID = "reader";
+const READER_ID = "optima-barcode-reader";
 
 function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) {
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerActivoRef = useRef(false);
   const yaEscaneoRef = useRef(false);
   const [error, setError] = useState("");
 
+  async function detenerScanner() {
+    const scanner = scannerRef.current;
+
+    if (!scanner) return;
+
+    try {
+      if (scannerActivoRef.current) {
+        await scanner.stop();
+        scannerActivoRef.current = false;
+      }
+
+      await scanner.clear();
+    } catch (error) {
+      console.warn("No se pudo detener el escáner:", error);
+    }
+  }
+
   useEffect(() => {
-    const scanner = new Html5Qrcode(READER_ID);
-    scannerRef.current = scanner;
+    let componenteMontado = true;
 
-    scanner
-      .start(
-        { facingMode: "environment" },
-        {
-          fps: 10,
-          qrbox: {
-            width: 250,
-            height: 160,
+    async function iniciarScanner() {
+      try {
+        setError("");
+
+        const scanner = new Html5Qrcode(READER_ID);
+        scannerRef.current = scanner;
+
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: {
+              width: 280,
+              height: 160,
+            },
+            aspectRatio: 1.777778,
           },
-        },
-        async (decodedText) => {
-          if (yaEscaneoRef.current) return;
+          async (decodedText: string) => {
+            if (yaEscaneoRef.current) return;
 
-          yaEscaneoRef.current = true;
+            yaEscaneoRef.current = true;
 
-          try {
-            await scanner.stop();
-            await scanner.clear();
-          } catch (error) {
-            console.warn("No se pudo cerrar el scanner:", error);
+            const codigoLimpio = decodedText.trim();
+
+            await detenerScanner();
+
+            if (componenteMontado) {
+              setTimeout(() => {
+                onScanSuccess(codigoLimpio);
+              }, 150);
+            }
+          },
+          () => {
+            // Es normal que falle muchas veces mientras busca el código.
+            // No mostramos esos errores porque ensucian la pantalla.
           }
-
-          onScanSuccess(decodedText);
-        },
-        () => {
-          // Es normal que falle muchas veces mientras busca el código.
-          // Por eso no mostramos esos errores en pantalla.
-        }
-      )
-      .catch((error) => {
-        console.error("Error al abrir la cámara:", error);
-        setError(
-          "No se pudo abrir la cámara. Revisá los permisos o probá desde el celular con HTTPS."
         );
-      });
+
+        scannerActivoRef.current = true;
+
+        if (!componenteMontado) {
+          await detenerScanner();
+        }
+      } catch (error) {
+        console.error("Error al iniciar el escáner:", error);
+
+        if (componenteMontado) {
+          setError(
+            "No se pudo abrir la cámara. Revisá los permisos o probá nuevamente."
+          );
+        }
+      }
+    }
+
+    iniciarScanner();
 
     return () => {
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .then(() => scannerRef.current?.clear())
-          .catch(() => {
-            // Si ya estaba cerrado, no hacemos nada.
-          });
-      }
+      componenteMontado = false;
+      detenerScanner();
     };
   }, [onScanSuccess]);
 
-  async function cerrarScanner() {
-    try {
-      if (scannerRef.current) {
-        await scannerRef.current.stop();
-        await scannerRef.current.clear();
-      }
-    } catch (error) {
-      console.warn("No se pudo cerrar manualmente el scanner:", error);
-    }
-
+  async function cerrarManual() {
+    await detenerScanner();
     onClose();
   }
 
@@ -88,7 +111,7 @@ function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) {
             <p>Apuntá la cámara al código de barras del producto.</p>
           </div>
 
-          <button className="scanner-close" type="button" onClick={cerrarScanner}>
+          <button className="scanner-close" type="button" onClick={cerrarManual}>
             ✕
           </button>
         </div>
@@ -97,7 +120,7 @@ function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) {
 
         {error && <p className="scanner-error">{error}</p>}
 
-        <button className="scanner-cancel-button" type="button" onClick={cerrarScanner}>
+        <button className="scanner-cancel-button" type="button" onClick={cerrarManual}>
           Cancelar
         </button>
       </div>
@@ -106,3 +129,4 @@ function BarcodeScanner({ onScanSuccess, onClose }: BarcodeScannerProps) {
 }
 
 export default BarcodeScanner;
+

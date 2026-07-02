@@ -116,6 +116,10 @@ select {
   background: #1d4ed8;
 }
 
+.product-data-section {
+  margin-top: 4px;
+}
+
 .product-new-box {
   display: flex;
   flex-direction: column;
@@ -136,17 +140,13 @@ select {
   font-size: 14px;
 }
 
-.product-data-section {
-  margin-top: 4px;
-}
-
 .product-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
 }
 
-.nombre-master-preview {
+.nombre-preview {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -158,14 +158,14 @@ select {
   color: #1e3a8a;
 }
 
-.nombre-master-preview span {
+.nombre-preview span {
   font-size: 13px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
 
-.nombre-master-preview strong {
+.nombre-preview strong {
   font-size: 16px;
 }
 

@@ -24,7 +24,7 @@ type MovimientoGuardado = {
   marca: string;
   presentacion: string;
   especificacion: string;
-  nombreMaster: string;
+  nombre: string;
   ubicacion: string;
   sinVencimiento: boolean;
   productoNuevo: boolean;
@@ -64,7 +64,7 @@ const productosBase: ProductoBase[] = [
 
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
-function armarNombreMaster(
+function armarNombre(
   producto: string,
   marca: string,
   especificacion: string,
@@ -111,8 +111,8 @@ function App() {
     return "nuevo";
   }, [codigo, productoEncontrado]);
 
-  const nombreMaster = useMemo(() => {
-    return armarNombreMaster(producto, marca, especificacion, presentacion);
+  const nombre = useMemo(() => {
+    return armarNombre(producto, marca, especificacion, presentacion);
   }, [producto, marca, especificacion, presentacion]);
 
   function cargarProductoEncontrado(productoBase: ProductoBase) {
@@ -214,7 +214,7 @@ function App() {
 
   function validarFormulario() {
     if (!codigo.trim()) {
-      return "El código de barras es obligatorio.";
+      return "El código es obligatorio.";
     }
 
     if (!producto.trim()) {
@@ -260,7 +260,7 @@ function App() {
       marca: marca.trim(),
       presentacion: presentacion.trim(),
       especificacion: especificacion.trim(),
-      nombreMaster,
+      nombre,
       ubicacion,
       sinVencimiento,
       productoNuevo: estadoProducto === "nuevo",
@@ -341,15 +341,27 @@ function App() {
             </div>
           </div>
 
-          {estadoProducto === "nuevo" && (
-            <div className="product-new-box">
-              <strong>Producto nuevo</strong>
-              <span>Complete los datos para crearlo:</span>
-            </div>
+          {estadoProducto === "existente" && (
+            <section className="product-data-section">
+              <div className="field-group">
+                <label htmlFor="nombre-existente">Nombre</label>
+                <input
+                  id="nombre-existente"
+                  type="text"
+                  value={nombre}
+                  readOnly
+                />
+              </div>
+            </section>
           )}
 
-          {estadoProducto !== "sin_codigo" && (
+          {estadoProducto === "nuevo" && (
             <section className="product-data-section">
+              <div className="product-new-box">
+                <strong>Producto nuevo</strong>
+                <span>Complete los datos para crearlo:</span>
+              </div>
+
               <div className="field-group">
                 <label htmlFor="producto">Producto</label>
                 <input
@@ -358,51 +370,48 @@ function App() {
                   value={producto}
                   onChange={(event) => setProducto(event.target.value)}
                   placeholder="Ej: Leche"
-                  readOnly={estadoProducto === "existente"}
                 />
               </div>
 
-              {estadoProducto === "nuevo" && (
-                <div className="product-grid">
-                  <div className="field-group">
-                    <label htmlFor="marca">Marca</label>
-                    <input
-                      id="marca"
-                      type="text"
-                      value={marca}
-                      onChange={(event) => setMarca(event.target.value)}
-                      placeholder="Ej: La Serenísima"
-                    />
-                  </div>
-
-                  <div className="field-group">
-                    <label htmlFor="presentacion">Presentación</label>
-                    <input
-                      id="presentacion"
-                      type="text"
-                      value={presentacion}
-                      onChange={(event) => setPresentacion(event.target.value)}
-                      placeholder="Ej: 1L"
-                    />
-                  </div>
-
-                  <div className="field-group">
-                    <label htmlFor="especificacion">Especificación</label>
-                    <input
-                      id="especificacion"
-                      type="text"
-                      value={especificacion}
-                      onChange={(event) => setEspecificacion(event.target.value)}
-                      placeholder="Ej: Entera / Sin TACC / 0000"
-                    />
-                  </div>
+              <div className="product-grid">
+                <div className="field-group">
+                  <label htmlFor="marca">Marca</label>
+                  <input
+                    id="marca"
+                    type="text"
+                    value={marca}
+                    onChange={(event) => setMarca(event.target.value)}
+                    placeholder="Ej: La Serenísima"
+                  />
                 </div>
-              )}
 
-              {nombreMaster && (
-                <div className="nombre-master-preview">
-                  <span>Nombre master</span>
-                  <strong>{nombreMaster}</strong>
+                <div className="field-group">
+                  <label htmlFor="presentacion">Presentación</label>
+                  <input
+                    id="presentacion"
+                    type="text"
+                    value={presentacion}
+                    onChange={(event) => setPresentacion(event.target.value)}
+                    placeholder="Ej: 1L"
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="especificacion">Especificación</label>
+                  <input
+                    id="especificacion"
+                    type="text"
+                    value={especificacion}
+                    onChange={(event) => setEspecificacion(event.target.value)}
+                    placeholder="Ej: Entera / Sin TACC / 0000"
+                  />
+                </div>
+              </div>
+
+              {nombre && (
+                <div className="nombre-preview">
+                  <span>Nombre</span>
+                  <strong>{nombre}</strong>
                 </div>
               )}
             </section>
@@ -504,7 +513,7 @@ function App() {
             </p>
 
             <p>
-              <strong>Nombre master:</strong> {ultimoMovimiento.nombreMaster}
+              <strong>Nombre:</strong> {ultimoMovimiento.nombre}
             </p>
 
             <p>

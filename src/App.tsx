@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./App.css";
+import BarcodeScanner from "./components/BarcodeScanner";
 
 type Lote = {
   id: number;
@@ -21,27 +22,27 @@ function App() {
   const [nombre, setNombre] = useState("");
   const [ubicacion, setUbicacion] = useState("Galpón");
   const [sinVencimiento, setSinVencimiento] = useState(false);
+  const [scannerAbierto, setScannerAbierto] = useState(false);
+
   const [lotes, setLotes] = useState<Lote[]>([
     { id: Date.now(), vencimiento: "", cantidad: "" },
   ]);
+
   const [productos, setProductos] = useState<Producto[]>([]);
 
   function formatearFecha(fecha: string) {
     if (!fecha) return "";
-
     const [anio, mes, dia] = fecha.split("-");
     return `${dia}/${mes}/${anio.slice(2)}`;
   }
 
-  function abrirCamara() {
-    alert("Próximo paso: acá vamos a abrir la cámara para escanear.");
+  function manejarCodigoEscaneado(codigoEscaneado: string) {
+    setCodigo(codigoEscaneado);
+    setScannerAbierto(false);
   }
 
   function agregarLote() {
-    setLotes([
-      ...lotes,
-      { id: Date.now(), vencimiento: "", cantidad: "" },
-    ]);
+    setLotes([...lotes, { id: Date.now(), vencimiento: "", cantidad: "" }]);
   }
 
   function actualizarLote(
@@ -67,7 +68,7 @@ function App() {
 
   function guardarProducto() {
     if (!codigo || !nombre || !ubicacion) {
-      alert("Completá código, nombre y ubicación");
+      alert("Completá código, producto y ubicación");
       return;
     }
 
@@ -82,7 +83,7 @@ function App() {
       );
 
       if (hayLoteIncompleto) {
-        alert("Completá fecha de vencimiento y cantidad en todos los lotes");
+        alert("Completá fecha y unidades en todos los lotes");
         return;
       }
     }
@@ -109,6 +110,13 @@ function App() {
 
   return (
     <div className="app">
+      {scannerAbierto && (
+        <BarcodeScanner
+          onScan={manejarCodigoEscaneado}
+          onClose={() => setScannerAbierto(false)}
+        />
+      )}
+
       <div className="header">
         <h1>📦 OPTIMA Inventario</h1>
         <p>Control de stock, ubicaciones y vencimientos</p>
@@ -124,7 +132,11 @@ function App() {
               onChange={(e) => setCodigo(e.target.value)}
             />
 
-            <button type="button" className="camera-button" onClick={abrirCamara}>
+            <button
+              type="button"
+              className="camera-button"
+              onClick={() => setScannerAbierto(true)}
+            >
               📷
             </button>
           </div>
@@ -237,4 +249,4 @@ function App() {
   );
 }
 
-export default App;                                                                   
+export default App;

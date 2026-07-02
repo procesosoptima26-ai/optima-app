@@ -2,12 +2,20 @@ import { useMemo, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import "./App.css";
 
-type ProductoBase = {
+type ProductoApi = {
+  id: string;
   codigo: string;
+  nombre: string;
   producto: string;
   marca: string;
   presentacion: string;
   especificacion: string;
+};
+
+type RespuestaProductoApi = {
+  encontrado: boolean;
+  producto: ProductoApi | null;
+  error?: string;
 };
 
 type Lote = {
@@ -16,7 +24,7 @@ type Lote = {
   cantidad: string;
 };
 
-type EstadoProducto = "sin_codigo" | "existente" | "nuevo";
+type EstadoProducto = "sin_codigo" | "buscando" | "existente" | "nuevo" | "error";
 
 type MovimientoGuardado = {
   codigo: string;
@@ -30,37 +38,6 @@ type MovimientoGuardado = {
   productoNuevo: boolean;
   lotes: Lote[];
 };
-
-const productosBase: ProductoBase[] = [
-  {
-    codigo: "7790895000434",
-    producto: "Leche",
-    marca: "La Serenísima",
-    especificacion: "Entera",
-    presentacion: "1L",
-  },
-  {
-    codigo: "7790040115106",
-    producto: "Coca-Cola",
-    marca: "Coca-Cola",
-    especificacion: "Original",
-    presentacion: "2.25L",
-  },
-  {
-    codigo: "7790580110017",
-    producto: "Arroz",
-    marca: "Gallo Oro",
-    especificacion: "",
-    presentacion: "1kg",
-  },
-  {
-    codigo: "7790070411209",
-    producto: "Yerba Mate",
-    marca: "Taragüi",
-    especificacion: "",
-    presentacion: "1kg",
-  },
-];
 
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
@@ -86,6 +63,8 @@ function App() {
   const [sinVencimiento, setSinVencimiento] = useState(false);
   const [scannerAbierto, setScannerAbierto] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [estadoProducto, setEstadoProducto] =
+    useState<EstadoProducto>("sin_codigo");
   const [ultimoMovimiento, setUltimoMovimiento] =
     useState<MovimientoGuardado | null>(null);
 
@@ -97,29 +76,15 @@ function App() {
     },
   ]);
 
-  const productoEncontrado = useMemo(() => {
-    const codigoLimpio = codigo.trim();
-
-    if (!codigoLimpio) return undefined;
-
-    return productosBase.find((item) => item.codigo === codigoLimpio);
-  }, [codigo]);
-
-  const estadoProducto: EstadoProducto = useMemo(() => {
-    if (!codigo.trim()) return "sin_codigo";
-    if (productoEncontrado) return "existente";
-    return "nuevo";
-  }, [codigo, productoEncontrado]);
-
   const nombre = useMemo(() => {
     return armarNombre(producto, marca, especificacion, presentacion);
   }, [producto, marca, especificacion, presentacion]);
 
-  function cargarProductoEncontrado(productoBase: ProductoBase) {
-    setProducto(productoBase.producto);
-    setMarca(productoBase.marca);
-    setPresentacion(productoBase.presentacion);
-    setEspecificacion(productoBase.especificacion);
+  function cargarProductoEncontrado(productoApi: ProductoApi) {
+    setProducto(productoApi.producto);
+    setMarca(productoApi.marca);
+    setPresentacion(productoApi.presentacion);
+    setEspecificacion(productoApi.especificacion);
   }
 
   function limpiarDatosProducto() {
@@ -129,40 +94,68 @@ function App() {
     setEspecificacion("");
   }
 
-  function buscarProductoPorCodigo(codigoIngresado: string) {
+  async function buscarProductoEnAirtable(codigoIngresado: string) {
     const codigoLimpio = codigoIngresado.trim();
 
     setCodigo(codigoLimpio);
     setMensaje("");
     setUltimoMovimiento(null);
 
-    const encontrado = productosBase.find((item) => item.codigo === codigoLimpio);
-
-    if (encontrado) {
-      cargarProductoEncontrado(encontrado);
-    } else {
+    if (!codigoLimpio) {
       limpiarDatosProducto();
+      setEstadoProducto("sin_codigo");
+      return;
+    }
+
+    setEstadoProducto("buscando");
+    limpiarDatosProducto();
+
+    try {
+      const response = await fetch(
+        `/api/productos?codigo=${encodeURIComponent(codigoLimpio)}`
+      );
+
+      const data = (await response.json()) as RespuestaProductoApi;
+
+      if (!response.ok) {
+        throw new Error(data.error || "Error buscando producto");
+      }
+
+      if (data.encontrado && data.producto) {
+        cargarProductoEncontrado(data.producto);
+        setEstadoProducto("existente");
+        return;
+      }
+
+      setEstadoProducto("nuevo");
+    } catch (error) {
+      console.error("Error buscando producto:", error);
+      limpiarDatosProducto();
+      setEstadoProducto("error");
+      setMensaje("No se pudo buscar el producto en Airtable.");
     }
   }
 
   function manejarCambioCodigo(valor: string) {
-    const codigoLimpio = valor.trim();
-
     setCodigo(valor);
     setMensaje("");
     setUltimoMovimiento(null);
 
-    if (!codigoLimpio) {
+    if (!valor.trim()) {
       limpiarDatosProducto();
-      return;
+      setEstadoProducto("sin_codigo");
     }
+  }
 
-    const encontrado = productosBase.find((item) => item.codigo === codigoLimpio);
+  function manejarBlurCodigo() {
+    if (!codigo.trim()) return;
 
-    if (encontrado) {
-      cargarProductoEncontrado(encontrado);
-    } else {
-      limpiarDatosProducto();
+    buscarProductoEnAirtable(codigo);
+  }
+
+  function manejarEnterCodigo(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter") {
+      buscarProductoEnAirtable(codigo);
     }
   }
 
@@ -215,6 +208,10 @@ function App() {
   function validarFormulario() {
     if (!codigo.trim()) {
       return "El código es obligatorio.";
+    }
+
+    if (estadoProducto === "buscando") {
+      return "Esperá a que termine la búsqueda del producto.";
     }
 
     if (!producto.trim()) {
@@ -278,6 +275,7 @@ function App() {
     limpiarDatosProducto();
     setUbicacion("Galpón");
     setSinVencimiento(false);
+    setEstadoProducto("sin_codigo");
     setLotes([
       {
         id: Date.now(),
@@ -327,6 +325,8 @@ function App() {
                 type="text"
                 value={codigo}
                 onChange={(event) => manejarCambioCodigo(event.target.value)}
+                onBlur={manejarBlurCodigo}
+                onKeyDown={manejarEnterCodigo}
                 placeholder="Escaneá o escribí el código"
               />
 
@@ -340,6 +340,10 @@ function App() {
               </button>
             </div>
           </div>
+
+          {estadoProducto === "buscando" && (
+            <p className="message">Buscando producto...</p>
+          )}
 
           {estadoProducto === "existente" && (
             <section className="product-data-section">
@@ -549,7 +553,7 @@ function App() {
       {scannerAbierto && (
         <BarcodeScanner
           onScanSuccess={(codigoEscaneado) => {
-            buscarProductoPorCodigo(codigoEscaneado);
+            buscarProductoEnAirtable(codigoEscaneado);
             setScannerAbierto(false);
           }}
           onClose={() => setScannerAbierto(false)}

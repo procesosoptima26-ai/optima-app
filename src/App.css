@@ -1,0 +1,141 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.app {
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.header {
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 32px;
+}
+
+.header p {
+  margin: 8px 0 0;
+  color: #6b7280;
+}
+
+.card {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+}
+
+.form {
+  display: grid;
+  gap: 12px;
+}
+
+.form input,
+.form select,
+.form button {
+  width: 100%;
+  padding: 12px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+.form input,
+.form select {
+  border: 1px solid #d1d5db;
+}
+
+.form button {
+  border: none;
+  background: #111827;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.item {
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.item span {
+  display: block;
+  color: #4b5563;
+  font-size: 14px;
+}
+.lote {
+  display: grid;
+  grid-template-columns: 1fr 110px 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.lote input {
+  min-width: 0;
+}
+
+.secondary {
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+.danger {
+  background: #fee2e2 !important;
+  color: #991b1b !important;
+  padding: 12px 0 !important;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.item {
+  text-align: left;
+}
+
+.item strong {
+  font-size: 18px;
+}
+
+.item span {
+  margin-top: 4px;
+}
+.codigo-row {
+  display: grid;
+  grid-template-columns: 1fr 54px;
+  gap: 8px;
+}
+
+.camera-button {
+  padding: 12px !important;
+  font-size: 20px !important;
+}

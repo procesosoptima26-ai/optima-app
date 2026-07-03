@@ -33,6 +33,11 @@ type Lote = {
 
 type EstadoProducto = "sin_codigo" | "buscando" | "existente" | "nuevo" | "error";
 
+type Aviso = {
+  tipo: "info" | "exito" | "error";
+  texto: string;
+};
+
 type MovimientoGuardado = {
   codigo: string;
   producto: string;
@@ -62,7 +67,7 @@ function armarNombre(
 }
 
 function App() {
-  const codigoInputRef = useRef<HTMLInputElement>(null);
+  const codigoInputRef = useRef<HTMLInputElement | null>(null);
 
   const [codigo, setCodigo] = useState("");
   const [producto, setProducto] = useState("");
@@ -73,7 +78,7 @@ function App() {
   const [sinVencimiento, setSinVencimiento] = useState(false);
   const [observaciones, setObservaciones] = useState("");
   const [scannerAbierto, setScannerAbierto] = useState(false);
-  const [mensaje, setMensaje] = useState("");
+  const [aviso, setAviso] = useState<Aviso | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [estadoProducto, setEstadoProducto] =
     useState<EstadoProducto>("sin_codigo");
@@ -110,7 +115,7 @@ function App() {
     const codigoLimpio = codigoIngresado.trim();
 
     setCodigo(codigoLimpio);
-    setMensaje("");
+    setAviso(null);
     setUltimoMovimiento(null);
 
     if (!codigoLimpio) {
@@ -144,13 +149,16 @@ function App() {
       console.error("Error buscando producto:", error);
       limpiarDatosProducto();
       setEstadoProducto("error");
-      setMensaje("No se pudo buscar el producto en Airtable.");
+      setAviso({
+        tipo: "error",
+        texto: "No se pudo buscar el producto en Airtable.",
+      });
     }
   }
 
   function manejarCambioCodigo(valor: string) {
     setCodigo(valor);
-    setMensaje("");
+    setAviso(null);
     setUltimoMovimiento(null);
 
     if (!valor.trim()) {
@@ -161,7 +169,6 @@ function App() {
 
   function manejarBlurCodigo() {
     if (!codigo.trim()) return;
-
     buscarProductoEnAirtable(codigo);
   }
 
@@ -185,7 +192,6 @@ function App() {
   function eliminarLote(id: number) {
     setLotes((lotesActuales) => {
       if (lotesActuales.length === 1) return lotesActuales;
-
       return lotesActuales.filter((lote) => lote.id !== id);
     });
   }
@@ -278,7 +284,10 @@ function App() {
     const error = validarFormulario();
 
     if (error) {
-      setMensaje(error);
+      setAviso({
+        tipo: "error",
+        texto: error,
+      });
       return;
     }
 
@@ -298,7 +307,10 @@ function App() {
 
     try {
       setGuardando(true);
-      setMensaje("Guardando inventario...");
+      setAviso({
+        tipo: "info",
+        texto: "Guardando inventario...",
+      });
 
       const response = await fetch("/api/stock", {
         method: "POST",
@@ -317,16 +329,20 @@ function App() {
       setUltimoMovimiento(movimiento);
       prepararSiguienteCarga();
 
-      setMensaje(
-        `Inventario guardado correctamente. Registros creados: ${
+      setAviso({
+        tipo: "exito",
+        texto: `Guardado OK. Registros creados: ${
           data.cantidadRegistros || lotes.length
-        }. Listo para escanear el siguiente producto.`
-      );
+        }. Ya podés escanear el siguiente producto.`,
+      });
 
       console.log("Inventario guardado:", movimiento);
     } catch (error) {
       console.error("Error guardando inventario:", error);
-      setMensaje("No se pudo guardar el inventario en Airtable.");
+      setAviso({
+        tipo: "error",
+        texto: "No se pudo guardar el inventario en Airtable.",
+      });
     } finally {
       setGuardando(false);
     }
@@ -346,7 +362,7 @@ function App() {
         cantidad: "",
       },
     ]);
-    setMensaje("");
+    setAviso(null);
     setUltimoMovimiento(null);
 
     setTimeout(() => {
@@ -354,18 +370,43 @@ function App() {
     }, 100);
   }
 
+  const textoEstadoProducto = {
+    sin_codigo: "Esperando código",
+    buscando: "Buscando producto...",
+    existente: "Producto encontrado",
+    nuevo: "Producto nuevo",
+    error: "Error de búsqueda",
+  };
+
   return (
     <main className="app">
       <section className="app-container">
         <header className="app-header">
-          <div>
-            <p className="app-kicker">OPTIMA APP</p>
-            <h1>Inventario inicial</h1>
-            <p>
-              Escaneá productos, cargá vencimientos y registrá el stock contado.
-            </p>
+          <div className="brand-row">
+            <div className="brand-logo">O</div>
+
+            <div>
+              <p className="app-kicker">OPTIMA</p>
+              <h1>Inventario inicial</h1>
+            </div>
           </div>
+
+          <p>
+            Escaneá productos, cargá vencimientos y registrá el stock contado.
+          </p>
         </header>
+
+        <section className="quick-status-card">
+          <div>
+            <span className="status-label">Ubicación actual</span>
+            <strong>{ubicacion}</strong>
+          </div>
+
+          <div>
+            <span className="status-label">Estado</span>
+            <strong>{textoEstadoProducto[estadoProducto]}</strong>
+          </div>
+        </section>
 
         <section className="form-card">
           <div className="field-group">
@@ -383,19 +424,35 @@ function App() {
             </select>
           </div>
 
+          <div className="scan-panel">
+            <div>
+              <span className="scan-panel-label">Código de barras</span>
+              <p>Escaneá con cámara o escribí el código manualmente.</p>
+            </div>
+
+            <button
+              className="scan-main-button"
+              type="button"
+              onClick={() => setScannerAbierto(true)}
+              aria-label="Abrir cámara"
+            >
+              📷 Escanear
+            </button>
+          </div>
+
           <div className="field-group">
             <label htmlFor="codigo">Código</label>
 
             <div className="barcode-row">
               <input
-                id="codigo"
                 ref={codigoInputRef}
-                type="text"
+                id="codigo"
                 value={codigo}
                 onChange={(event) => manejarCambioCodigo(event.target.value)}
                 onBlur={manejarBlurCodigo}
                 onKeyDown={manejarEnterCodigo}
                 placeholder="Escaneá o escribí el código"
+                inputMode="numeric"
               />
 
               <button
@@ -410,47 +467,40 @@ function App() {
           </div>
 
           {estadoProducto === "buscando" && (
-            <p className="message">Buscando producto...</p>
+            <div className="product-status product-status-info">
+              Buscando producto...
+            </div>
           )}
 
           {estadoProducto === "existente" && (
-            <section className="product-data-section">
-              <div className="field-group">
-                <label htmlFor="nombre-existente">Nombre</label>
-                <input
-                  id="nombre-existente"
-                  type="text"
-                  value={nombre}
-                  readOnly
-                />
-              </div>
-            </section>
+            <div className="field-group">
+              <label htmlFor="nombre">Nombre</label>
+              <input id="nombre" value={nombre} readOnly />
+            </div>
           )}
 
           {estadoProducto === "nuevo" && (
-            <section className="product-data-section">
+            <div className="product-data-section">
               <div className="product-new-box">
                 <strong>Producto nuevo</strong>
-                <span>Complete los datos para crearlo:</span>
-              </div>
-
-              <div className="field-group">
-                <label htmlFor="producto">Producto</label>
-                <input
-                  id="producto"
-                  type="text"
-                  value={producto}
-                  onChange={(event) => setProducto(event.target.value)}
-                  placeholder="Ej: Leche"
-                />
+                <span>Completá los datos para crearlo en Airtable.</span>
               </div>
 
               <div className="product-grid">
                 <div className="field-group">
+                  <label htmlFor="producto">Producto</label>
+                  <input
+                    id="producto"
+                    value={producto}
+                    onChange={(event) => setProducto(event.target.value)}
+                    placeholder="Ej: Leche"
+                  />
+                </div>
+
+                <div className="field-group">
                   <label htmlFor="marca">Marca</label>
                   <input
                     id="marca"
-                    type="text"
                     value={marca}
                     onChange={(event) => setMarca(event.target.value)}
                     placeholder="Ej: La Serenísima"
@@ -461,7 +511,6 @@ function App() {
                   <label htmlFor="presentacion">Presentación</label>
                   <input
                     id="presentacion"
-                    type="text"
                     value={presentacion}
                     onChange={(event) => setPresentacion(event.target.value)}
                     placeholder="Ej: 1L"
@@ -472,9 +521,10 @@ function App() {
                   <label htmlFor="especificacion">Especificación</label>
                   <input
                     id="especificacion"
-                    type="text"
                     value={especificacion}
-                    onChange={(event) => setEspecificacion(event.target.value)}
+                    onChange={(event) =>
+                      setEspecificacion(event.target.value)
+                    }
                     placeholder="Ej: Entera / Sin TACC / 0000"
                   />
                 </div>
@@ -482,23 +532,21 @@ function App() {
 
               {nombre && (
                 <div className="nombre-preview">
-                  <span>Nombre</span>
+                  <span>Nombre master generado</span>
                   <strong>{nombre}</strong>
                 </div>
               )}
-            </section>
+            </div>
           )}
 
-          <div className="checkbox-row">
+          <label className="checkbox-row">
             <input
-              id="sin-vencimiento"
               type="checkbox"
               checked={sinVencimiento}
               onChange={(event) => manejarSinVencimiento(event.target.checked)}
             />
-
-            <label htmlFor="sin-vencimiento">Sin fecha de vencimiento</label>
-          </div>
+            Sin fecha de vencimiento
+          </label>
 
           <section className="lotes-section">
             <div className="section-title-row">
@@ -519,7 +567,7 @@ function App() {
             </div>
 
             {lotes.map((lote, index) => (
-              <div className="lote-card" key={lote.id}>
+              <article className="lote-card" key={lote.id}>
                 <div className="lote-title-row">
                   <strong>Lote {index + 1}</strong>
 
@@ -544,7 +592,11 @@ function App() {
                       type="date"
                       value={lote.vencimiento}
                       onChange={(event) =>
-                        actualizarLote(lote.id, "vencimiento", event.target.value)
+                        actualizarLote(
+                          lote.id,
+                          "vencimiento",
+                          event.target.value
+                        )
                       }
                     />
                   </div>
@@ -555,7 +607,8 @@ function App() {
                   <input
                     id={`cantidad-${lote.id}`}
                     type="number"
-                    min="1"
+                    min="0"
+                    step="0.01"
                     value={lote.cantidad}
                     onChange={(event) =>
                       actualizarLote(lote.id, "cantidad", event.target.value)
@@ -563,7 +616,7 @@ function App() {
                     placeholder="Ej: 12"
                   />
                 </div>
-              </div>
+              </article>
             ))}
           </section>
 
@@ -578,7 +631,11 @@ function App() {
             />
           </div>
 
-          {mensaje && <p className="message">{mensaje}</p>}
+          {aviso && (
+            <div className={`message message-${aviso.tipo}`}>
+              {aviso.texto}
+            </div>
+          )}
 
           <div className="actions-row">
             <button
@@ -603,41 +660,43 @@ function App() {
 
         {ultimoMovimiento && (
           <section className="result-card">
-            <h2>Última carga</h2>
+            <div className="result-title-row">
+              <div>
+                <span>Última carga</span>
+                <h2>{ultimoMovimiento.nombre}</h2>
+              </div>
 
-            <p>
-              <strong>Código:</strong> {ultimoMovimiento.codigo}
-            </p>
+              <strong className="result-badge">
+                {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
+              </strong>
+            </div>
 
-            <p>
-              <strong>Nombre:</strong> {ultimoMovimiento.nombre}
-            </p>
+            <div className="result-grid">
+              <p>
+                <strong>Código:</strong> {ultimoMovimiento.codigo}
+              </p>
 
-            <p>
-              <strong>Estado:</strong>{" "}
-              {ultimoMovimiento.productoNuevo
-                ? "Producto nuevo"
-                : "Producto existente"}
-            </p>
+              <p>
+                <strong>Ubicación:</strong> {ultimoMovimiento.ubicacion}
+              </p>
 
-            <p>
-              <strong>Ubicación:</strong> {ultimoMovimiento.ubicacion}
-            </p>
+              <p>
+                <strong>Vencimiento:</strong>{" "}
+                {ultimoMovimiento.sinVencimiento
+                  ? "Sin vencimiento"
+                  : "Con vencimiento"}
+              </p>
+            </div>
 
-            <p>
-              <strong>Vencimiento:</strong>{" "}
-              {ultimoMovimiento.sinVencimiento
-                ? "Sin vencimiento"
-                : "Con vencimiento"}
-            </p>
-
-            <ul>
+            <ul className="result-lotes-list">
               {ultimoMovimiento.lotes.map((lote) => (
                 <li key={lote.id}>
-                  {ultimoMovimiento.sinVencimiento
-                    ? "Sin vencimiento"
-                    : lote.vencimiento}{" "}
-                  — {lote.cantidad} unidades
+                  <span>
+                    {ultimoMovimiento.sinVencimiento
+                      ? "Sin vencimiento"
+                      : lote.vencimiento}
+                  </span>
+                  <strong>{lote.cantidad} unidades</strong>
                 </li>
               ))}
             </ul>

@@ -442,13 +442,14 @@ function App() {
             />
 
             <div className="brand-text">
-              <p className="app-kicker">OPTIMA</p>
-              <h1>Inventario inicial</h1>
+              <h1>OPTIMA</h1>
             </div>
           </div>
         </header>
 
         <section className="form-card">
+          <div className="module-label">INVENTARIO</div>
+
           <div className="location-summary">
             <div className="location-current-card">
               <span>Ubicación actual</span>

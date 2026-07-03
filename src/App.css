@@ -60,19 +60,22 @@ button:disabled {
   flex-direction: column;
 }
 
-.app-kicker {
-  margin: 0 0 2px;
-  color: #2563eb;
-  font-weight: 900;
-  letter-spacing: 0.14em;
-  font-size: 12px;
-}
-
 .app-header h1 {
   margin: 0;
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1;
   color: #0f172a;
+  letter-spacing: 0.08em;
+  font-weight: 900;
+}
+
+.module-label {
+  margin-bottom: 12px;
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-align: center;
 }
 
 .form-card,
@@ -490,7 +493,7 @@ button:disabled {
   }
 
   .app-header h1 {
-    font-size: 26px;
+    font-size: 30px;
   }
 
   .form-card,

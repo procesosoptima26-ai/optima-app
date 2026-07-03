@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import "./App.css";
 
@@ -62,6 +62,8 @@ function armarNombre(
 }
 
 function App() {
+  const codigoInputRef = useRef<HTMLInputElement>(null);
+
   const [codigo, setCodigo] = useState("");
   const [producto, setProducto] = useState("");
   const [marca, setMarca] = useState("");
@@ -253,6 +255,25 @@ function App() {
     return "";
   }
 
+  function prepararSiguienteCarga() {
+    setCodigo("");
+    limpiarDatosProducto();
+    setSinVencimiento(false);
+    setObservaciones("");
+    setEstadoProducto("sin_codigo");
+    setLotes([
+      {
+        id: Date.now(),
+        vencimiento: "",
+        cantidad: "",
+      },
+    ]);
+
+    setTimeout(() => {
+      codigoInputRef.current?.focus();
+    }, 100);
+  }
+
   async function guardarMovimiento() {
     const error = validarFormulario();
 
@@ -294,10 +315,12 @@ function App() {
       }
 
       setUltimoMovimiento(movimiento);
+      prepararSiguienteCarga();
+
       setMensaje(
         `Inventario guardado correctamente. Registros creados: ${
           data.cantidadRegistros || lotes.length
-        }.`
+        }. Listo para escanear el siguiente producto.`
       );
 
       console.log("Inventario guardado:", movimiento);
@@ -325,6 +348,10 @@ function App() {
     ]);
     setMensaje("");
     setUltimoMovimiento(null);
+
+    setTimeout(() => {
+      codigoInputRef.current?.focus();
+    }, 100);
   }
 
   return (
@@ -362,6 +389,7 @@ function App() {
             <div className="barcode-row">
               <input
                 id="codigo"
+                ref={codigoInputRef}
                 type="text"
                 value={codigo}
                 onChange={(event) => manejarCambioCodigo(event.target.value)}
@@ -480,7 +508,11 @@ function App() {
               </div>
 
               {!sinVencimiento && (
-                <button className="secondary-button" type="button" onClick={agregarLote}>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={agregarLote}
+                >
                   + Agregar fecha
                 </button>
               )}
@@ -594,7 +626,9 @@ function App() {
 
             <p>
               <strong>Vencimiento:</strong>{" "}
-              {ultimoMovimiento.sinVencimiento ? "Sin vencimiento" : "Con vencimiento"}
+              {ultimoMovimiento.sinVencimiento
+                ? "Sin vencimiento"
+                : "Con vencimiento"}
             </p>
 
             <ul>
@@ -625,3 +659,4 @@ function App() {
 }
 
 export default App;
+

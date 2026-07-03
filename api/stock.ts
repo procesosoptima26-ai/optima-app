@@ -53,13 +53,34 @@ function limpiarTexto(valor: string) {
   return valor.trim();
 }
 
+function armarCamposProductoNuevo(payload: GuardarStockPayload) {
+  const codeField = getEnv("AIRTABLE_CODE_FIELD");
+
+  const especificacionLimpia = limpiarTexto(payload.especificacion);
+
+  const fields: Record<string, unknown> = {
+    [codeField]: convertirCodigoParaProductos(payload.codigo),
+
+    // Campos de selección única en Airtable
+    PRODUCTO: limpiarTexto(payload.producto),
+    MARCA: limpiarTexto(payload.marca),
+    "PRESENTACIÓN": limpiarTexto(payload.presentacion),
+  };
+
+  // Campo de selección múltiple en Airtable
+  if (especificacionLimpia) {
+    fields["ESPECIFICACIÓN"] = [especificacionLimpia];
+  }
+
+  return fields;
+}
+
 async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
   if (!payload.productoNuevo) return;
 
   const token = getEnv("AIRTABLE_TOKEN");
   const baseId = getEnv("AIRTABLE_BASE_ID");
   const productosTable = getEnv("AIRTABLE_TABLE_NAME");
-  const codeField = getEnv("AIRTABLE_CODE_FIELD");
 
   const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
     productosTable
@@ -74,15 +95,10 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
     body: JSON.stringify({
       records: [
         {
-          fields: {
-            [codeField]: convertirCodigoParaProductos(payload.codigo),
-            PRODUCTO: limpiarTexto(payload.producto),
-            MARCA: limpiarTexto(payload.marca),
-            "PRESENTACIÓN": limpiarTexto(payload.presentacion),
-            "ESPECIFICACIÓN": limpiarTexto(payload.especificacion),
-          },
+          fields: armarCamposProductoNuevo(payload),
         },
       ],
+      typecast: true,
     }),
   });
 
@@ -152,6 +168,7 @@ async function guardarStock(payload: GuardarStockPayload) {
       },
       body: JSON.stringify({
         records: grupo,
+        typecast: true,
       }),
     });
 

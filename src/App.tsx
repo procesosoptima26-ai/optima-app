@@ -18,6 +18,13 @@ type RespuestaProductoApi = {
   error?: string;
 };
 
+type RespuestaGuardarStockApi = {
+  ok: boolean;
+  cantidadRegistros?: number;
+  registros?: string[];
+  error?: string;
+};
+
 type Lote = {
   id: number;
   vencimiento: string;
@@ -36,6 +43,7 @@ type MovimientoGuardado = {
   ubicacion: string;
   sinVencimiento: boolean;
   productoNuevo: boolean;
+  observaciones: string;
   lotes: Lote[];
 };
 
@@ -61,8 +69,10 @@ function App() {
   const [especificacion, setEspecificacion] = useState("");
   const [ubicacion, setUbicacion] = useState("Galpón");
   const [sinVencimiento, setSinVencimiento] = useState(false);
+  const [observaciones, setObservaciones] = useState("");
   const [scannerAbierto, setScannerAbierto] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [guardando, setGuardando] = useState(false);
   const [estadoProducto, setEstadoProducto] =
     useState<EstadoProducto>("sin_codigo");
   const [ultimoMovimiento, setUltimoMovimiento] =
@@ -243,7 +253,7 @@ function App() {
     return "";
   }
 
-  function guardarMovimiento() {
+  async function guardarMovimiento() {
     const error = validarFormulario();
 
     if (error) {
@@ -261,13 +271,42 @@ function App() {
       ubicacion,
       sinVencimiento,
       productoNuevo: estadoProducto === "nuevo",
+      observaciones: observaciones.trim(),
       lotes,
     };
 
-    setUltimoMovimiento(movimiento);
-    setMensaje("Movimiento guardado correctamente.");
+    try {
+      setGuardando(true);
+      setMensaje("Guardando inventario...");
 
-    console.log("Movimiento guardado:", movimiento);
+      const response = await fetch("/api/stock", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(movimiento),
+      });
+
+      const data = (await response.json()) as RespuestaGuardarStockApi;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "No se pudo guardar el inventario");
+      }
+
+      setUltimoMovimiento(movimiento);
+      setMensaje(
+        `Inventario guardado correctamente. Registros creados: ${
+          data.cantidadRegistros || lotes.length
+        }.`
+      );
+
+      console.log("Inventario guardado:", movimiento);
+    } catch (error) {
+      console.error("Error guardando inventario:", error);
+      setMensaje("No se pudo guardar el inventario en Airtable.");
+    } finally {
+      setGuardando(false);
+    }
   }
 
   function limpiarFormulario() {
@@ -275,6 +314,7 @@ function App() {
     limpiarDatosProducto();
     setUbicacion("Galpón");
     setSinVencimiento(false);
+    setObservaciones("");
     setEstadoProducto("sin_codigo");
     setLotes([
       {
@@ -293,9 +333,9 @@ function App() {
         <header className="app-header">
           <div>
             <p className="app-kicker">OPTIMA APP</p>
-            <h1>Control de inventario</h1>
+            <h1>Inventario inicial</h1>
             <p>
-              Escaneá productos, cargá vencimientos y registrá movimientos de stock.
+              Escaneá productos, cargá vencimientos y registrá el stock contado.
             </p>
           </div>
         </header>
@@ -495,14 +535,35 @@ function App() {
             ))}
           </section>
 
+          <div className="field-group">
+            <label htmlFor="observaciones">Observaciones</label>
+            <textarea
+              id="observaciones"
+              value={observaciones}
+              onChange={(event) => setObservaciones(event.target.value)}
+              placeholder="Opcional"
+              rows={3}
+            />
+          </div>
+
           {mensaje && <p className="message">{mensaje}</p>}
 
           <div className="actions-row">
-            <button className="primary-button" type="button" onClick={guardarMovimiento}>
-              Guardar movimiento
+            <button
+              className="primary-button"
+              type="button"
+              onClick={guardarMovimiento}
+              disabled={guardando}
+            >
+              {guardando ? "Guardando..." : "Guardar inventario"}
             </button>
 
-            <button className="secondary-button" type="button" onClick={limpiarFormulario}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={limpiarFormulario}
+              disabled={guardando}
+            >
               Limpiar
             </button>
           </div>
@@ -510,7 +571,7 @@ function App() {
 
         {ultimoMovimiento && (
           <section className="result-card">
-            <h2>Último movimiento</h2>
+            <h2>Última carga</h2>
 
             <p>
               <strong>Código:</strong> {ultimoMovimiento.codigo}

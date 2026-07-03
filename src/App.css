@@ -12,8 +12,14 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
+}
+
+button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .app {
@@ -76,7 +82,8 @@ select {
 }
 
 .field-group input,
-.field-group select {
+.field-group select,
+.field-group textarea {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 14px;
@@ -86,13 +93,19 @@ select {
   outline: none;
 }
 
+.field-group textarea {
+  resize: vertical;
+  min-height: 88px;
+}
+
 .field-group input:read-only {
   background: #f3f4f6;
   color: #4b5563;
 }
 
 .field-group input:focus,
-.field-group select:focus {
+.field-group select:focus,
+.field-group textarea:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
 }

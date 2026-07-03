@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
+import logoOptima from "./assets/logo-optima.png";
 import "./App.css";
 
 type ProductoApi = {
@@ -64,6 +65,46 @@ function armarNombre(
     .map((valor) => valor.trim())
     .filter(Boolean)
     .join(" ");
+}
+
+function formatearFechaInput(valor: string) {
+  const soloNumeros = valor.replace(/\D/g, "").slice(0, 8);
+
+  if (soloNumeros.length <= 2) return soloNumeros;
+
+  if (soloNumeros.length <= 4) {
+    return `${soloNumeros.slice(0, 2)}-${soloNumeros.slice(2)}`;
+  }
+
+  return `${soloNumeros.slice(0, 2)}-${soloNumeros.slice(
+    2,
+    4
+  )}-${soloNumeros.slice(4)}`;
+}
+
+function esFechaValida(dia: number, mes: number, anio: number) {
+  const fecha = new Date(anio, mes - 1, dia);
+
+  return (
+    fecha.getFullYear() === anio &&
+    fecha.getMonth() === mes - 1 &&
+    fecha.getDate() === dia
+  );
+}
+
+function convertirFechaParaApi(fechaTexto: string) {
+  const valor = fechaTexto.trim();
+  const match = valor.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+
+  if (!match) return "";
+
+  const dia = Number(match[1]);
+  const mes = Number(match[2]);
+  const anio = Number(match[3]);
+
+  if (!esFechaValida(dia, mes, anio)) return "";
+
+  return `${anio}-${match[2]}-${match[1]}`;
 }
 
 function App() {
@@ -197,12 +238,15 @@ function App() {
   }
 
   function actualizarLote(id: number, campo: keyof Lote, valor: string) {
+    const valorFinal =
+      campo === "vencimiento" ? formatearFechaInput(valor) : valor;
+
     setLotes((lotesActuales) =>
       lotesActuales.map((lote) =>
         lote.id === id
           ? {
               ...lote,
-              [campo]: valor,
+              [campo]: valorFinal,
             }
           : lote
       )
@@ -249,8 +293,14 @@ function App() {
     }
 
     for (const lote of lotes) {
-      if (!sinVencimiento && !lote.vencimiento) {
-        return "Completá la fecha de vencimiento o marcá Sin fecha de vencimiento.";
+      if (!sinVencimiento) {
+        if (!lote.vencimiento.trim()) {
+          return "Completá el vencimiento o marcá Sin fecha de vencimiento.";
+        }
+
+        if (!convertirFechaParaApi(lote.vencimiento)) {
+          return "La fecha debe tener formato DD-MM-AAAA.";
+        }
       }
 
       if (!lote.cantidad || Number(lote.cantidad) <= 0) {
@@ -305,6 +355,16 @@ function App() {
       lotes,
     };
 
+    const payload = {
+      ...movimiento,
+      lotes: lotes.map((lote) => ({
+        ...lote,
+        vencimiento: sinVencimiento
+          ? ""
+          : convertirFechaParaApi(lote.vencimiento),
+      })),
+    };
+
     try {
       setGuardando(true);
       setAviso({
@@ -317,7 +377,7 @@ function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(movimiento),
+        body: JSON.stringify(payload),
       });
 
       const data = (await response.json()) as RespuestaGuardarStockApi;
@@ -336,7 +396,7 @@ function App() {
         }.`,
       });
 
-      console.log("Inventario guardado:", movimiento);
+      console.log("Inventario guardado:", payload);
     } catch (error) {
       console.error("Error guardando inventario:", error);
       setAviso({
@@ -375,9 +435,13 @@ function App() {
       <section className="app-container">
         <header className="app-header">
           <div className="brand-row">
-            <div className="brand-logo">O</div>
+            <img
+              src={logoOptima}
+              alt="Logo OPTIMA"
+              className="brand-logo-image"
+            />
 
-            <div>
+            <div className="brand-text">
               <p className="app-kicker">OPTIMA</p>
               <h1>Inventario inicial</h1>
             </div>
@@ -386,7 +450,7 @@ function App() {
 
         <section className="form-card">
           <div className="location-summary">
-            <div>
+            <div className="location-current-card">
               <span>Ubicación actual</span>
               <strong>{ubicacion}</strong>
             </div>
@@ -525,7 +589,7 @@ function App() {
                   type="button"
                   onClick={agregarLote}
                 >
-                  + Otro vencimiento
+                  + Otro
                 </button>
               )}
             </div>
@@ -546,39 +610,48 @@ function App() {
                   )}
                 </div>
 
-                {!sinVencimiento && (
-                  <div className="field-group">
-                    <label htmlFor={`vencimiento-${lote.id}`}>
-                      Fecha de vencimiento
-                    </label>
+                <div
+                  className={`lote-inline-grid ${
+                    sinVencimiento ? "solo-cantidad" : ""
+                  }`}
+                >
+                  {!sinVencimiento && (
+                    <div className="field-group no-margin">
+                      <label htmlFor={`vencimiento-${lote.id}`}>
+                        Vencimiento
+                      </label>
+                      <input
+                        id={`vencimiento-${lote.id}`}
+                        type="text"
+                        value={lote.vencimiento}
+                        onChange={(event) =>
+                          actualizarLote(
+                            lote.id,
+                            "vencimiento",
+                            event.target.value
+                          )
+                        }
+                        placeholder="DD-MM-AAAA"
+                        inputMode="numeric"
+                        maxLength={10}
+                      />
+                    </div>
+                  )}
+
+                  <div className="field-group no-margin">
+                    <label htmlFor={`cantidad-${lote.id}`}>Cantidad</label>
                     <input
-                      id={`vencimiento-${lote.id}`}
-                      type="date"
-                      value={lote.vencimiento}
+                      id={`cantidad-${lote.id}`}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={lote.cantidad}
                       onChange={(event) =>
-                        actualizarLote(
-                          lote.id,
-                          "vencimiento",
-                          event.target.value
-                        )
+                        actualizarLote(lote.id, "cantidad", event.target.value)
                       }
+                      placeholder="Ej: 12"
                     />
                   </div>
-                )}
-
-                <div className="field-group no-margin">
-                  <label htmlFor={`cantidad-${lote.id}`}>Cantidad</label>
-                  <input
-                    id={`cantidad-${lote.id}`}
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={lote.cantidad}
-                    onChange={(event) =>
-                      actualizarLote(lote.id, "cantidad", event.target.value)
-                    }
-                    placeholder="Ej: 12"
-                  />
                 </div>
               </article>
             ))}
@@ -586,12 +659,12 @@ function App() {
 
           <div className="field-group">
             <label htmlFor="observaciones">Observaciones</label>
-            <textarea
+            <input
               id="observaciones"
+              type="text"
               value={observaciones}
               onChange={(event) => setObservaciones(event.target.value)}
               placeholder="Opcional"
-              rows={2}
             />
           </div>
 
@@ -608,7 +681,7 @@ function App() {
               onClick={guardarMovimiento}
               disabled={guardando}
             >
-              {guardando ? "Guardando..." : "Guardar inventario"}
+              {guardando ? "Guardando..." : "Guardar"}
             </button>
 
             <button
@@ -682,4 +755,3 @@ function App() {
 }
 
 export default App;
-

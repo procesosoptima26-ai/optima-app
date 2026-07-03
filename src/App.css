@@ -95,36 +95,36 @@ button:disabled {
   margin-top: 12px;
 }
 
-.location-summary {
+.branch-location-summary {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 10px;
+  grid-template-columns: 1fr 1.1fr;
+  gap: 8px;
   align-items: stretch;
   margin-bottom: 14px;
 }
 
-.location-current-card {
+.current-card {
   border: 1px solid #dbeafe;
   background: #eff6ff;
   border-radius: 16px;
-  padding: 12px;
+  padding: 10px;
   display: flex;
   flex-direction: column;
   justify-content: center;
 }
 
-.location-current-card span {
+.current-card span {
   display: block;
   margin-bottom: 4px;
   color: #2563eb;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
 }
 
-.location-current-card strong {
-  font-size: 18px;
+.current-card strong {
+  font-size: 15px;
   color: #111827;
 }
 
@@ -156,6 +156,11 @@ button:disabled {
   outline: none;
   transition: border-color 0.18s ease, box-shadow 0.18s ease,
     background 0.18s ease;
+}
+
+.compact-field select {
+  height: 100%;
+  min-height: 48px;
 }
 
 .field-group input:read-only {
@@ -441,7 +446,7 @@ button:disabled {
 
 .result-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 8px;
 }
 
@@ -506,17 +511,21 @@ button:disabled {
     border-radius: 18px;
   }
 
-  .location-summary {
+  .branch-location-summary {
     grid-template-columns: 1fr 1.1fr;
     gap: 8px;
   }
 
-  .location-current-card {
+  .current-card {
     padding: 10px;
   }
 
-  .location-current-card strong {
-    font-size: 16px;
+  .current-card strong {
+    font-size: 15px;
+  }
+
+  .current-card span {
+    font-size: 9px;
   }
 
   .lote-inline-grid {

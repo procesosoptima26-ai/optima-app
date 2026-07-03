@@ -17,6 +17,7 @@ type GuardarStockPayload = {
   marca: string;
   presentacion: string;
   especificacion: string;
+  sucursal: string;
   ubicacion: string;
   sinVencimiento: boolean;
   productoNuevo: boolean;
@@ -55,19 +56,15 @@ function limpiarTexto(valor: string) {
 
 function armarCamposProductoNuevo(payload: GuardarStockPayload) {
   const codeField = getEnv("AIRTABLE_CODE_FIELD");
-
   const especificacionLimpia = limpiarTexto(payload.especificacion);
 
   const fields: Record<string, unknown> = {
     [codeField]: convertirCodigoParaProductos(payload.codigo),
-
-    // Campos de selección única en Airtable
     PRODUCTO: limpiarTexto(payload.producto),
     MARCA: limpiarTexto(payload.marca),
     "PRESENTACIÓN": limpiarTexto(payload.presentacion),
   };
 
-  // Campo de selección múltiple en Airtable
   if (especificacionLimpia) {
     fields["ESPECIFICACIÓN"] = [especificacionLimpia];
   }
@@ -105,7 +102,6 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
   if (!response.ok) {
     const data = (await response.json()) as AirtableErrorResponse;
     console.error("Error creando producto:", data);
-
     throw new Error("No se pudo crear el producto nuevo en Airtable");
   }
 }
@@ -119,6 +115,7 @@ function armarRecordsStock(payload: GuardarStockPayload) {
     const fields: Record<string, unknown> = {
       CÓDIGO: codigoTexto,
       NOMBRE: limpiarTexto(payload.nombre),
+      SUCURSAL: limpiarTexto(payload.sucursal),
       UBICACIÓN: limpiarTexto(payload.ubicacion),
       SIN_VENCIMIENTO: payload.sinVencimiento,
       CANTIDAD: cantidadNumero,
@@ -152,7 +149,6 @@ async function guardarStock(payload: GuardarStockPayload) {
 
   const records = armarRecordsStock(payload);
   const grupos = partirEnGrupos(records, 10);
-
   const creados = [];
 
   for (const grupo of grupos) {
@@ -176,7 +172,6 @@ async function guardarStock(payload: GuardarStockPayload) {
 
     if (!response.ok) {
       console.error("Error guardando stock:", data);
-
       throw new Error("No se pudo guardar el stock en Airtable");
     }
 
@@ -189,6 +184,7 @@ async function guardarStock(payload: GuardarStockPayload) {
 function validarPayload(payload: GuardarStockPayload) {
   if (!payload.codigo?.trim()) return "Falta el código";
   if (!payload.nombre?.trim()) return "Falta el nombre";
+  if (!payload.sucursal?.trim()) return "Falta la sucursal";
   if (!payload.ubicacion?.trim()) return "Falta la ubicación";
 
   if (!Array.isArray(payload.lotes) || payload.lotes.length === 0) {
@@ -214,7 +210,10 @@ function validarPayload(payload: GuardarStockPayload) {
   return "";
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+) {
   try {
     if (req.method !== "POST") {
       return res.status(405).json({

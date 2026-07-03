@@ -46,6 +46,7 @@ type MovimientoGuardado = {
   presentacion: string;
   especificacion: string;
   nombre: string;
+  sucursal: string;
   ubicacion: string;
   sinVencimiento: boolean;
   productoNuevo: boolean;
@@ -53,6 +54,7 @@ type MovimientoGuardado = {
   lotes: Lote[];
 };
 
+const sucursales = ["Bella Vista", "Goya"];
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
 function armarNombre(
@@ -115,6 +117,7 @@ function App() {
   const [marca, setMarca] = useState("");
   const [presentacion, setPresentacion] = useState("");
   const [especificacion, setEspecificacion] = useState("");
+  const [sucursal, setSucursal] = useState("Bella Vista");
   const [ubicacion, setUbicacion] = useState("Galpón");
   const [sinVencimiento, setSinVencimiento] = useState(false);
   const [observaciones, setObservaciones] = useState("");
@@ -268,6 +271,14 @@ function App() {
   }
 
   function validarFormulario() {
+    if (!sucursal.trim()) {
+      return "La sucursal es obligatoria.";
+    }
+
+    if (!ubicacion.trim()) {
+      return "La ubicación es obligatoria.";
+    }
+
     if (!codigo.trim()) {
       return "No hay código cargado. Escaneá o escribí un código antes de guardar.";
     }
@@ -286,10 +297,6 @@ function App() {
 
     if (estadoProducto === "nuevo" && !presentacion.trim()) {
       return "El campo Presentación es obligatorio para productos nuevos.";
-    }
-
-    if (!ubicacion.trim()) {
-      return "La ubicación es obligatoria.";
     }
 
     for (const lote of lotes) {
@@ -348,6 +355,7 @@ function App() {
       presentacion: presentacion.trim(),
       especificacion: especificacion.trim(),
       nombre,
+      sucursal,
       ubicacion,
       sinVencimiento,
       productoNuevo: estadoProducto === "nuevo",
@@ -411,7 +419,6 @@ function App() {
   function limpiarFormulario() {
     setCodigo("");
     limpiarDatosProducto();
-    setUbicacion("Galpón");
     setSinVencimiento(false);
     setObservaciones("");
     setEstadoProducto("sin_codigo");
@@ -450,8 +457,28 @@ function App() {
         <section className="form-card">
           <div className="module-label">INVENTARIO</div>
 
-          <div className="location-summary">
-            <div className="location-current-card">
+          <div className="branch-location-summary">
+            <div className="current-card">
+              <span>Sucursal actual</span>
+              <strong>{sucursal}</strong>
+            </div>
+
+            <div className="field-group compact-field">
+              <label htmlFor="sucursal">Sucursal</label>
+              <select
+                id="sucursal"
+                value={sucursal}
+                onChange={(event) => setSucursal(event.target.value)}
+              >
+                {sucursales.map((sucursalDisponible) => (
+                  <option key={sucursalDisponible} value={sucursalDisponible}>
+                    {sucursalDisponible}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="current-card">
               <span>Ubicación actual</span>
               <strong>{ubicacion}</strong>
             </div>
@@ -711,11 +738,15 @@ function App() {
 
             <div className="result-grid">
               <p>
-                <strong>Código:</strong> {ultimoMovimiento.codigo}
+                <strong>Sucursal:</strong> {ultimoMovimiento.sucursal}
               </p>
 
               <p>
                 <strong>Ubicación:</strong> {ultimoMovimiento.ubicacion}
+              </p>
+
+              <p>
+                <strong>Código:</strong> {ultimoMovimiento.codigo}
               </p>
 
               <p>

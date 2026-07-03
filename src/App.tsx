@@ -225,7 +225,7 @@ function App() {
 
   function validarFormulario() {
     if (!codigo.trim()) {
-      return "El código es obligatorio.";
+      return "No hay código cargado. Escaneá o escribí un código antes de guardar.";
     }
 
     if (estadoProducto === "buscando") {
@@ -309,7 +309,7 @@ function App() {
       setGuardando(true);
       setAviso({
         tipo: "info",
-        texto: "Guardando inventario...",
+        texto: "Guardando...",
       });
 
       const response = await fetch("/api/stock", {
@@ -333,7 +333,7 @@ function App() {
         tipo: "exito",
         texto: `Guardado OK. Registros creados: ${
           data.cantidadRegistros || lotes.length
-        }. Ya podés escanear el siguiente producto.`,
+        }.`,
       });
 
       console.log("Inventario guardado:", movimiento);
@@ -370,14 +370,6 @@ function App() {
     }, 100);
   }
 
-  const textoEstadoProducto = {
-    sin_codigo: "Esperando código",
-    buscando: "Buscando producto...",
-    existente: "Producto encontrado",
-    nuevo: "Producto nuevo",
-    error: "Error de búsqueda",
-  };
-
   return (
     <main className="app">
       <section className="app-container">
@@ -390,54 +382,29 @@ function App() {
               <h1>Inventario inicial</h1>
             </div>
           </div>
-
-          <p>
-            Escaneá productos, cargá vencimientos y registrá el stock contado.
-          </p>
         </header>
 
-        <section className="quick-status-card">
-          <div>
-            <span className="status-label">Ubicación actual</span>
-            <strong>{ubicacion}</strong>
-          </div>
-
-          <div>
-            <span className="status-label">Estado</span>
-            <strong>{textoEstadoProducto[estadoProducto]}</strong>
-          </div>
-        </section>
-
         <section className="form-card">
-          <div className="field-group">
-            <label htmlFor="ubicacion">Ubicación</label>
-            <select
-              id="ubicacion"
-              value={ubicacion}
-              onChange={(event) => setUbicacion(event.target.value)}
-            >
-              {ubicaciones.map((ubicacionDisponible) => (
-                <option key={ubicacionDisponible} value={ubicacionDisponible}>
-                  {ubicacionDisponible}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="scan-panel">
+          <div className="location-summary">
             <div>
-              <span className="scan-panel-label">Código de barras</span>
-              <p>Escaneá con cámara o escribí el código manualmente.</p>
+              <span>Ubicación actual</span>
+              <strong>{ubicacion}</strong>
             </div>
 
-            <button
-              className="scan-main-button"
-              type="button"
-              onClick={() => setScannerAbierto(true)}
-              aria-label="Abrir cámara"
-            >
-              📷 Escanear
-            </button>
+            <div className="field-group compact-field">
+              <label htmlFor="ubicacion">Ubicación</label>
+              <select
+                id="ubicacion"
+                value={ubicacion}
+                onChange={(event) => setUbicacion(event.target.value)}
+              >
+                {ubicaciones.map((ubicacionDisponible) => (
+                  <option key={ubicacionDisponible} value={ubicacionDisponible}>
+                    {ubicacionDisponible}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="field-group">
@@ -483,7 +450,7 @@ function App() {
             <div className="product-data-section">
               <div className="product-new-box">
                 <strong>Producto nuevo</strong>
-                <span>Completá los datos para crearlo en Airtable.</span>
+                <span>Completá los datos para crearlo.</span>
               </div>
 
               <div className="product-grid">
@@ -525,14 +492,14 @@ function App() {
                     onChange={(event) =>
                       setEspecificacion(event.target.value)
                     }
-                    placeholder="Ej: Entera / Sin TACC / 0000"
+                    placeholder="Ej: Entera / Sin TACC"
                   />
                 </div>
               </div>
 
               {nombre && (
                 <div className="nombre-preview">
-                  <span>Nombre master generado</span>
+                  <span>Nombre master</span>
                   <strong>{nombre}</strong>
                 </div>
               )}
@@ -549,19 +516,16 @@ function App() {
           </label>
 
           <section className="lotes-section">
-            <div className="section-title-row">
-              <div>
-                <h2>Vencimientos y cantidades</h2>
-                <p>Podés cargar uno o varios lotes del mismo producto.</p>
-              </div>
+            <div className="section-title-row compact-title-row">
+              <h2>Vencimientos</h2>
 
               {!sinVencimiento && (
                 <button
-                  className="secondary-button"
+                  className="small-add-button"
                   type="button"
                   onClick={agregarLote}
                 >
-                  + Agregar fecha
+                  + Otro vencimiento
                 </button>
               )}
             </div>
@@ -602,7 +566,7 @@ function App() {
                   </div>
                 )}
 
-                <div className="field-group">
+                <div className="field-group no-margin">
                   <label htmlFor={`cantidad-${lote.id}`}>Cantidad</label>
                   <input
                     id={`cantidad-${lote.id}`}
@@ -627,7 +591,7 @@ function App() {
               value={observaciones}
               onChange={(event) => setObservaciones(event.target.value)}
               placeholder="Opcional"
-              rows={3}
+              rows={2}
             />
           </div>
 

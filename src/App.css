@@ -36,23 +36,23 @@ button:disabled {
 }
 
 .app-header {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .brand-row {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 10px;
   text-align: center;
 }
 
 .brand-logo-image {
-  width: 58px;
-  height: 58px;
+  width: 50px;
+  height: 50px;
   object-fit: contain;
-  border-radius: 16px;
+  border-radius: 14px;
   background: #ffffff;
   padding: 4px;
   box-shadow: 0 10px 24px rgba(17, 24, 39, 0.14);
@@ -492,8 +492,8 @@ button:disabled {
 
 @media (max-width: 640px) {
   .brand-logo-image {
-    width: 54px;
-    height: 54px;
+    width: 48px;
+    height: 48px;
   }
 
   .app-header h1 {

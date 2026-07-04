@@ -606,28 +606,31 @@ function App() {
             </div>
           )}
 
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={sinVencimiento}
-              onChange={(event) => manejarSinVencimiento(event.target.checked)}
-            />
-            Sin fecha de vencimiento
-          </label>
-
           <section className="lotes-section">
             <div className="section-title-row compact-title-row">
               <h2>Vencimientos</h2>
 
-              {!sinVencimiento && (
+              <div className="lote-actions-inline">
                 <button
-                  className="small-add-button"
+                  className={`sin-vencimiento-button ${
+                    sinVencimiento ? "sin-vencimiento-activo" : ""
+                  }`}
                   type="button"
-                  onClick={agregarLote}
+                  onClick={() => manejarSinVencimiento(!sinVencimiento)}
                 >
-                  + Otro
+                  {sinVencimiento ? "Sin vencimiento ✓" : "Sin vencimiento"}
                 </button>
-              )}
+
+                {!sinVencimiento && (
+                  <button
+                    className="small-add-button"
+                    type="button"
+                    onClick={agregarLote}
+                  >
+                    + Otro
+                  </button>
+                )}
+              </div>
             </div>
 
             {lotes.map((lote, index) => (

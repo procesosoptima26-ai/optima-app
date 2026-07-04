@@ -72,16 +72,16 @@ button:disabled {
 
 .menu-toggle-button {
   position: fixed;
-  top: 14px;
-  left: 14px;
+  top: 58px;
+  left: 16px;
   z-index: 900;
-  width: 44px;
-  height: 44px;
+  width: 52px;
+  height: 52px;
   display: grid;
   place-items: center;
   padding: 0;
   border: none;
-  border-radius: 0;
+  border-radius: 6px;
   background: transparent;
   box-shadow: none;
   color: transparent;
@@ -91,21 +91,20 @@ button:disabled {
 
 .menu-toggle-button::before {
   content: "";
-  width: 26px;
-  height: 18px;
+  width: 31px;
+  height: 23px;
   display: block;
   background:
-    linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 3px no-repeat,
-    linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 3px no-repeat,
-    linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 3px no-repeat;
-  border-radius: 999px;
+    linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 4px no-repeat,
+    linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 4px no-repeat,
+    linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 4px no-repeat;
 }
 
 .menu-toggle-button:hover::before {
   background:
-    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) top center / 100% 3px no-repeat,
-    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) center center / 100% 3px no-repeat,
-    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) bottom center / 100% 3px no-repeat;
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) top center / 100% 4px no-repeat,
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) center center / 100% 4px no-repeat,
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) bottom center / 100% 4px no-repeat;
 }
 
 .menu-overlay {
@@ -944,19 +943,19 @@ button:disabled {
   }
 
   .menu-toggle-button {
-    top: 10px;
-    left: 10px;
-    width: 42px;
-    height: 42px;
+    top: 58px;
+    left: 14px;
+    width: 50px;
+    height: 50px;
   }
 
   .menu-toggle-button::before {
-    width: 24px;
-    height: 16px;
+    width: 30px;
+    height: 22px;
     background:
-      linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 3px no-repeat,
-      linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 3px no-repeat,
-      linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 3px no-repeat;
+      linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 4px no-repeat,
+      linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 4px no-repeat,
+      linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 4px no-repeat;
   }
 
   .side-menu {

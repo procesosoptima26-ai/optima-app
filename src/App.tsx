@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import logoOptima from "./assets/logo-optima.png";
+import optimaHomeImage from "./assets/optima-home.png";
 import "./App.css";
 
 type ProductoApi = {
@@ -54,8 +55,70 @@ type MovimientoGuardado = {
   lotes: Lote[];
 };
 
+type VistaActiva =
+  | "inicio"
+  | "login"
+  | "inventario"
+  | "movimientos"
+  | "automatizaciones"
+  | "reportes"
+  | "ajustes"
+  | "usuario";
+
+type ItemMenu = {
+  id: VistaActiva;
+  etiqueta: string;
+  icono: string;
+  disponible: boolean;
+};
+
 const sucursales = ["Bella Vista", "Goya"];
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
+
+const itemsMenu: ItemMenu[] = [
+  {
+    id: "login",
+    etiqueta: "Login",
+    icono: "🔐",
+    disponible: false,
+  },
+  {
+    id: "inventario",
+    etiqueta: "Inventario",
+    icono: "📦",
+    disponible: true,
+  },
+  {
+    id: "movimientos",
+    etiqueta: "Movimientos",
+    icono: "🔄",
+    disponible: false,
+  },
+  {
+    id: "automatizaciones",
+    etiqueta: "Automatizaciones",
+    icono: "⚙️",
+    disponible: false,
+  },
+  {
+    id: "reportes",
+    etiqueta: "Reportes",
+    icono: "📊",
+    disponible: false,
+  },
+  {
+    id: "ajustes",
+    etiqueta: "Ajustes",
+    icono: "🛠️",
+    disponible: false,
+  },
+  {
+    id: "usuario",
+    etiqueta: "Usuario",
+    icono: "👤",
+    disponible: false,
+  },
+];
 
 function armarNombre(
   producto: string,
@@ -111,6 +174,9 @@ function convertirFechaParaApi(fechaTexto: string) {
 
 function App() {
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [vistaActiva, setVistaActiva] = useState<VistaActiva>("inicio");
+  const [menuAbierto, setMenuAbierto] = useState(false);
 
   const [codigo, setCodigo] = useState("");
   const [producto, setProducto] = useState("");
@@ -238,6 +304,7 @@ function App() {
   function eliminarLote(id: number) {
     setLotes((lotesActuales) => {
       if (lotesActuales.length === 1) return lotesActuales;
+
       return lotesActuales.filter((lote) => lote.id !== id);
     });
   }
@@ -472,23 +539,67 @@ function App() {
     ejecutarLimpiezaFormulario();
   }
 
-  return (
-    <main className="app">
-      <section className="app-container">
-        <header className="app-header">
-          <div className="brand-row">
-            <img
-              src={logoOptima}
-              alt="Logo OPTIMA"
-              className="brand-logo-image"
-            />
+  function cambiarVista(nuevaVista: VistaActiva) {
+    setVistaActiva(nuevaVista);
+    setMenuAbierto(false);
+  }
 
-            <div className="brand-text">
-              <h1>OPTIMA</h1>
-            </div>
+  function obtenerTituloVista() {
+    const item = itemsMenu.find((menuItem) => menuItem.id === vistaActiva);
+
+    if (vistaActiva === "inicio") return "Inicio";
+
+    return item?.etiqueta || "OPTIMA";
+  }
+
+  function renderInicio() {
+    return (
+      <section className="home-screen">
+        <div className="home-brand-card">
+          <img
+            src={optimaHomeImage}
+            alt="OPTIMA - Optimizamos hoy, impulsamos el mañana"
+            className="home-brand-image"
+          />
+
+          <div className="home-brand-text">
+            <h1>OPTIMA</h1>
+            <p>
+              Optimizamos hoy,
+              <br />
+              impulsamos el mañana.
+            </p>
           </div>
-        </header>
+        </div>
+      </section>
+    );
+  }
 
+  function renderModuloEnDesarrollo() {
+    return (
+      <section className="coming-soon-card">
+        <div className="coming-soon-icon">🚧</div>
+
+        <p className="coming-soon-label">{obtenerTituloVista()}</p>
+
+        <h2>Este módulo ya está en desarrollo.</h2>
+
+        <p>Optimizamos hoy, impulsamos el mañana.</p>
+
+        <button
+          className="coming-soon-button"
+          type="button"
+          onClick={() => cambiarVista("inventario")}
+        >
+          Ir a Inventario
+        </button>
+      </section>
+    );
+  }
+
+  function renderInventario() {
+    return (
+      <>
         <section className="form-card">
           <div className="module-label">INVENTARIO</div>
 
@@ -821,6 +932,102 @@ function App() {
             </ul>
           </section>
         )}
+      </>
+    );
+  }
+
+  function renderContenido() {
+    if (vistaActiva === "inicio") {
+      return renderInicio();
+    }
+
+    if (vistaActiva === "inventario") {
+      return renderInventario();
+    }
+
+    return renderModuloEnDesarrollo();
+  }
+
+  return (
+    <main className="app">
+      <button
+        className="menu-toggle-button"
+        type="button"
+        onClick={() => setMenuAbierto(true)}
+        aria-label="Abrir menú"
+      >
+        M
+      </button>
+
+      {menuAbierto && (
+        <div className="menu-overlay" onClick={() => setMenuAbierto(false)}>
+          <aside className="side-menu" onClick={(event) => event.stopPropagation()}>
+            <div className="side-menu-header">
+              <img
+                src={logoOptima}
+                alt="Logo OPTIMA"
+                className="side-menu-logo"
+              />
+
+              <div>
+                <strong>OPTIMA</strong>
+                <span>Optimizamos hoy.</span>
+              </div>
+            </div>
+
+            <nav className="side-menu-nav" aria-label="Menú principal">
+              <button
+                className={`side-menu-item ${
+                  vistaActiva === "inicio" ? "side-menu-item-active" : ""
+                }`}
+                type="button"
+                onClick={() => cambiarVista("inicio")}
+              >
+                <span>🏠</span>
+                <strong>Inicio</strong>
+              </button>
+
+              {itemsMenu.map((item) => (
+                <button
+                  key={item.id}
+                  className={`side-menu-item ${
+                    vistaActiva === item.id ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista(item.id)}
+                >
+                  <span>{item.icono}</span>
+                  <strong>{item.etiqueta}</strong>
+
+                  {!item.disponible && (
+                    <small className="side-menu-status">En desarrollo</small>
+                  )}
+                </button>
+              ))}
+            </nav>
+          </aside>
+        </div>
+      )}
+
+      <section className="app-container">
+        {vistaActiva !== "inicio" && (
+          <header className="app-header">
+            <div className="brand-row">
+              <img
+                src={logoOptima}
+                alt="Logo OPTIMA"
+                className="brand-logo-image"
+              />
+
+              <div className="brand-text">
+                <h1>OPTIMA</h1>
+                <span>{obtenerTituloVista()}</span>
+              </div>
+            </div>
+          </header>
+        )}
+
+        {renderContenido()}
       </section>
 
       {scannerAbierto && (

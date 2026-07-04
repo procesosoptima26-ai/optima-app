@@ -230,6 +230,48 @@ button:disabled {
   border: 1px solid #bfdbfe;
 }
 
+.product-found-box {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 0 0 12px;
+  padding: 11px 13px;
+  border-radius: 16px;
+  background: #eff6ff;
+  border: 1.5px solid #2563eb;
+  box-shadow: 0 8px 18px rgba(37, 99, 235, 0.1);
+}
+
+.product-found-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: #111827;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.product-found-box span {
+  display: block;
+  margin-bottom: 3px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.product-found-box strong {
+  display: block;
+  color: #111827;
+  font-size: 16px;
+  line-height: 1.2;
+}
+
 .product-data-section {
   margin-top: 2px;
 }
@@ -400,12 +442,14 @@ button:disabled {
 }
 
 .secondary-button {
-  background: #e0ecff;
-  color: #1d4ed8;
+  background: rgba(224, 236, 255, 0.45);
+  color: rgba(29, 78, 216, 0.7);
+  box-shadow: none;
 }
 
 .secondary-button:hover {
-  background: #c7dcff;
+  background: rgba(199, 220, 255, 0.65);
+  color: #1d4ed8;
 }
 
 .delete-button {
@@ -450,6 +494,74 @@ button:disabled {
   background: #fef2f2;
   color: #b91c1c;
   border: 1px solid #fecaca;
+}
+
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, 0.48);
+  backdrop-filter: blur(4px);
+}
+
+.confirm-card {
+  width: min(380px, 100%);
+  border-radius: 22px;
+  padding: 20px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  border: 1px solid #e5e7eb;
+  text-align: center;
+}
+
+.confirm-card h2 {
+  margin: 0;
+  color: #111827;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.confirm-card p {
+  margin: 10px 0 18px;
+  color: #64748b;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.confirm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.confirm-cancel-button,
+.confirm-clear-button {
+  border: none;
+  border-radius: 15px;
+  padding: 13px 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.confirm-cancel-button {
+  background: #e0ecff;
+  color: #1d4ed8;
+}
+
+.confirm-cancel-button:hover {
+  background: #c7dcff;
+}
+
+.confirm-clear-button {
+  background: #111827;
+  color: #ffffff;
+}
+
+.confirm-clear-button:hover {
+  background: #1f2937;
 }
 
 .result-title-row {
@@ -582,6 +694,20 @@ button:disabled {
     min-height: 44px;
   }
 
+  .product-found-box {
+    padding: 10px 12px;
+  }
+
+  .product-found-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 17px;
+  }
+
+  .product-found-box strong {
+    font-size: 15px;
+  }
+
   .section-title-row {
     gap: 6px;
   }
@@ -615,6 +741,14 @@ button:disabled {
   .primary-button,
   .secondary-button {
     width: 100%;
+  }
+
+  .confirm-card {
+    padding: 18px;
+  }
+
+  .confirm-card h2 {
+    font-size: 20px;
   }
 
   .result-title-row {

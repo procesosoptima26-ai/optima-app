@@ -124,6 +124,8 @@ function App() {
   const [scannerAbierto, setScannerAbierto] = useState(false);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [mostrarConfirmacionLimpiar, setMostrarConfirmacionLimpiar] =
+    useState(false);
   const [estadoProducto, setEstadoProducto] =
     useState<EstadoProducto>("sin_codigo");
   const [ultimoMovimiento, setUltimoMovimiento] =
@@ -318,6 +320,29 @@ function App() {
     return "";
   }
 
+  function formularioTieneDatosCargados() {
+    const tieneCodigo = Boolean(codigo.trim());
+    const tieneDatosProducto =
+      Boolean(producto.trim()) ||
+      Boolean(marca.trim()) ||
+      Boolean(presentacion.trim()) ||
+      Boolean(especificacion.trim());
+    const tieneObservaciones = Boolean(observaciones.trim());
+    const tieneLotes = lotes.some(
+      (lote) => Boolean(lote.vencimiento.trim()) || Boolean(lote.cantidad.trim())
+    );
+
+    return (
+      tieneCodigo ||
+      tieneDatosProducto ||
+      tieneObservaciones ||
+      tieneLotes ||
+      sinVencimiento ||
+      estadoProducto === "nuevo" ||
+      estadoProducto === "existente"
+    );
+  }
+
   function prepararSiguienteCarga() {
     setCodigo("");
     limpiarDatosProducto();
@@ -416,7 +441,7 @@ function App() {
     }
   }
 
-  function limpiarFormulario() {
+  function ejecutarLimpiezaFormulario() {
     setCodigo("");
     limpiarDatosProducto();
     setSinVencimiento(false);
@@ -431,10 +456,20 @@ function App() {
     ]);
     setAviso(null);
     setUltimoMovimiento(null);
+    setMostrarConfirmacionLimpiar(false);
 
     setTimeout(() => {
       codigoInputRef.current?.focus();
     }, 100);
+  }
+
+  function manejarClickLimpiar() {
+    if (formularioTieneDatosCargados()) {
+      setMostrarConfirmacionLimpiar(true);
+      return;
+    }
+
+    ejecutarLimpiezaFormulario();
   }
 
   return (
@@ -540,9 +575,13 @@ function App() {
           )}
 
           {estadoProducto === "existente" && (
-            <div className="field-group">
-              <label htmlFor="nombre">Nombre</label>
-              <input id="nombre" value={nombre} readOnly />
+            <div className="product-found-box">
+              <div className="product-found-icon">✓</div>
+
+              <div>
+                <span>Producto encontrado</span>
+                <strong>{nombre}</strong>
+              </div>
             </div>
           )}
 
@@ -726,7 +765,7 @@ function App() {
             <button
               className="secondary-button"
               type="button"
-              onClick={limpiarFormulario}
+              onClick={manejarClickLimpiar}
               disabled={guardando}
             >
               Limpiar
@@ -792,6 +831,36 @@ function App() {
           }}
           onClose={() => setScannerAbierto(false)}
         />
+      )}
+
+      {mostrarConfirmacionLimpiar && (
+        <div className="confirm-overlay">
+          <div className="confirm-card">
+            <h2>¿Querés borrar los datos cargados?</h2>
+            <p>
+              Se limpiará el producto, código, vencimientos, cantidades y
+              observaciones.
+            </p>
+
+            <div className="confirm-actions">
+              <button
+                className="confirm-cancel-button"
+                type="button"
+                onClick={() => setMostrarConfirmacionLimpiar(false)}
+              >
+                Cancelar
+              </button>
+
+              <button
+                className="confirm-clear-button"
+                type="button"
+                onClick={ejecutarLimpiezaFormulario}
+              >
+                Limpiar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

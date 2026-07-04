@@ -458,44 +458,52 @@ function App() {
           <div className="module-label">INVENTARIO</div>
 
           <div className="selection-section">
-            <div className="current-summary-row">
-              <span className="current-summary-label">Sucursal actual</span>
-              <strong className="current-summary-value">{sucursal}</strong>
+            <div className="current-summary-grid">
+              <div className="current-summary-row">
+                <span className="current-summary-label">Sucursal actual</span>
+                <strong className="current-summary-value">
+                  {sucursal.toUpperCase()}
+                </strong>
+              </div>
+
+              <div className="current-summary-row">
+                <span className="current-summary-label">Ubicación actual</span>
+                <strong className="current-summary-value">
+                  {ubicacion.toUpperCase()}
+                </strong>
+              </div>
             </div>
 
-            <div className="field-group compact-field">
-              <label htmlFor="sucursal">Sucursal</label>
-              <select
-                id="sucursal"
-                value={sucursal}
-                onChange={(event) => setSucursal(event.target.value)}
-              >
-                {sucursales.map((sucursalDisponible) => (
-                  <option key={sucursalDisponible} value={sucursalDisponible}>
-                    {sucursalDisponible}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <div className="selector-grid">
+              <div className="field-group compact-field">
+                <label htmlFor="sucursal">Sucursal</label>
+                <select
+                  id="sucursal"
+                  value={sucursal}
+                  onChange={(event) => setSucursal(event.target.value)}
+                >
+                  {sucursales.map((sucursalDisponible) => (
+                    <option key={sucursalDisponible} value={sucursalDisponible}>
+                      {sucursalDisponible}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div className="current-summary-row">
-              <span className="current-summary-label">Ubicación actual</span>
-              <strong className="current-summary-value">{ubicacion}</strong>
-            </div>
-
-            <div className="field-group compact-field">
-              <label htmlFor="ubicacion">Ubicación</label>
-              <select
-                id="ubicacion"
-                value={ubicacion}
-                onChange={(event) => setUbicacion(event.target.value)}
-              >
-                {ubicaciones.map((ubicacionDisponible) => (
-                  <option key={ubicacionDisponible} value={ubicacionDisponible}>
-                    {ubicacionDisponible}
-                  </option>
-                ))}
-              </select>
+              <div className="field-group compact-field">
+                <label htmlFor="ubicacion">Ubicación</label>
+                <select
+                  id="ubicacion"
+                  value={ubicacion}
+                  onChange={(event) => setUbicacion(event.target.value)}
+                >
+                  {ubicaciones.map((ubicacionDisponible) => (
+                    <option key={ubicacionDisponible} value={ubicacionDisponible}>
+                      {ubicacionDisponible}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 

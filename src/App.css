@@ -74,7 +74,7 @@ button:disabled {
 }
 
 .module-label {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   color: #94a3b8;
   font-size: 13px;
   font-weight: 900;
@@ -86,7 +86,7 @@ button:disabled {
 .result-card {
   background: rgba(255, 255, 255, 0.97);
   border-radius: 20px;
-  padding: 14px;
+  padding: 13px;
   box-shadow: 0 16px 44px rgba(15, 23, 42, 0.08);
   border: 1px solid #e5e7eb;
 }
@@ -98,43 +98,58 @@ button:disabled {
 .selection-section {
   display: flex;
   flex-direction: column;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.current-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-bottom: 14px;
 }
 
 .current-summary-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 12px;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 999px;
   background: #eff6ff;
   border: 1px solid #dbeafe;
+  min-height: 28px;
 }
 
 .current-summary-label {
   color: #2563eb;
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 900;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .current-summary-value {
   color: #1d4ed8;
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 900;
   line-height: 1.1;
   text-align: right;
+  white-space: nowrap;
+}
+
+.selector-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 .field-group {
   display: flex;
   flex-direction: column;
-  gap: 7px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 11px;
 }
 
 .field-group label {
@@ -146,13 +161,18 @@ button:disabled {
   margin-bottom: 0;
 }
 
+.compact-field label {
+  text-align: center;
+  font-size: 15px;
+}
+
 .field-group input,
 .field-group select,
 .field-group textarea {
   width: 100%;
   border: 1px solid #d1d5db;
   border-radius: 15px;
-  padding: 13px 14px;
+  padding: 12px 13px;
   background: #ffffff;
   color: #111827;
   outline: none;
@@ -161,7 +181,8 @@ button:disabled {
 }
 
 .compact-field select {
-  min-height: 48px;
+  min-height: 46px;
+  padding: 10px 12px;
 }
 
 .field-group input:read-only {
@@ -266,8 +287,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 2px 0 14px;
-  padding: 12px 14px;
+  margin: 1px 0 12px;
+  padding: 11px 14px;
   border-radius: 16px;
   background: #f8fafc;
   border: 1px solid #e5e7eb;
@@ -281,7 +302,7 @@ button:disabled {
 }
 
 .lotes-section {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .section-title-row {
@@ -289,12 +310,13 @@ button:disabled {
   justify-content: space-between;
   gap: 10px;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .compact-title-row h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
+  color: #94a3b8;
 }
 
 .small-add-button {
@@ -317,22 +339,22 @@ button:disabled {
   border: 1px solid #e5e7eb;
   background: #f8fafc;
   border-radius: 16px;
-  padding: 12px;
-  margin-bottom: 10px;
+  padding: 11px;
+  margin-bottom: 9px;
 }
 
 .lote-title-row {
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   align-items: center;
 }
 
 .lote-inline-grid {
   display: grid;
   grid-template-columns: 1.2fr 0.8fr;
-  gap: 10px;
+  gap: 9px;
 }
 
 .lote-inline-grid.solo-cantidad {
@@ -387,7 +409,7 @@ button:disabled {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 14px;
+  margin-top: 12px;
 }
 
 .message {
@@ -497,6 +519,10 @@ button:disabled {
 }
 
 @media (max-width: 640px) {
+  .app {
+    padding: 8px 8px;
+  }
+
   .brand-logo-image {
     width: 48px;
     height: 48px;
@@ -506,22 +532,40 @@ button:disabled {
     font-size: 30px;
   }
 
+  .module-label {
+    margin-bottom: 8px;
+  }
+
   .form-card,
   .result-card {
-    padding: 13px;
+    padding: 12px;
     border-radius: 18px;
   }
 
   .current-summary-row {
-    padding: 6px 10px;
+    padding: 5px 7px;
   }
 
   .current-summary-label {
-    font-size: 10px;
+    font-size: 8.5px;
   }
 
   .current-summary-value {
-    font-size: 17px;
+    font-size: 12.5px;
+  }
+
+  .field-group {
+    margin-bottom: 10px;
+  }
+
+  .field-group input,
+  .field-group select,
+  .field-group textarea {
+    padding: 11px 12px;
+  }
+
+  .compact-field select {
+    min-height: 44px;
   }
 
   .lote-inline-grid {

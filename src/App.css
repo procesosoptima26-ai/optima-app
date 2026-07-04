@@ -12,6 +12,11 @@
   --optima-green-soft: #ecfdf8;
   --optima-green-border: #b9efe5;
 
+  --optima-green-action-soft: #f4fbf9;
+  --optima-green-action-hover: #e9f8f4;
+  --optima-green-action-border: #d6eee9;
+  --optima-green-action-text: #12877e;
+
   --optima-bg: #eef3f8;
   --optima-surface: #ffffff;
   --optima-soft-surface: #f8fafc;
@@ -624,12 +629,11 @@ button:disabled {
 }
 
 .sin-vencimiento-button {
-  border: none;
+  border: 1px solid var(--optima-green-action-border);
   border-radius: 999px;
   padding: 8px 11px;
-  background: var(--optima-green-soft);
-  color: var(--optima-green-dark);
-  border: 1px solid var(--optima-green-border);
+  background: var(--optima-green-action-soft);
+  color: var(--optima-green-action-text);
   font-size: 12px;
   font-weight: 900;
   cursor: pointer;
@@ -637,7 +641,7 @@ button:disabled {
 }
 
 .sin-vencimiento-button:hover {
-  background: #dffaf3;
+  background: var(--optima-green-action-hover);
 }
 
 .sin-vencimiento-activo {
@@ -652,12 +656,11 @@ button:disabled {
 }
 
 .small-add-button {
-  border: none;
+  border: 1px solid var(--optima-green-action-border);
   border-radius: 999px;
   padding: 8px 11px;
-  background: var(--optima-green-soft);
-  color: var(--optima-green-dark);
-  border: 1px solid var(--optima-green-border);
+  background: var(--optima-green-action-soft);
+  color: var(--optima-green-action-text);
   font-size: 13px;
   font-weight: 900;
   cursor: pointer;
@@ -665,7 +668,7 @@ button:disabled {
 }
 
 .small-add-button:hover {
-  background: #dffaf3;
+  background: var(--optima-green-action-hover);
 }
 
 .lote-card {

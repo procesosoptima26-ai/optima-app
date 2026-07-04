@@ -65,11 +65,21 @@ type VistaActiva =
   | "ajustes"
   | "usuario";
 
+type MenuIconKey =
+  | "login"
+  | "inventario"
+  | "movimientos"
+  | "automatizaciones"
+  | "reportes"
+  | "ajustes"
+  | "usuario";
+
+type ModuloVista = Exclude<VistaActiva, "inicio">;
+
 type ItemMenu = {
-  id: VistaActiva;
+  id: ModuloVista;
   etiqueta: string;
-  icono: string;
-  disponible: boolean;
+  icono: MenuIconKey;
 };
 
 const sucursales = ["Bella Vista", "Goya"];
@@ -78,45 +88,38 @@ const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 const itemsMenu: ItemMenu[] = [
   {
     id: "login",
-    etiqueta: "Login",
-    icono: "🔐",
-    disponible: false,
+    etiqueta: "LOGIN",
+    icono: "login",
   },
   {
     id: "inventario",
-    etiqueta: "Inventario",
-    icono: "📦",
-    disponible: true,
+    etiqueta: "INVENTARIO",
+    icono: "inventario",
   },
   {
     id: "movimientos",
-    etiqueta: "Movimientos",
-    icono: "🔄",
-    disponible: false,
+    etiqueta: "MOVIMIENTOS",
+    icono: "movimientos",
   },
   {
     id: "automatizaciones",
-    etiqueta: "Automatizaciones",
-    icono: "⚙️",
-    disponible: false,
+    etiqueta: "AUTOMATIZACIONES",
+    icono: "automatizaciones",
   },
   {
     id: "reportes",
-    etiqueta: "Reportes",
-    icono: "📊",
-    disponible: false,
+    etiqueta: "REPORTES",
+    icono: "reportes",
   },
   {
     id: "ajustes",
-    etiqueta: "Ajustes",
-    icono: "🛠️",
-    disponible: false,
+    etiqueta: "AJUSTES",
+    icono: "ajustes",
   },
   {
     id: "usuario",
-    etiqueta: "Usuario",
-    icono: "👤",
-    disponible: false,
+    etiqueta: "USUARIO",
+    icono: "usuario",
   },
 ];
 
@@ -170,6 +173,154 @@ function convertirFechaParaApi(fechaTexto: string) {
   if (!esFechaValida(dia, mes, anio)) return "";
 
   return `${anio}-${match[2]}-${match[1]}`;
+}
+
+function IconLogin() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="3.5" y="11" width="17" height="9" rx="2.4" />
+      <path d="M7.5 11V8.8a4.5 4.5 0 0 1 9 0V11" />
+      <circle cx="12" cy="15.5" r="1.1" />
+    </svg>
+  );
+}
+
+function IconInventory() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3 4.8 6.8 12 10.6l7.2-3.8L12 3Z" />
+      <path d="M4.8 6.8V17.2L12 21l7.2-3.8V6.8" />
+      <path d="M12 10.6V21" />
+    </svg>
+  );
+}
+
+function IconMovements() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7 7h11" />
+      <path d="M15 4l3 3-3 3" />
+      <path d="M17 17H6" />
+      <path d="M9 14l-3 3 3 3" />
+    </svg>
+  );
+}
+
+function IconAutomation() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="7" y="7" width="10" height="10" rx="2.2" />
+      <path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4" />
+      <path d="M5.1 5.1l1.7 1.7M17.2 17.2l1.7 1.7M18.9 5.1l-1.7 1.7M6.8 17.2l-1.7 1.7" />
+      <circle cx="12" cy="12" r="2.2" />
+    </svg>
+  );
+}
+
+function IconReports() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 20V10" />
+      <path d="M10 20V6" />
+      <path d="M16 20V13" />
+      <path d="M22 20H2" />
+    </svg>
+  );
+}
+
+function IconSettings() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 1 1-4 0v-.2a1 1 0 0 0-.6-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 1 1 0-4h.2a1 1 0 0 0 .9-.6 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 1 1 4 0v.2a1 1 0 0 0 .6.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 1 1 0 4h-.2a1 1 0 0 0-.9.6Z" />
+    </svg>
+  );
+}
+
+function IconUser() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
+    </svg>
+  );
+}
+
+function renderIcon(icono: MenuIconKey) {
+  switch (icono) {
+    case "login":
+      return <IconLogin />;
+    case "inventario":
+      return <IconInventory />;
+    case "movimientos":
+      return <IconMovements />;
+    case "automatizaciones":
+      return <IconAutomation />;
+    case "reportes":
+      return <IconReports />;
+    case "ajustes":
+      return <IconSettings />;
+    case "usuario":
+      return <IconUser />;
+    default:
+      return <IconAutomation />;
+  }
 }
 
 function App() {
@@ -544,12 +695,12 @@ function App() {
     setMenuAbierto(false);
   }
 
-  function obtenerTituloVista() {
-    const item = itemsMenu.find((menuItem) => menuItem.id === vistaActiva);
+  function abrirMenu() {
+    setMenuAbierto(true);
+  }
 
-    if (vistaActiva === "inicio") return "Inicio";
-
-    return item?.etiqueta || "OPTIMA";
+  function obtenerItemMenuActual() {
+    return itemsMenu.find((item) => item.id === vistaActiva);
   }
 
   function renderInicio() {
@@ -561,37 +712,36 @@ function App() {
             alt="OPTIMA - Optimizamos hoy, impulsamos el mañana"
             className="home-brand-image"
           />
-
-          <div className="home-brand-text">
-            <h1>OPTIMA</h1>
-            <p>
-              Optimizamos hoy,
-              <br />
-              impulsamos el mañana.
-            </p>
-          </div>
         </div>
       </section>
     );
   }
 
   function renderModuloEnDesarrollo() {
+    const itemActual = obtenerItemMenuActual();
+
     return (
       <section className="coming-soon-card">
-        <div className="coming-soon-icon">🚧</div>
+        <div className="coming-soon-icon">
+          {itemActual ? renderIcon(itemActual.icono) : <IconAutomation />}
+        </div>
 
-        <p className="coming-soon-label">{obtenerTituloVista()}</p>
+        <p className="coming-soon-label">
+          {itemActual?.etiqueta ?? "MÓDULO"}
+        </p>
 
         <h2>Este módulo ya está en desarrollo.</h2>
 
-        <p>Optimizamos hoy, impulsamos el mañana.</p>
+        <p className="coming-soon-message">
+          Optimizamos hoy, impulsamos el mañana.
+        </p>
 
         <button
           className="coming-soon-button"
           type="button"
-          onClick={() => cambiarVista("inventario")}
+          onClick={abrirMenu}
         >
-          Ir a Inventario
+          Ir al menú
         </button>
       </section>
     );
@@ -644,7 +794,10 @@ function App() {
                   onChange={(event) => setUbicacion(event.target.value)}
                 >
                   {ubicaciones.map((ubicacionDisponible) => (
-                    <option key={ubicacionDisponible} value={ubicacionDisponible}>
+                    <option
+                      key={ubicacionDisponible}
+                      value={ubicacionDisponible}
+                    >
                       {ubicacionDisponible}
                     </option>
                   ))}
@@ -949,11 +1102,11 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className={`app ${vistaActiva === "inicio" ? "app-home" : ""}`}>
       <button
         className="menu-toggle-button"
         type="button"
-        onClick={() => setMenuAbierto(true)}
+        onClick={abrirMenu}
         aria-label="Abrir menú"
       >
         M
@@ -961,32 +1114,27 @@ function App() {
 
       {menuAbierto && (
         <div className="menu-overlay" onClick={() => setMenuAbierto(false)}>
-          <aside className="side-menu" onClick={(event) => event.stopPropagation()}>
-            <div className="side-menu-header">
+          <aside
+            className="side-menu"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              className="side-menu-header-button"
+              type="button"
+              onClick={() => cambiarVista("inicio")}
+            >
               <img
                 src={logoOptima}
                 alt="Logo OPTIMA"
                 className="side-menu-logo"
               />
 
-              <div>
+              <div className="side-menu-brand-text">
                 <strong>OPTIMA</strong>
-                <span>Optimizamos hoy.</span>
               </div>
-            </div>
+            </button>
 
             <nav className="side-menu-nav" aria-label="Menú principal">
-              <button
-                className={`side-menu-item ${
-                  vistaActiva === "inicio" ? "side-menu-item-active" : ""
-                }`}
-                type="button"
-                onClick={() => cambiarVista("inicio")}
-              >
-                <span>🏠</span>
-                <strong>Inicio</strong>
-              </button>
-
               {itemsMenu.map((item) => (
                 <button
                   key={item.id}
@@ -996,12 +1144,11 @@ function App() {
                   type="button"
                   onClick={() => cambiarVista(item.id)}
                 >
-                  <span>{item.icono}</span>
-                  <strong>{item.etiqueta}</strong>
+                  <span className="side-menu-icon">
+                    {renderIcon(item.icono)}
+                  </span>
 
-                  {!item.disponible && (
-                    <small className="side-menu-status">En desarrollo</small>
-                  )}
+                  <strong>{item.etiqueta}</strong>
                 </button>
               ))}
             </nav>
@@ -1021,7 +1168,6 @@ function App() {
 
               <div className="brand-text">
                 <h1>OPTIMA</h1>
-                <span>{obtenerTituloVista()}</span>
               </div>
             </div>
           </header>

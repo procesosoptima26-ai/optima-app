@@ -457,10 +457,10 @@ function App() {
         <section className="form-card">
           <div className="module-label">INVENTARIO</div>
 
-          <div className="branch-location-summary">
-            <div className="current-card">
-              <span>Sucursal actual</span>
-              <strong>{sucursal}</strong>
+          <div className="selection-section">
+            <div className="current-summary-row">
+              <span className="current-summary-label">Sucursal actual</span>
+              <strong className="current-summary-value">{sucursal}</strong>
             </div>
 
             <div className="field-group compact-field">
@@ -478,9 +478,9 @@ function App() {
               </select>
             </div>
 
-            <div className="current-card">
-              <span>Ubicación actual</span>
-              <strong>{ubicacion}</strong>
+            <div className="current-summary-row">
+              <span className="current-summary-label">Ubicación actual</span>
+              <strong className="current-summary-value">{ubicacion}</strong>
             </div>
 
             <div className="field-group compact-field">

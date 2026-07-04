@@ -95,41 +95,39 @@ button:disabled {
   margin-top: 12px;
 }
 
-.branch-location-summary {
-  display: grid;
-  grid-template-columns: 0.9fr 1.1fr;
+.selection-section {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: start;
   margin-bottom: 14px;
 }
 
-.current-card {
-  border: 1px solid #dbeafe;
-  background: #eff6ff;
-  border-radius: 14px;
-  padding: 8px 10px;
+.current-summary-row {
   display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-self: start;
-  min-height: unset;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
 }
 
-.current-card span {
-  display: block;
-  margin-bottom: 3px;
+.current-summary-label {
   color: #2563eb;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 900;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  line-height: 1.2;
+  line-height: 1.1;
 }
 
-.current-card strong {
-  font-size: 14px;
-  line-height: 1.2;
-  color: #111827;
+.current-summary-value {
+  color: #1d4ed8;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+  text-align: right;
 }
 
 .field-group {
@@ -163,7 +161,6 @@ button:disabled {
 }
 
 .compact-field select {
-  height: 100%;
   min-height: 48px;
 }
 
@@ -515,21 +512,16 @@ button:disabled {
     border-radius: 18px;
   }
 
-  .branch-location-summary {
-    grid-template-columns: 0.88fr 1.12fr;
-    gap: 8px;
+  .current-summary-row {
+    padding: 6px 10px;
   }
 
-  .current-card {
-    padding: 8px 10px;
+  .current-summary-label {
+    font-size: 10px;
   }
 
-  .current-card strong {
-    font-size: 14px;
-  }
-
-  .current-card span {
-    font-size: 9px;
+  .current-summary-value {
+    font-size: 17px;
   }
 
   .lote-inline-grid {

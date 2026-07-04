@@ -81,10 +81,17 @@ button:disabled {
   border-radius: 16px;
   background: var(--optima-blue);
   color: #ffffff;
-  font-size: 20px;
+  font-size: 0;
   font-weight: 950;
   cursor: pointer;
   box-shadow: 0 14px 34px rgba(8, 63, 136, 0.24);
+}
+
+.menu-toggle-button::before {
+  content: "☰";
+  font-size: 27px;
+  line-height: 1;
+  font-weight: 900;
 }
 
 .menu-toggle-button:hover {
@@ -932,6 +939,10 @@ button:disabled {
     width: 46px;
     height: 46px;
     border-radius: 15px;
+  }
+
+  .menu-toggle-button::before {
+    font-size: 26px;
   }
 
   .side-menu {

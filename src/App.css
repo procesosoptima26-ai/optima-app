@@ -75,35 +75,37 @@ button:disabled {
   top: 14px;
   left: 14px;
   z-index: 900;
-  width: 48px;
-  height: 48px;
+  width: 44px;
+  height: 44px;
   display: grid;
   place-items: center;
   padding: 0;
   border: none;
-  border-radius: 16px;
-  background: var(--optima-blue);
-  color: #ffffff;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: transparent;
   font-size: 0;
-  font-weight: 950;
   cursor: pointer;
-  box-shadow: 0 14px 34px rgba(8, 63, 136, 0.24);
 }
 
 .menu-toggle-button::before {
   content: "";
-  width: 24px;
+  width: 26px;
   height: 18px;
   display: block;
   background:
-    linear-gradient(#ffffff, #ffffff) top center / 100% 3px no-repeat,
-    linear-gradient(#ffffff, #ffffff) center center / 100% 3px no-repeat,
-    linear-gradient(#ffffff, #ffffff) bottom center / 100% 3px no-repeat;
+    linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 3px no-repeat,
+    linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 3px no-repeat,
+    linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 3px no-repeat;
   border-radius: 999px;
 }
 
-.menu-toggle-button:hover {
-  background: var(--optima-blue-dark);
+.menu-toggle-button:hover::before {
+  background:
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) top center / 100% 3px no-repeat,
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) center center / 100% 3px no-repeat,
+    linear-gradient(var(--optima-blue-dark), var(--optima-blue-dark)) bottom center / 100% 3px no-repeat;
 }
 
 .menu-overlay {
@@ -944,18 +946,17 @@ button:disabled {
   .menu-toggle-button {
     top: 10px;
     left: 10px;
-    width: 46px;
-    height: 46px;
-    border-radius: 15px;
+    width: 42px;
+    height: 42px;
   }
 
   .menu-toggle-button::before {
-    width: 23px;
-    height: 17px;
+    width: 24px;
+    height: 16px;
     background:
-      linear-gradient(#ffffff, #ffffff) top center / 100% 3px no-repeat,
-      linear-gradient(#ffffff, #ffffff) center center / 100% 3px no-repeat,
-      linear-gradient(#ffffff, #ffffff) bottom center / 100% 3px no-repeat;
+      linear-gradient(var(--optima-blue), var(--optima-blue)) top center / 100% 3px no-repeat,
+      linear-gradient(var(--optima-blue), var(--optima-blue)) center center / 100% 3px no-repeat,
+      linear-gradient(var(--optima-blue), var(--optima-blue)) bottom center / 100% 3px no-repeat;
   }
 
   .side-menu {

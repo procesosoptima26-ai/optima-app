@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
+import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
 import "./App.css";
 
 type ProductoApi = {
@@ -707,11 +708,18 @@ function App() {
     return (
       <section className="home-screen">
         <div className="home-brand-card">
-          <img
-            src={optimaHomeImage}
-            alt="OPTIMA - Optimizamos hoy, impulsamos el mañana"
-            className="home-brand-image"
-          />
+          <picture>
+            <source
+              media="(min-width: 900px)"
+              srcSet={optimaHomeDesktopImage}
+            />
+
+            <img
+              src={optimaHomeImage}
+              alt="OPTIMA - Optimizamos hoy, impulsamos el mañana"
+              className="home-brand-image"
+            />
+          </picture>
         </div>
       </section>
     );
@@ -726,9 +734,7 @@ function App() {
           {itemActual ? renderIcon(itemActual.icono) : <IconAutomation />}
         </div>
 
-        <p className="coming-soon-label">
-          {itemActual?.etiqueta ?? "MÓDULO"}
-        </p>
+        <p className="coming-soon-label">{itemActual?.etiqueta ?? "MÓDULO"}</p>
 
         <h2>Este módulo ya está en desarrollo.</h2>
 
@@ -1109,7 +1115,7 @@ function App() {
         onClick={abrirMenu}
         aria-label="Abrir menú"
       >
-        M
+        Menú
       </button>
 
       {menuAbierto && (

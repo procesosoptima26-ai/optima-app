@@ -30,12 +30,34 @@
   --optima-danger-border: #fecaca;
 }
 
-body {
+html,
+body,
+#root {
+  width: 100%;
+  min-width: 100%;
+  min-height: 100%;
   margin: 0;
+  padding: 0;
+}
+
+html {
+  background: #ffffff;
+}
+
+body {
+  min-height: 100vh;
+  overflow-x: hidden;
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
   background: var(--optima-bg);
   color: var(--optima-text);
+}
+
+#root {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  text-align: initial !important;
 }
 
 button,
@@ -60,7 +82,12 @@ button:disabled {
 }
 
 .app-home {
-  padding: 0;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  max-width: none !important;
+  min-height: 100vh;
+  padding: 0 !important;
+  margin: 0 !important;
   overflow: hidden;
   background: #ffffff;
 }
@@ -71,9 +98,11 @@ button:disabled {
 }
 
 .app-home .app-container {
-  width: 100vw;
-  max-width: none;
-  margin: 0;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 /* MENÚ / NAVEGACIÓN */
@@ -225,41 +254,52 @@ button:disabled {
 /* HOME / SPLASH */
 
 .home-screen {
-  width: 100vw;
-  min-height: 100vh;
-  min-height: 100svh;
-  padding: 0;
+  width: 100vw !important;
+  min-width: 100vw !important;
+  height: 100vh;
+  height: 100svh;
+  padding: 0 !important;
+  margin: 0 !important;
   overflow: hidden;
   background: #ffffff;
 }
 
 .home-brand-card {
-  width: 100vw;
+  width: 100vw !important;
+  min-width: 100vw !important;
   height: 100vh;
   height: 100svh;
+  margin: 0 !important;
+  padding: 0 !important;
   overflow: hidden;
 }
 
 .home-brand-card picture {
   display: block;
-  width: 100vw;
+  width: 100vw !important;
+  min-width: 100vw !important;
   height: 100vh;
   height: 100svh;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
 .home-brand-image {
   display: block;
-  width: 100vw;
+  width: 100vw !important;
+  min-width: 100vw !important;
   height: 100vh;
   height: 100svh;
+  margin: 0 !important;
+  padding: 0 !important;
   object-fit: cover;
   object-position: center;
 }
 
 @media (min-width: 900px) {
   .home-brand-image {
-    width: 100vw;
-    height: 100vh;
+    width: 100vw !important;
+    height: 100vh !important;
     object-fit: cover;
     object-position: center;
   }
@@ -967,7 +1007,7 @@ button:disabled {
   }
 
   .app-home {
-    padding: 0;
+    padding: 0 !important;
   }
 
   .menu-toggle-button {
@@ -995,17 +1035,19 @@ button:disabled {
   }
 
   .home-screen {
-    min-height: 100vh;
-    min-height: 100svh;
+    width: 100vw !important;
+    height: 100vh;
+    height: 100svh;
   }
 
   .home-brand-card picture {
+    width: 100vw !important;
     height: 100vh;
     height: 100svh;
   }
 
   .home-brand-image {
-    width: 100vw;
+    width: 100vw !important;
     height: 100vh;
     height: 100svh;
     object-fit: cover;

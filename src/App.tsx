@@ -1232,34 +1232,20 @@ function App() {
                 <span>Última carga</span>
                 <h2>{ultimoMovimiento.nombre}</h2>
               </div>
+<div className="result-actions-top">
+  <button
+    className="correct-load-button"
+    type="button"
+    onClick={editarUltimaCarga}
+    disabled={guardando || modoEdicion}
+  >
+    Corregir carga
+  </button>
 
-              <div
-                style={{
-                  display: "flex",
-                  gap: "8px",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  justifyContent: "flex-end",
-                }}
-              >
-                <strong className="result-badge">
-                  {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
-                </strong>
-
-                <button
-                  className="secondary-button"
-                  type="button"
-                  onClick={editarUltimaCarga}
-                  disabled={guardando || modoEdicion}
-                  style={{
-                    padding: "8px 12px",
-                    borderRadius: "999px",
-                    fontSize: "13px",
-                  }}
-                >
-                  ✏️ Editar
-                </button>
-              </div>
+  <strong className="result-badge">
+    {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
+  </strong>
+</div>
             </div>
 
             <div className="result-grid">

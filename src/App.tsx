@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
@@ -21,10 +22,17 @@ type RespuestaProductoApi = {
   error?: string;
 };
 
+type LoteGuardadoApi = {
+  id?: number;
+  recordId: string;
+};
+
 type RespuestaGuardarStockApi = {
   ok: boolean;
   cantidadRegistros?: number;
   registros?: string[];
+  lotes?: LoteGuardadoApi[];
+  registrosEliminados?: string[];
   error?: string;
 };
 
@@ -32,6 +40,7 @@ type Lote = {
   id: number;
   vencimiento: string;
   cantidad: string;
+  recordId?: string;
 };
 
 type EstadoProducto = "sin_codigo" | "buscando" | "existente" | "nuevo" | "error";
@@ -136,19 +145,8 @@ function armarNombre(
     .join(" ");
 }
 
-function formatearFechaInput(valor: string) {
-  const soloNumeros = valor.replace(/\D/g, "").slice(0, 8);
-
-  if (soloNumeros.length <= 2) return soloNumeros;
-
-  if (soloNumeros.length <= 4) {
-    return `${soloNumeros.slice(0, 2)}-${soloNumeros.slice(2)}`;
-  }
-
-  return `${soloNumeros.slice(0, 2)}-${soloNumeros.slice(
-    2,
-    4
-  )}-${soloNumeros.slice(4)}`;
+function completarConCero(valor: number) {
+  return String(valor).padStart(2, "0");
 }
 
 function esFechaValida(dia: number, mes: number, anio: number) {
@@ -161,19 +159,37 @@ function esFechaValida(dia: number, mes: number, anio: number) {
   );
 }
 
-function convertirFechaParaApi(fechaTexto: string) {
+function interpretarFechaFlexible(fechaTexto: string) {
   const valor = fechaTexto.trim();
-  const match = valor.match(/^(\d{2})-(\d{2})-(\d{4})$/);
 
-  if (!match) return "";
+  if (!valor) return null;
+
+  const match = valor.match(/^(\d{1,2})([-/])(\d{1,2})\2(\d{2}|\d{4})$/);
+
+  if (!match) return null;
 
   const dia = Number(match[1]);
-  const mes = Number(match[2]);
-  const anio = Number(match[3]);
+  const mes = Number(match[3]);
+  const anioTexto = match[4];
+  const anio = anioTexto.length === 2 ? 2000 + Number(anioTexto) : Number(anioTexto);
 
-  if (!esFechaValida(dia, mes, anio)) return "";
+  if (!esFechaValida(dia, mes, anio)) return null;
 
-  return `${anio}-${match[2]}-${match[1]}`;
+  const diaFormateado = completarConCero(dia);
+  const mesFormateado = completarConCero(mes);
+
+  return {
+    display: `${diaFormateado}/${mesFormateado}/${anio}`,
+    api: `${anio}-${mesFormateado}-${diaFormateado}`,
+  };
+}
+
+function normalizarFechaParaMostrar(fechaTexto: string) {
+  return interpretarFechaFlexible(fechaTexto)?.display || "";
+}
+
+function convertirFechaParaApi(fechaTexto: string) {
+  return interpretarFechaFlexible(fechaTexto)?.api || "";
 }
 
 function IconLogin() {
@@ -342,6 +358,10 @@ function App() {
   const [scannerAbierto, setScannerAbierto] = useState(false);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [modoEdicion, setModoEdicion] = useState(false);
+  const [registrosEliminadosEdicion, setRegistrosEliminadosEdicion] = useState<
+    string[]
+  >([]);
   const [mostrarConfirmacionLimpiar, setMostrarConfirmacionLimpiar] =
     useState(false);
   const [estadoProducto, setEstadoProducto] =
@@ -381,6 +401,8 @@ function App() {
     setCodigo(codigoLimpio);
     setAviso(null);
     setUltimoMovimiento(null);
+    setModoEdicion(false);
+    setRegistrosEliminadosEdicion([]);
 
     if (!codigoLimpio) {
       limpiarDatosProducto();
@@ -421,6 +443,8 @@ function App() {
   }
 
   function manejarCambioCodigo(valor: string) {
+    if (modoEdicion) return;
+
     setCodigo(valor);
     setAviso(null);
     setUltimoMovimiento(null);
@@ -432,11 +456,12 @@ function App() {
   }
 
   function manejarBlurCodigo() {
+    if (modoEdicion) return;
     if (!codigo.trim()) return;
     buscarProductoEnAirtable(codigo);
   }
 
-  function manejarEnterCodigo(event: React.KeyboardEvent<HTMLInputElement>) {
+  function manejarEnterCodigo(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       buscarProductoEnAirtable(codigo);
     }
@@ -457,23 +482,48 @@ function App() {
     setLotes((lotesActuales) => {
       if (lotesActuales.length === 1) return lotesActuales;
 
+      const loteAEliminar = lotesActuales.find((lote) => lote.id === id);
+
+      if (modoEdicion && loteAEliminar?.recordId) {
+        setRegistrosEliminadosEdicion((registrosActuales) => [
+          ...registrosActuales,
+          loteAEliminar.recordId as string,
+        ]);
+      }
+
       return lotesActuales.filter((lote) => lote.id !== id);
     });
   }
 
   function actualizarLote(id: number, campo: keyof Lote, valor: string) {
-    const valorFinal =
-      campo === "vencimiento" ? formatearFechaInput(valor) : valor;
-
     setLotes((lotesActuales) =>
       lotesActuales.map((lote) =>
         lote.id === id
           ? {
               ...lote,
-              [campo]: valorFinal,
+              [campo]: valor,
             }
           : lote
       )
+    );
+  }
+
+  function normalizarVencimientoLote(id: number) {
+    if (sinVencimiento) return;
+
+    setLotes((lotesActuales) =>
+      lotesActuales.map((lote) => {
+        if (lote.id !== id) return lote;
+
+        const fechaNormalizada = normalizarFechaParaMostrar(lote.vencimiento);
+
+        if (!fechaNormalizada) return lote;
+
+        return {
+          ...lote,
+          vencimiento: fechaNormalizada,
+        };
+      })
     );
   }
 
@@ -481,6 +531,15 @@ function App() {
     setSinVencimiento(valor);
 
     if (valor) {
+      if (modoEdicion) {
+        setRegistrosEliminadosEdicion((registrosActuales) => [
+          ...registrosActuales,
+          ...lotes
+            .map((lote) => lote.recordId)
+            .filter((recordId): recordId is string => Boolean(recordId)),
+        ]);
+      }
+
       setLotes([
         {
           id: Date.now(),
@@ -489,6 +548,24 @@ function App() {
         },
       ]);
     }
+  }
+
+  function obtenerLotesNormalizados() {
+    return lotes.map((lote) => {
+      if (sinVencimiento) {
+        return {
+          ...lote,
+          vencimiento: "",
+        };
+      }
+
+      const fechaNormalizada = normalizarFechaParaMostrar(lote.vencimiento);
+
+      return {
+        ...lote,
+        vencimiento: fechaNormalizada || lote.vencimiento.trim(),
+      };
+    });
   }
 
   function validarFormulario() {
@@ -512,11 +589,11 @@ function App() {
       return "El campo Producto es obligatorio.";
     }
 
-    if (estadoProducto === "nuevo" && !marca.trim()) {
+    if (!modoEdicion && estadoProducto === "nuevo" && !marca.trim()) {
       return "El campo Marca es obligatorio para productos nuevos.";
     }
 
-    if (estadoProducto === "nuevo" && !presentacion.trim()) {
+    if (!modoEdicion && estadoProducto === "nuevo" && !presentacion.trim()) {
       return "El campo Presentación es obligatorio para productos nuevos.";
     }
 
@@ -527,7 +604,7 @@ function App() {
         }
 
         if (!convertirFechaParaApi(lote.vencimiento)) {
-          return "La fecha debe tener formato DD-MM-AAAA.";
+          return "La fecha debe ser válida. Ej: 5/5/27 o 05/05/2027.";
         }
       }
 
@@ -557,6 +634,7 @@ function App() {
       tieneObservaciones ||
       tieneLotes ||
       sinVencimiento ||
+      modoEdicion ||
       estadoProducto === "nuevo" ||
       estadoProducto === "existente"
     );
@@ -568,6 +646,8 @@ function App() {
     setSinVencimiento(false);
     setObservaciones("");
     setEstadoProducto("sin_codigo");
+    setModoEdicion(false);
+    setRegistrosEliminadosEdicion([]);
     setLotes([
       {
         id: Date.now(),
@@ -581,6 +661,29 @@ function App() {
     }, 100);
   }
 
+  function obtenerLotesConRecordIds(
+    lotesMovimiento: Lote[],
+    data: RespuestaGuardarStockApi
+  ) {
+    if (data.lotes && data.lotes.length > 0) {
+      return lotesMovimiento.map((lote) => {
+        const loteGuardado = data.lotes?.find(
+          (loteApi) => loteApi.id === lote.id
+        );
+
+        return {
+          ...lote,
+          recordId: loteGuardado?.recordId || lote.recordId,
+        };
+      });
+    }
+
+    return lotesMovimiento.map((lote, index) => ({
+      ...lote,
+      recordId: data.registros?.[index] || lote.recordId,
+    }));
+  }
+
   async function guardarMovimiento() {
     const error = validarFormulario();
 
@@ -592,6 +695,11 @@ function App() {
       return;
     }
 
+    const lotesNormalizados = obtenerLotesNormalizados();
+    const productoNuevoMovimiento = modoEdicion
+      ? Boolean(ultimoMovimiento?.productoNuevo)
+      : estadoProducto === "nuevo";
+
     const movimiento: MovimientoGuardado = {
       codigo: codigo.trim(),
       producto: producto.trim(),
@@ -602,18 +710,22 @@ function App() {
       sucursal,
       ubicacion,
       sinVencimiento,
-      productoNuevo: estadoProducto === "nuevo",
+      productoNuevo: productoNuevoMovimiento,
       observaciones: observaciones.trim(),
-      lotes,
+      lotes: lotesNormalizados,
     };
 
     const payload = {
       ...movimiento,
-      lotes: lotes.map((lote) => ({
-        ...lote,
+      productoNuevo: modoEdicion ? false : estadoProducto === "nuevo",
+      registrosEliminados: modoEdicion ? registrosEliminadosEdicion : [],
+      lotes: lotesNormalizados.map((lote) => ({
+        id: lote.id,
+        recordId: lote.recordId,
         vencimiento: sinVencimiento
           ? ""
           : convertirFechaParaApi(lote.vencimiento),
+        cantidad: lote.cantidad,
       })),
     };
 
@@ -621,11 +733,11 @@ function App() {
       setGuardando(true);
       setAviso({
         tipo: "info",
-        texto: "Guardando...",
+        texto: modoEdicion ? "Actualizando carga..." : "Guardando...",
       });
 
       const response = await fetch("/api/stock", {
-        method: "POST",
+        method: modoEdicion ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
@@ -638,14 +750,25 @@ function App() {
         throw new Error(data.error || "No se pudo guardar el inventario");
       }
 
-      setUltimoMovimiento(movimiento);
+      const lotesConRecordIds = obtenerLotesConRecordIds(
+        movimiento.lotes,
+        data
+      );
+
+      setUltimoMovimiento({
+        ...movimiento,
+        lotes: lotesConRecordIds,
+      });
+
       prepararSiguienteCarga();
 
       setAviso({
         tipo: "exito",
-        texto: `Guardado OK. Registros creados: ${
-          data.cantidadRegistros || lotes.length
-        }.`,
+        texto: modoEdicion
+          ? "Carga actualizada OK."
+          : `Guardado OK. Registros creados: ${
+              data.cantidadRegistros || lotes.length
+            }.`,
       });
 
       console.log("Inventario guardado:", payload);
@@ -653,11 +776,45 @@ function App() {
       console.error("Error guardando inventario:", error);
       setAviso({
         tipo: "error",
-        texto: "No se pudo guardar el inventario en Airtable.",
+        texto: modoEdicion
+          ? "No se pudo actualizar la carga en Airtable."
+          : "No se pudo guardar el inventario en Airtable.",
       });
     } finally {
       setGuardando(false);
     }
+  }
+
+  function editarUltimaCarga() {
+    if (!ultimoMovimiento) return;
+
+    setCodigo(ultimoMovimiento.codigo);
+    setProducto(ultimoMovimiento.producto);
+    setMarca(ultimoMovimiento.marca);
+    setPresentacion(ultimoMovimiento.presentacion);
+    setEspecificacion(ultimoMovimiento.especificacion);
+    setSucursal(ultimoMovimiento.sucursal);
+    setUbicacion(ultimoMovimiento.ubicacion);
+    setSinVencimiento(ultimoMovimiento.sinVencimiento);
+    setObservaciones(ultimoMovimiento.observaciones);
+    setLotes(
+      ultimoMovimiento.lotes.map((lote) => ({
+        ...lote,
+        id: Date.now() + Math.floor(Math.random() * 100000),
+      }))
+    );
+    setEstadoProducto("existente");
+    setModoEdicion(true);
+    setRegistrosEliminadosEdicion([]);
+    setAviso({
+      tipo: "info",
+      texto: "Editando última carga. Corregí los datos y tocá Actualizar carga.",
+    });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   function ejecutarLimpiezaFormulario() {
@@ -666,6 +823,8 @@ function App() {
     setSinVencimiento(false);
     setObservaciones("");
     setEstadoProducto("sin_codigo");
+    setModoEdicion(false);
+    setRegistrosEliminadosEdicion([]);
     setLotes([
       {
         id: Date.now(),
@@ -757,7 +916,9 @@ function App() {
     return (
       <>
         <section className="form-card">
-          <div className="module-label">INVENTARIO</div>
+          <div className="module-label">
+            {modoEdicion ? "INVENTARIO · EDITANDO ÚLTIMA CARGA" : "INVENTARIO"}
+          </div>
 
           <div className="selection-section">
             <div className="current-summary-grid">
@@ -783,6 +944,7 @@ function App() {
                   id="sucursal"
                   value={sucursal}
                   onChange={(event) => setSucursal(event.target.value)}
+                  disabled={guardando}
                 >
                   {sucursales.map((sucursalDisponible) => (
                     <option key={sucursalDisponible} value={sucursalDisponible}>
@@ -798,6 +960,7 @@ function App() {
                   id="ubicacion"
                   value={ubicacion}
                   onChange={(event) => setUbicacion(event.target.value)}
+                  disabled={guardando}
                 >
                   {ubicaciones.map((ubicacionDisponible) => (
                     <option
@@ -825,6 +988,7 @@ function App() {
                 onKeyDown={manejarEnterCodigo}
                 placeholder="Escaneá o escribí el código"
                 inputMode="numeric"
+                disabled={modoEdicion || guardando}
               />
 
               <button
@@ -832,6 +996,7 @@ function App() {
                 type="button"
                 onClick={() => setScannerAbierto(true)}
                 aria-label="Abrir cámara"
+                disabled={modoEdicion || guardando}
               >
                 📷
               </button>
@@ -849,7 +1014,7 @@ function App() {
               <div className="product-found-icon">✓</div>
 
               <div>
-                <span>Producto encontrado</span>
+                <span>{modoEdicion ? "Editando producto" : "Producto encontrado"}</span>
                 <strong>{nombre}</strong>
               </div>
             </div>
@@ -870,6 +1035,7 @@ function App() {
                     value={producto}
                     onChange={(event) => setProducto(event.target.value)}
                     placeholder="Ej: Leche"
+                    disabled={guardando}
                   />
                 </div>
 
@@ -880,6 +1046,7 @@ function App() {
                     value={marca}
                     onChange={(event) => setMarca(event.target.value)}
                     placeholder="Ej: La Serenísima"
+                    disabled={guardando}
                   />
                 </div>
 
@@ -890,6 +1057,7 @@ function App() {
                     value={presentacion}
                     onChange={(event) => setPresentacion(event.target.value)}
                     placeholder="Ej: 1L"
+                    disabled={guardando}
                   />
                 </div>
 
@@ -902,6 +1070,7 @@ function App() {
                       setEspecificacion(event.target.value)
                     }
                     placeholder="Ej: Entera / Sin TACC"
+                    disabled={guardando}
                   />
                 </div>
               </div>
@@ -926,6 +1095,7 @@ function App() {
                   }`}
                   type="button"
                   onClick={() => manejarSinVencimiento(!sinVencimiento)}
+                  disabled={guardando}
                 >
                   {sinVencimiento ? "Sin vencimiento ✓" : "Sin vencimiento"}
                 </button>
@@ -935,6 +1105,7 @@ function App() {
                     className="small-add-button"
                     type="button"
                     onClick={agregarLote}
+                    disabled={guardando}
                   >
                     + Otro
                   </button>
@@ -952,6 +1123,7 @@ function App() {
                       className="delete-button"
                       type="button"
                       onClick={() => eliminarLote(lote.id)}
+                      disabled={guardando}
                     >
                       Eliminar
                     </button>
@@ -979,9 +1151,11 @@ function App() {
                             event.target.value
                           )
                         }
-                        placeholder="DD-MM-AAAA"
-                        inputMode="numeric"
+                        onBlur={() => normalizarVencimientoLote(lote.id)}
+                        placeholder="D/M/AA"
+                        inputMode="text"
                         maxLength={10}
+                        disabled={guardando}
                       />
                     </div>
                   )}
@@ -998,6 +1172,7 @@ function App() {
                         actualizarLote(lote.id, "cantidad", event.target.value)
                       }
                       placeholder="Ej: 12"
+                      disabled={guardando}
                     />
                   </div>
                 </div>
@@ -1013,6 +1188,7 @@ function App() {
               value={observaciones}
               onChange={(event) => setObservaciones(event.target.value)}
               placeholder="Opcional"
+              disabled={guardando}
             />
           </div>
 
@@ -1029,7 +1205,13 @@ function App() {
               onClick={guardarMovimiento}
               disabled={guardando}
             >
-              {guardando ? "Guardando..." : "Guardar"}
+              {guardando
+                ? modoEdicion
+                  ? "Actualizando..."
+                  : "Guardando..."
+                : modoEdicion
+                ? "Actualizar carga"
+                : "Guardar"}
             </button>
 
             <button
@@ -1038,7 +1220,7 @@ function App() {
               onClick={manejarClickLimpiar}
               disabled={guardando}
             >
-              Limpiar
+              {modoEdicion ? "Cancelar edición" : "Limpiar"}
             </button>
           </div>
         </section>
@@ -1051,9 +1233,33 @@ function App() {
                 <h2>{ultimoMovimiento.nombre}</h2>
               </div>
 
-              <strong className="result-badge">
-                {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
-              </strong>
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  justifyContent: "flex-end",
+                }}
+              >
+                <strong className="result-badge">
+                  {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
+                </strong>
+
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={editarUltimaCarga}
+                  disabled={guardando || modoEdicion}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "999px",
+                    fontSize: "13px",
+                  }}
+                >
+                  ✏️ Editar
+                </button>
+              </div>
             </div>
 
             <div className="result-grid">
@@ -1226,3 +1432,4 @@ function App() {
 }
 
 export default App;
+

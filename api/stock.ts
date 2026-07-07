@@ -6,6 +6,8 @@ dotenv.config({
 });
 
 type LotePayload = {
+  id?: number;
+  recordId?: string;
   vencimiento: string;
   cantidad: string;
 };
@@ -23,6 +25,25 @@ type GuardarStockPayload = {
   productoNuevo: boolean;
   observaciones: string;
   lotes: LotePayload[];
+  registrosEliminados?: string[];
+};
+
+type AirtableRecord = {
+  id: string;
+  fields?: Record<string, unknown>;
+};
+
+type AirtableRecordsResponse = {
+  records?: AirtableRecord[];
+  error?: unknown;
+};
+
+type AirtableDeleteResponse = {
+  records?: {
+    id: string;
+    deleted: boolean;
+  }[];
+  error?: unknown;
 };
 
 type AirtableErrorResponse = {
@@ -106,30 +127,35 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
   }
 }
 
-function armarRecordsStock(payload: GuardarStockPayload) {
+function armarCamposStock(payload: GuardarStockPayload, lote: LotePayload) {
   const codigoTexto = payload.codigo.trim();
+  const cantidadNumero = Number(lote.cantidad);
 
-  return payload.lotes.map((lote) => {
-    const cantidadNumero = Number(lote.cantidad);
+  const fields: Record<string, unknown> = {
+    CÓDIGO: codigoTexto,
+    NOMBRE: limpiarTexto(payload.nombre),
+    SUCURSAL: limpiarTexto(payload.sucursal),
+    UBICACIÓN: limpiarTexto(payload.ubicacion),
+    SIN_VENCIMIENTO: payload.sinVencimiento,
+    CANTIDAD: cantidadNumero,
+    OBSERVACIONES: limpiarTexto(payload.observaciones),
+  };
 
-    const fields: Record<string, unknown> = {
-      CÓDIGO: codigoTexto,
-      NOMBRE: limpiarTexto(payload.nombre),
-      SUCURSAL: limpiarTexto(payload.sucursal),
-      UBICACIÓN: limpiarTexto(payload.ubicacion),
-      SIN_VENCIMIENTO: payload.sinVencimiento,
-      CANTIDAD: cantidadNumero,
-      OBSERVACIONES: limpiarTexto(payload.observaciones),
-    };
+  if (!payload.sinVencimiento && lote.vencimiento) {
+    fields.FECHA_VENCIMIENTO = lote.vencimiento;
+  }
 
-    if (!payload.sinVencimiento && lote.vencimiento) {
-      fields.FECHA_VENCIMIENTO = lote.vencimiento;
-    }
+  if (payload.sinVencimiento) {
+    fields.FECHA_VENCIMIENTO = null;
+  }
 
-    return {
-      fields,
-    };
-  });
+  return fields;
+}
+
+function armarRecordsStock(payload: GuardarStockPayload) {
+  return payload.lotes.map((lote) => ({
+    fields: armarCamposStock(payload, lote),
+  }));
 }
 
 function partirEnGrupos<T>(items: T[], cantidadPorGrupo: number) {
@@ -142,14 +168,20 @@ function partirEnGrupos<T>(items: T[], cantidadPorGrupo: number) {
   return grupos;
 }
 
+function getAirtableConfig() {
+  return {
+    token: getEnv("AIRTABLE_TOKEN"),
+    baseId: getEnv("AIRTABLE_BASE_ID"),
+    stockTable: getEnv("AIRTABLE_STOCK_TABLE_NAME"),
+  };
+}
+
 async function guardarStock(payload: GuardarStockPayload) {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_BASE_ID");
-  const stockTable = getEnv("AIRTABLE_STOCK_TABLE_NAME");
+  const { token, baseId, stockTable } = getAirtableConfig();
 
   const records = armarRecordsStock(payload);
   const grupos = partirEnGrupos(records, 10);
-  const creados = [];
+  const creados: AirtableRecord[] = [];
 
   for (const grupo of grupos) {
     const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
@@ -168,17 +200,155 @@ async function guardarStock(payload: GuardarStockPayload) {
       }),
     });
 
-    const data = await response.json();
+    const data = (await response.json()) as AirtableRecordsResponse;
 
     if (!response.ok) {
       console.error("Error guardando stock:", data);
       throw new Error("No se pudo guardar el stock en Airtable");
     }
 
-    creados.push(...data.records);
+    creados.push(...(data.records || []));
   }
 
   return creados;
+}
+
+async function crearUnLoteStock(payload: GuardarStockPayload, lote: LotePayload) {
+  const payloadUnitario: GuardarStockPayload = {
+    ...payload,
+    lotes: [lote],
+  };
+
+  const recordsCreados = await guardarStock(payloadUnitario);
+  const recordCreado = recordsCreados[0];
+
+  if (!recordCreado) {
+    throw new Error("No se pudo crear el lote nuevo en Airtable");
+  }
+
+  return recordCreado;
+}
+
+async function actualizarUnLoteStock(
+  payload: GuardarStockPayload,
+  lote: LotePayload
+) {
+  if (!lote.recordId) {
+    throw new Error("Falta el ID del registro para actualizar");
+  }
+
+  const { token, baseId, stockTable } = getAirtableConfig();
+
+  const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+    stockTable
+  )}`;
+
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      records: [
+        {
+          id: lote.recordId,
+          fields: armarCamposStock(payload, lote),
+        },
+      ],
+      typecast: true,
+    }),
+  });
+
+  const data = (await response.json()) as AirtableRecordsResponse;
+
+  if (!response.ok) {
+    console.error("Error actualizando stock:", data);
+    throw new Error("No se pudo actualizar el stock en Airtable");
+  }
+
+  const recordActualizado = data.records?.[0];
+
+  if (!recordActualizado) {
+    throw new Error("Airtable no devolvió el registro actualizado");
+  }
+
+  return recordActualizado;
+}
+
+async function eliminarLotesStock(recordIds: string[]) {
+  if (recordIds.length === 0) return [];
+
+  const { token, baseId, stockTable } = getAirtableConfig();
+  const grupos = partirEnGrupos(recordIds, 10);
+  const eliminados: string[] = [];
+
+  for (const grupo of grupos) {
+    const url = new URL(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(stockTable)}`
+    );
+
+    grupo.forEach((recordId) => {
+      url.searchParams.append("records[]", recordId);
+    });
+
+    const response = await fetch(url.toString(), {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = (await response.json()) as AirtableDeleteResponse;
+
+    if (!response.ok) {
+      console.error("Error eliminando lotes:", data);
+      throw new Error("No se pudo eliminar el lote en Airtable");
+    }
+
+    eliminados.push(
+      ...(data.records || [])
+        .filter((record) => record.deleted)
+        .map((record) => record.id)
+    );
+  }
+
+  return eliminados;
+}
+
+async function actualizarCargaStock(payload: GuardarStockPayload) {
+  const registrosEliminados = payload.registrosEliminados || [];
+  const eliminados = await eliminarLotesStock(registrosEliminados);
+
+  const lotesProcesados: {
+    id?: number;
+    recordId: string;
+  }[] = [];
+
+  for (const lote of payload.lotes) {
+    if (lote.recordId) {
+      const recordActualizado = await actualizarUnLoteStock(payload, lote);
+
+      lotesProcesados.push({
+        id: lote.id,
+        recordId: recordActualizado.id,
+      });
+
+      continue;
+    }
+
+    const recordCreado = await crearUnLoteStock(payload, lote);
+
+    lotesProcesados.push({
+      id: lote.id,
+      recordId: recordCreado.id,
+    });
+  }
+
+  return {
+    lotesProcesados,
+    eliminados,
+  };
 }
 
 function validarPayload(payload: GuardarStockPayload) {
@@ -215,7 +385,7 @@ export default async function handler(
   res: VercelResponse
 ) {
   try {
-    if (req.method !== "POST") {
+    if (req.method !== "POST" && req.method !== "PATCH") {
       return res.status(405).json({
         error: "Método no permitido",
       });
@@ -230,14 +400,32 @@ export default async function handler(
       });
     }
 
-    await crearProductoSiEsNuevo(payload);
+    if (req.method === "POST") {
+      await crearProductoSiEsNuevo(payload);
 
-    const recordsCreados = await guardarStock(payload);
+      const recordsCreados = await guardarStock(payload);
+
+      return res.status(200).json({
+        ok: true,
+        cantidadRegistros: recordsCreados.length,
+        registros: recordsCreados.map((record) => record.id),
+        lotes: recordsCreados.map((record, index) => ({
+          id: payload.lotes[index]?.id,
+          recordId: record.id,
+        })),
+      });
+    }
+
+    const resultadoActualizacion = await actualizarCargaStock(payload);
 
     return res.status(200).json({
       ok: true,
-      cantidadRegistros: recordsCreados.length,
-      registros: recordsCreados.map((record) => record.id),
+      cantidadRegistros: resultadoActualizacion.lotesProcesados.length,
+      registros: resultadoActualizacion.lotesProcesados.map(
+        (lote) => lote.recordId
+      ),
+      lotes: resultadoActualizacion.lotesProcesados,
+      registrosEliminados: resultadoActualizacion.eliminados,
     });
   } catch (error) {
     console.error(error);
@@ -247,3 +435,4 @@ export default async function handler(
     });
   }
 }
+

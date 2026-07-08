@@ -26,9 +26,28 @@ function getEnv(name: string) {
   return value;
 }
 
-function normalizarTexto(valor: unknown) {
-  if (typeof valor === "string") return valor;
+function normalizarTexto(valor: unknown): string {
+  if (typeof valor === "string") return valor.trim();
+
   if (typeof valor === "number") return String(valor);
+
+  if (Array.isArray(valor)) {
+    return valor
+      .map((item) => normalizarTexto(item))
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  if (valor && typeof valor === "object") {
+    const objeto = valor as Record<string, unknown>;
+
+    if (typeof objeto.name === "string") return objeto.name.trim();
+    if (typeof objeto.text === "string") return objeto.text.trim();
+    if (typeof objeto.value === "string") return objeto.value.trim();
+
+    return "";
+  }
+
   return "";
 }
 

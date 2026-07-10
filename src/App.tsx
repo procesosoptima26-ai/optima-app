@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
-import CuentasCorrientes from "./modules/cuentasCorrientes/CuentasCorrientes";
+import CuentasCorrientesMock from "./modules/cuentasCorrientes/CuentasCorrientes";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -34,6 +34,20 @@ type RespuestaGuardarStockApi = {
   registros?: string[];
   lotes?: LoteGuardadoApi[];
   registrosEliminados?: string[];
+  error?: string;
+};
+
+type UsuarioSesion = {
+  usuario: string;
+  nombre: string;
+  empresa: string;
+  rol: string;
+  modulos: string[];
+};
+
+type RespuestaLoginApi = {
+  ok: boolean;
+  usuario?: UsuarioSesion;
   error?: string;
 };
 
@@ -98,6 +112,8 @@ type ItemMenu = {
 const sucursales = ["Bella Vista", "Goya"];
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
+const STORAGE_USUARIO_KEY = "optima_usuario_sesion_v1";
+
 const itemsMenu: ItemMenu[] = [
   {
     id: "login",
@@ -140,6 +156,17 @@ const itemsMenu: ItemMenu[] = [
     icono: "usuario",
   },
 ];
+
+const moduloPorVista: Record<ModuloVista, string> = {
+  login: "LOGIN",
+  inventario: "INVENTARIO",
+  movimientos: "MOVIMIENTOS",
+  cuentasCorrientes: "CUENTAS_CORRIENTES",
+  automatizaciones: "AUTOMATIZACIONES",
+  reportes: "REPORTES",
+  ajustes: "AJUSTES",
+  usuario: "USUARIO",
+};
 
 function armarNombre(
   producto: string,
@@ -377,6 +404,13 @@ function App() {
   const [vistaActiva, setVistaActiva] = useState<VistaActiva>("inicio");
   const [menuAbierto, setMenuAbierto] = useState(false);
 
+  const [sesionCargada, setSesionCargada] = useState(false);
+  const [usuarioSesion, setUsuarioSesion] = useState<UsuarioSesion | null>(null);
+  const [loginUsuario, setLoginUsuario] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginCargando, setLoginCargando] = useState(false);
+  const [loginError, setLoginError] = useState("");
+
   const [codigo, setCodigo] = useState("");
   const [producto, setProducto] = useState("");
   const [marca, setMarca] = useState("");
@@ -408,9 +442,112 @@ function App() {
     },
   ]);
 
+  useEffect(() => {
+    const usuarioGuardado = localStorage.getItem(STORAGE_USUARIO_KEY);
+
+    if (usuarioGuardado) {
+      try {
+        const usuarioParseado = JSON.parse(usuarioGuardado) as UsuarioSesion;
+        setUsuarioSesion(usuarioParseado);
+        setVistaActiva("inicio");
+      } catch (error) {
+        console.error("No se pudo leer la sesión guardada:", error);
+        localStorage.removeItem(STORAGE_USUARIO_KEY);
+        setVistaActiva("login");
+      }
+    } else {
+      setVistaActiva("login");
+    }
+
+    setSesionCargada(true);
+  }, []);
+
+  const itemsMenuVisibles = useMemo(() => {
+    if (!usuarioSesion) return [];
+
+    return itemsMenu.filter((item) => {
+      if (item.id === "login") return false;
+      if (item.id === "usuario") return true;
+
+      const moduloRequerido = moduloPorVista[item.id];
+
+      return usuarioSesion.modulos.includes(moduloRequerido);
+    });
+  }, [usuarioSesion]);
+
   const nombre = useMemo(() => {
     return armarNombre(producto, marca, especificacion, presentacion);
   }, [producto, marca, especificacion, presentacion]);
+
+  function usuarioPuedeVer(vista: VistaActiva) {
+    if (vista === "inicio") return Boolean(usuarioSesion);
+    if (vista === "login") return !usuarioSesion;
+    if (!usuarioSesion) return false;
+    if (vista === "usuario") return true;
+
+    const moduloRequerido = moduloPorVista[vista];
+
+    return usuarioSesion.modulos.includes(moduloRequerido);
+  }
+
+  async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const usuario = loginUsuario.trim();
+    const password = loginPassword.trim();
+
+    if (!usuario || !password) {
+      setLoginError("Completá usuario y contraseña.");
+      return;
+    }
+
+    try {
+      setLoginCargando(true);
+      setLoginError("");
+
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario,
+          password,
+        }),
+      });
+
+      const data = (await response.json()) as RespuestaLoginApi;
+
+      if (!response.ok || !data.ok || !data.usuario) {
+        throw new Error(data.error || "No se pudo iniciar sesión.");
+      }
+
+      localStorage.setItem(STORAGE_USUARIO_KEY, JSON.stringify(data.usuario));
+      setUsuarioSesion(data.usuario);
+      setLoginUsuario("");
+      setLoginPassword("");
+      setVistaActiva("inicio");
+      setMenuAbierto(false);
+    } catch (error) {
+      console.error("Error iniciando sesión:", error);
+      setLoginError(
+        error instanceof Error
+          ? error.message
+          : "No se pudo iniciar sesión. Revisá los datos."
+      );
+    } finally {
+      setLoginCargando(false);
+    }
+  }
+
+  function cerrarSesion() {
+    localStorage.removeItem(STORAGE_USUARIO_KEY);
+    setUsuarioSesion(null);
+    setVistaActiva("login");
+    setMenuAbierto(false);
+    setAviso(null);
+    setUltimoMovimiento(null);
+  }
 
   function cargarProductoEncontrado(productoApi: ProductoApi) {
     setProducto(productoApi.producto);
@@ -882,6 +1019,18 @@ function App() {
   }
 
   function cambiarVista(nuevaVista: VistaActiva) {
+    if (!usuarioSesion && nuevaVista !== "login") {
+      setVistaActiva("login");
+      setMenuAbierto(false);
+      return;
+    }
+
+    if (usuarioSesion && !usuarioPuedeVer(nuevaVista)) {
+      setVistaActiva("inicio");
+      setMenuAbierto(false);
+      return;
+    }
+
     setVistaActiva(nuevaVista);
     setMenuAbierto(false);
   }
@@ -892,6 +1041,100 @@ function App() {
 
   function obtenerItemMenuActual() {
     return itemsMenu.find((item) => item.id === vistaActiva);
+  }
+
+  function renderLogin() {
+    return (
+      <section className="login-screen">
+        <div className="login-card">
+          <img src={logoOptima} alt="Logo OPTIMA" className="login-logo" />
+
+          <p className="login-kicker">OPTIMA</p>
+          <h1>Iniciar sesión</h1>
+          <p className="login-subtitle">Ingresá con tu usuario para usar la app.</p>
+
+          <form className="login-form" onSubmit={iniciarSesion}>
+            <div className="field-group">
+              <label htmlFor="login-usuario">Usuario</label>
+              <input
+                id="login-usuario"
+                type="text"
+                value={loginUsuario}
+                onChange={(event) => setLoginUsuario(event.target.value)}
+                placeholder="Ej: TEST"
+                autoComplete="username"
+                disabled={loginCargando}
+              />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="login-password">Contraseña</label>
+              <input
+                id="login-password"
+                type="password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                placeholder="Contraseña"
+                autoComplete="current-password"
+                disabled={loginCargando}
+              />
+            </div>
+
+            {loginError && (
+              <div className="message message-error">{loginError}</div>
+            )}
+
+            <button
+              className="primary-button login-submit-button"
+              type="submit"
+              disabled={loginCargando}
+            >
+              {loginCargando ? "Ingresando..." : "Ingresar"}
+            </button>
+          </form>
+        </div>
+      </section>
+    );
+  }
+
+  function renderUsuario() {
+    if (!usuarioSesion) return renderLogin();
+
+    return (
+      <section className="user-card">
+        <div className="user-card-header">
+          <div>
+            <p className="user-kicker">USUARIO</p>
+            <h2>{usuarioSesion.nombre}</h2>
+          </div>
+
+          <span className="user-role-badge">{usuarioSesion.rol}</span>
+        </div>
+
+        <div className="user-info-grid">
+          <p>
+            <strong>Usuario:</strong> {usuarioSesion.usuario}
+          </p>
+          <p>
+            <strong>Empresa:</strong> {usuarioSesion.empresa}
+          </p>
+        </div>
+
+        <div className="user-modules-box">
+          <span>Módulos activos</span>
+
+          <div className="user-modules-list">
+            {usuarioSesion.modulos.map((modulo) => (
+              <strong key={modulo}>{modulo.replaceAll("_", " ")}</strong>
+            ))}
+          </div>
+        </div>
+
+        <button className="secondary-button logout-button" type="button" onClick={cerrarSesion}>
+          Cerrar sesión
+        </button>
+      </section>
+    );
   }
 
   function renderInicio() {
@@ -1319,7 +1562,26 @@ function App() {
   }
 
   function renderContenido() {
+    if (!sesionCargada) {
+      return (
+        <section className="login-screen">
+          <div className="login-card">
+            <p className="login-kicker">OPTIMA</p>
+            <h1>Cargando...</h1>
+          </div>
+        </section>
+      );
+    }
+
+    if (!usuarioSesion) {
+      return renderLogin();
+    }
+
     if (vistaActiva === "inicio") {
+      return renderInicio();
+    }
+
+    if (!usuarioPuedeVer(vistaActiva)) {
       return renderInicio();
     }
 
@@ -1328,24 +1590,34 @@ function App() {
     }
 
     if (vistaActiva === "cuentasCorrientes") {
-      return <CuentasCorrientes />;
+      return <CuentasCorrientesMock />;
+    }
+
+    if (vistaActiva === "usuario") {
+      return renderUsuario();
     }
 
     return renderModuloEnDesarrollo();
   }
 
   return (
-    <main className={`app ${vistaActiva === "inicio" ? "app-home" : ""}`}>
-      <button
-        className="menu-toggle-button"
-        type="button"
-        onClick={abrirMenu}
-        aria-label="Abrir menú"
-      >
-        Menú
-      </button>
+    <main
+      className={`app ${
+        usuarioSesion && vistaActiva === "inicio" ? "app-home" : ""
+      } ${!usuarioSesion ? "app-login-page" : ""}`}
+    >
+      {usuarioSesion && (
+        <button
+          className="menu-toggle-button"
+          type="button"
+          onClick={abrirMenu}
+          aria-label="Abrir menú"
+        >
+          Menú
+        </button>
+      )}
 
-      {menuAbierto && (
+      {usuarioSesion && menuAbierto && (
         <div className="menu-overlay" onClick={() => setMenuAbierto(false)}>
           <aside
             className="side-menu"
@@ -1368,7 +1640,7 @@ function App() {
             </button>
 
             <nav className="side-menu-nav" aria-label="Menú principal">
-              {itemsMenu.map((item) => (
+              {itemsMenuVisibles.map((item) => (
                 <button
                   key={item.id}
                   className={`side-menu-item ${
@@ -1390,7 +1662,7 @@ function App() {
       )}
 
       <section className="app-container">
-        {vistaActiva !== "inicio" && (
+        {usuarioSesion && vistaActiva !== "inicio" && (
           <header className="app-header">
             <div className="brand-row">
               <img

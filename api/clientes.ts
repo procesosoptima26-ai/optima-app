@@ -64,7 +64,7 @@ function obtenerEstadoDesdeSaldo(saldo: number) {
 function getAirtableConfig() {
   return {
     token: getEnv("AIRTABLE_TOKEN"),
-    baseId: getEnv("AIRTABLE_BASE_ID"),
+    baseId: getEnv("AIRTABLE_CC_BASE_ID"),
     clientesTable: process.env.AIRTABLE_CLIENTES_TABLE_NAME || "CLIENTES",
   };
 }

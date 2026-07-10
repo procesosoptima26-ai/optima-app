@@ -43,7 +43,7 @@ function getEnv(name: string) {
 function getAirtableConfig() {
   return {
     token: getEnv("AIRTABLE_TOKEN"),
-    baseId: getEnv("AIRTABLE_BASE_ID"),
+    baseId: getEnv("AIRTABLE_CC_BASE_ID"),
     movimientosTable:
       process.env.AIRTABLE_MOVIMIENTOS_CC_TABLE_NAME || "MOVIMIENTOS_CC",
   };

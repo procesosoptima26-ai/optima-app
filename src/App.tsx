@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
+import CuentasCorrientesMock from "./modules/cuentasCorrientes/CuentasCorrientesMock";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -70,6 +71,7 @@ type VistaActiva =
   | "login"
   | "inventario"
   | "movimientos"
+  | "cuentasCorrientes"
   | "automatizaciones"
   | "reportes"
   | "ajustes"
@@ -79,6 +81,7 @@ type MenuIconKey =
   | "login"
   | "inventario"
   | "movimientos"
+  | "cuentasCorrientes"
   | "automatizaciones"
   | "reportes"
   | "ajustes"
@@ -110,6 +113,11 @@ const itemsMenu: ItemMenu[] = [
     id: "movimientos",
     etiqueta: "MOVIMIENTOS",
     icono: "movimientos",
+  },
+  {
+    id: "cuentasCorrientes",
+    etiqueta: "CUENTAS CORRIENTES",
+    icono: "cuentasCorrientes",
   },
   {
     id: "automatizaciones",
@@ -247,6 +255,27 @@ function IconMovements() {
   );
 }
 
+function IconAccounts() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 6.5h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17.5h10" />
+      <circle cx="18" cy="17.5" r="2" />
+      <path d="M18 15.5v4" />
+      <path d="M16 17.5h4" />
+    </svg>
+  );
+}
+
 function IconAutomation() {
   return (
     <svg
@@ -327,6 +356,8 @@ function renderIcon(icono: MenuIconKey) {
       return <IconInventory />;
     case "movimientos":
       return <IconMovements />;
+    case "cuentasCorrientes":
+      return <IconAccounts />;
     case "automatizaciones":
       return <IconAutomation />;
     case "reportes":
@@ -1296,6 +1327,10 @@ function App() {
       return renderInventario();
     }
 
+    if (vistaActiva === "cuentasCorrientes") {
+      return <CuentasCorrientesMock />;
+    }
+
     return renderModuloEnDesarrollo();
   }
 
@@ -1418,4 +1453,3 @@ function App() {
 }
 
 export default App;
-

@@ -199,14 +199,21 @@ function interpretarFechaFlexible(fechaTexto: string) {
 
   if (!valor) return null;
 
-  const match = valor.match(/^(\d{1,2})([-/])(\d{1,2})\2(\d{2}|\d{4})$/);
+  const match = valor.match(
+    /^(\d{1,2})([-/])(\d{1,2})(?:\2(\d{2}|\d{4}))?$/
+  );
 
   if (!match) return null;
 
   const dia = Number(match[1]);
   const mes = Number(match[3]);
   const anioTexto = match[4];
-  const anio = anioTexto.length === 2 ? 2000 + Number(anioTexto) : Number(anioTexto);
+
+  const anio = anioTexto
+    ? anioTexto.length === 2
+      ? 2000 + Number(anioTexto)
+      : Number(anioTexto)
+    : new Date().getFullYear();
 
   if (!esFechaValida(dia, mes, anio)) return null;
 

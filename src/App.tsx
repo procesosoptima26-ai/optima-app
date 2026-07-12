@@ -1613,16 +1613,16 @@ function App() {
         usuarioSesion && vistaActiva === "inicio" ? "app-home" : ""
       } ${!usuarioSesion ? "app-login-page" : ""}`}
     >
-      {usuarioSesion && (
-        <button
-          className="menu-toggle-button"
-          type="button"
-          onClick={abrirMenu}
-          aria-label="Abrir menú"
-        >
-          Menú
-        </button>
-      )}
+     {!menuAbierto && (
+  <button
+    className="menu-toggle-button"
+    type="button"
+    onClick={abrirMenu}
+    aria-label="Abrir menú"
+  >
+    Menú
+  </button>
+)}
 
       {usuarioSesion && menuAbierto && (
         <div className="menu-overlay" onClick={() => setMenuAbierto(false)}>

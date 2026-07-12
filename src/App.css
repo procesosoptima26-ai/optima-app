@@ -108,10 +108,10 @@ button:disabled {
 /* MENÚ / NAVEGACIÓN */
 
 .menu-toggle-button {
-  position: fixed;
-  top: 58px;
+  position: fixed !important;
+  top: 22px;
   left: 16px;
-  z-index: 900;
+  z-index: 2000;
   width: 52px;
   height: 52px;
   display: grid;
@@ -378,7 +378,7 @@ button:disabled {
 
 .app-header {
   margin-bottom: 10px;
-  padding-top: 54px;
+  padding-top: 28px;
 }
 
 .brand-row {
@@ -1046,7 +1046,7 @@ button:disabled {
   }
 
   .menu-toggle-button {
-    top: 58px;
+    top: 22px;
     left: 14px;
     width: 50px;
     height: 50px;

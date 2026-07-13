@@ -1404,10 +1404,14 @@ button:disabled {
   }
 }
 
-/* MENÚ HAMBURGUESA FIJO Y ESTABLE */
+/* MENÚ HAMBURGUESA ESTABLE EN EL ENCABEZADO */
+
+.app {
+  position: relative;
+}
 
 .menu-toggle-button {
-  position: fixed !important;
+  position: absolute !important;
   top: 18px !important;
   left: 14px !important;
   width: 50px !important;
@@ -1415,12 +1419,12 @@ button:disabled {
   margin: 0 !important;
   padding: 0 !important;
   transform: none !important;
-  flex: 0 0 50px !important;
-  z-index: 2000 !important;
+  z-index: 1000 !important;
 }
 
 @media (max-width: 640px) {
   .menu-toggle-button {
+    position: absolute !important;
     top: 18px !important;
     left: 14px !important;
     width: 50px !important;

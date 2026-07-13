@@ -1403,3 +1403,27 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* MENÚ HAMBURGUESA FIJO Y ESTABLE */
+
+.menu-toggle-button {
+  position: fixed !important;
+  top: 18px !important;
+  left: 14px !important;
+  width: 50px !important;
+  height: 50px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  transform: none !important;
+  flex: 0 0 50px !important;
+  z-index: 2000 !important;
+}
+
+@media (max-width: 640px) {
+  .menu-toggle-button {
+    top: 18px !important;
+    left: 14px !important;
+    width: 50px !important;
+    height: 50px !important;
+  }
+}

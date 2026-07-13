@@ -62,12 +62,6 @@ type RespuestaUbicaciones = {
 
 type RespuestaStock = {
   ok?: boolean;
-  cantidadTotal?: number;
-  cantidadVencimientoSeleccionado?: number;
-  loteSeleccionado?: LoteStock | null;
-  loteAnterior?: LoteStock | null;
-  vencimientoMasProximo?: LoteStock | null;
-  alertaFefo?: boolean;
   lotes?: LoteStock[];
   error?: string;
 };
@@ -87,7 +81,6 @@ type MovimientoPendiente = {
   vencimiento: string | null;
   cantidad: number;
   observacion: string;
-  alerta?: string;
 };
 
 type MovimientoProcesado = {
@@ -106,7 +99,6 @@ type MovimientoProcesado = {
 
 type RespuestaMovimientos = {
   ok?: boolean;
-  cantidad?: number;
   ids?: string[];
   movimientos?: MovimientoProcesado[];
   error?: string;
@@ -123,29 +115,22 @@ type DistribucionRecepcion = {
   cantidad: string;
 };
 
-const motivosIngreso = ["COMPRA", "DEVOLUCIÓN", "OTRO INGRESO"];
+const tiposAjustes = ["INGRESO", "EGRESO", "AJUSTE +", "AJUSTE -"];
 
-const motivosEgreso = [
+const motivosAjustes = [
+  "TRANSFERENCIA",
+  "DEVOLUCIÓN",
+  "ROTURA",
+  "MAL ESTADO",
+  "VENCIDO",
   "VENTA",
-  "ROTURA EN GÓNDOLA",
-  "ROTURA EN DEPÓSITO",
-  "MAL ESTADO EN GÓNDOLA",
-  "MAL ESTADO EN DEPÓSITO",
-  "VENCIMIENTO EN GÓNDOLA",
-  "VENCIMIENTO EN DEPÓSITO",
-  "OTRO EGRESO",
 ];
 
-const tiposIndividuales = [
-  "INGRESO",
-  "EGRESO",
-  "AJUSTE +",
-  "AJUSTE -",
-];
-
-function fechaHoy() {
-  return new Date().toISOString().slice(0, 10);
-}
+const origenesReposicionPermitidos = new Set([
+  "GALPÓN",
+  "DEPÓSITO",
+  "CÁMARA",
+]);
 
 function crearDistribucion(ubicacionId = ""): DistribucionRecepcion {
   return {
@@ -159,10 +144,86 @@ function formatearFecha(fecha: string | null) {
   if (!fecha) return "Sin vencimiento";
 
   const partes = fecha.split("-");
-
   if (partes.length !== 3) return fecha;
 
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function normalizarFechaManual(valor: string): {
+  fecha: string | null;
+  error: string;
+} {
+  const limpio = valor.trim();
+
+  if (!limpio) {
+    return { fecha: null, error: "Ingresá una fecha." };
+  }
+
+  const partes = limpio.split(/[/-]/).map((parte) => parte.trim());
+
+  if (partes.length !== 2 && partes.length !== 3) {
+    return {
+      fecha: null,
+      error: "Usá día/mes o día/mes/año.",
+    };
+  }
+
+  const dia = Number(partes[0]);
+  const mes = Number(partes[1]);
+
+  let anio = new Date().getFullYear();
+
+  if (partes.length === 3) {
+    const anioIngresado = Number(partes[2]);
+
+    if (!Number.isInteger(anioIngresado)) {
+      return { fecha: null, error: "El año no es válido." };
+    }
+
+    anio =
+      partes[2].length === 2
+        ? 2000 + anioIngresado
+        : anioIngresado;
+  }
+
+  if (
+    !Number.isInteger(dia) ||
+    !Number.isInteger(mes) ||
+    !Number.isInteger(anio)
+  ) {
+    return { fecha: null, error: "La fecha no es válida." };
+  }
+
+  const fechaValidacion = new Date(anio, mes - 1, dia);
+
+  const esValida =
+    fechaValidacion.getFullYear() === anio &&
+    fechaValidacion.getMonth() === mes - 1 &&
+    fechaValidacion.getDate() === dia;
+
+  if (!esValida) {
+    return { fecha: null, error: "La fecha no existe." };
+  }
+
+  return {
+    fecha: [
+      String(anio).padStart(4, "0"),
+      String(mes).padStart(2, "0"),
+      String(dia).padStart(2, "0"),
+    ].join("-"),
+    error: "",
+  };
+}
+
+function ordenarLotesFefo(lotes: LoteStock[]) {
+  return [...lotes]
+    .filter((lote) => lote.cantidad > 0)
+    .sort((a, b) => {
+      if (a.vencimiento === null && b.vencimiento === null) return 0;
+      if (a.vencimiento === null) return 1;
+      if (b.vencimiento === null) return -1;
+      return a.vencimiento.localeCompare(b.vencimiento);
+    });
 }
 
 function esperar(milisegundos: number) {
@@ -190,9 +251,13 @@ export default function Movimientos({ usuario }: Props) {
   const [ubicacionDestinoId, setUbicacionDestinoId] = useState("");
 
   const [sinVencimiento, setSinVencimiento] = useState(false);
-  const [vencimiento, setVencimiento] = useState(fechaHoy());
+  const [vencimientoTexto, setVencimientoTexto] = useState("");
   const [cantidad, setCantidad] = useState("");
   const [observacion, setObservacion] = useState("");
+
+  const [lotesDisponibles, setLotesDisponibles] = useState<LoteStock[]>([]);
+  const [loteSeleccionadoId, setLoteSeleccionadoId] = useState("");
+  const [cargandoLotes, setCargandoLotes] = useState(false);
 
   const [distribuciones, setDistribuciones] = useState<
     DistribucionRecepcion[]
@@ -222,6 +287,22 @@ export default function Movimientos({ usuario }: Props) {
     [ubicaciones, ubicacionDestinoId]
   );
 
+  const ubicacionesOrigenReposicion = useMemo(
+    () =>
+      ubicaciones.filter((ubicacion) =>
+        origenesReposicionPermitidos.has(ubicacion.tipoUbicacion)
+      ),
+    [ubicaciones]
+  );
+
+  const ubicacionGondola = useMemo(
+    () =>
+      ubicaciones.find(
+        (ubicacion) => ubicacion.tipoUbicacion === "GÓNDOLA"
+      ) || null,
+    [ubicaciones]
+  );
+
   const totalDistribucion = useMemo(() => {
     return distribuciones.reduce((total, distribucion) => {
       const cantidadNumerica = Number(distribucion.cantidad);
@@ -231,6 +312,23 @@ export default function Movimientos({ usuario }: Props) {
         : total;
     }, 0);
   }, [distribuciones]);
+
+  const esTransferencia =
+    modo === "individual" &&
+    motivoIndividual === "TRANSFERENCIA";
+
+  const esMovimientoNegativo =
+    modo === "reposicion" ||
+    esTransferencia ||
+    (modo === "individual" &&
+      (tipoIndividual === "EGRESO" ||
+        tipoIndividual === "AJUSTE -"));
+
+  const necesitaLoteExistente = esMovimientoNegativo;
+
+  const necesitaFechaManual =
+    modo === "recepcion" ||
+    (modo === "individual" && !esMovimientoNegativo);
 
   const configuracionActual = useMemo(() => {
     if (modo === "recepcion") {
@@ -252,27 +350,26 @@ export default function Movimientos({ usuario }: Props) {
     }
 
     return {
-      tipoMovimiento: tipoIndividual,
+      tipoMovimiento: esTransferencia ? "EGRESO" : tipoIndividual,
       motivo: motivoIndividual,
       necesitaOrigen:
+        esTransferencia ||
         tipoIndividual === "EGRESO" ||
         tipoIndividual === "AJUSTE -",
       necesitaDestino:
-        tipoIndividual === "INGRESO" ||
-        tipoIndividual === "AJUSTE +",
+        !esTransferencia &&
+        (tipoIndividual === "INGRESO" ||
+          tipoIndividual === "AJUSTE +"),
     };
-  }, [modo, tipoIndividual, motivoIndividual]);
+  }, [modo, tipoIndividual, motivoIndividual, esTransferencia]);
 
-  const motivosIndividuales = useMemo(() => {
-    if (
-      tipoIndividual === "INGRESO" ||
-      tipoIndividual === "AJUSTE +"
-    ) {
-      return motivosIngreso;
-    }
-
-    return motivosEgreso;
-  }, [tipoIndividual]);
+  const loteSeleccionado = useMemo(
+    () =>
+      lotesDisponibles.find(
+        (lote) => lote.id === loteSeleccionadoId
+      ) || null,
+    [lotesDisponibles, loteSeleccionadoId]
+  );
 
   useEffect(() => {
     cargarUbicaciones();
@@ -280,19 +377,15 @@ export default function Movimientos({ usuario }: Props) {
   }, [usuario.sucursal]);
 
   useEffect(() => {
-    if (!motivosIndividuales.includes(motivoIndividual)) {
-      setMotivoIndividual(motivosIndividuales[0]);
-    }
-  }, [motivosIndividuales, motivoIndividual]);
-
-  useEffect(() => {
     setProducto(null);
     setCodigo("");
     setCantidad("");
     setObservacion("");
     setSinVencimiento(false);
-    setVencimiento(fechaHoy());
+    setVencimientoTexto("");
     setAviso(null);
+    setLotesDisponibles([]);
+    setLoteSeleccionadoId("");
 
     if (modo === "recepcion") {
       const ubicacionPreferida =
@@ -305,33 +398,49 @@ export default function Movimientos({ usuario }: Props) {
         ubicaciones[0];
 
       setUbicacionOrigenId("");
+      setUbicacionDestinoId("");
       setDistribuciones([
         crearDistribucion(ubicacionPreferida?.id || ""),
       ]);
     }
 
     if (modo === "reposicion") {
-      const origenPreferido =
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
-        ) ||
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
-        );
-
-      const destinoPreferido = ubicaciones.find(
-        (ubicacion) => ubicacion.tipoUbicacion === "GÓNDOLA"
+      setUbicacionOrigenId(
+        ubicacionesOrigenReposicion[0]?.id || ""
       );
-
-      setUbicacionOrigenId(origenPreferido?.id || "");
-      setUbicacionDestinoId(destinoPreferido?.id || "");
+      setUbicacionDestinoId(ubicacionGondola?.id || "");
     }
 
     if (modo === "individual") {
       setUbicacionOrigenId("");
       setUbicacionDestinoId("");
     }
-  }, [modo, ubicaciones]);
+  }, [
+    modo,
+    ubicaciones,
+    ubicacionesOrigenReposicion,
+    ubicacionGondola,
+  ]);
+
+  useEffect(() => {
+    if (motivoIndividual === "TRANSFERENCIA") {
+      setTipoIndividual("EGRESO");
+      setUbicacionDestinoId("");
+    }
+  }, [motivoIndividual]);
+
+  useEffect(() => {
+    if (
+      producto &&
+      ubicacionOrigenId &&
+      necesitaLoteExistente
+    ) {
+      cargarLotesDisponibles(producto.id, ubicacionOrigenId);
+    } else {
+      setLotesDisponibles([]);
+      setLoteSeleccionadoId("");
+    }
+  }, [producto, ubicacionOrigenId, necesitaLoteExistente]);
 
   async function cargarUbicaciones() {
     try {
@@ -392,6 +501,87 @@ export default function Movimientos({ usuario }: Props) {
     }
   }
 
+  async function cargarLotesDisponibles(
+    productoId: string,
+    ubicacionId: string
+  ) {
+    try {
+      setCargandoLotes(true);
+      setLotesDisponibles([]);
+      setLoteSeleccionadoId("");
+
+      const params = new URLSearchParams({
+        productoId,
+        ubicacionId,
+      });
+
+      const response = await fetch(
+        `/api/stock-lotes?${params.toString()}`
+      );
+
+      const data = (await response.json()) as RespuestaStock;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.error || "No se pudieron consultar los lotes."
+        );
+      }
+
+      const lotesOrdenados = ordenarLotesFefo(data.lotes || []);
+
+      setLotesDisponibles(lotesOrdenados);
+
+      if (lotesOrdenados.length > 0) {
+        setLoteSeleccionadoId(lotesOrdenados[0].id);
+      }
+    } catch (error) {
+      console.error("Error cargando lotes:", error);
+
+      setAviso({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron consultar los lotes.",
+      });
+    } finally {
+      setCargandoLotes(false);
+    }
+  }
+
+  async function registrarErrorStock(
+    tipoError: "STOCK INSUFICIENTE" | "SIN STOCK" | "ERROR FEFO",
+    detalle: string,
+    cantidadSolicitada: number,
+    cantidadDisponible: number,
+    vencimiento: string | null
+  ) {
+    if (!producto || !ubicacionOrigenId) return;
+
+    try {
+      await fetch("/api/errores-movimientos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          usuario: usuario.nombre,
+          sucursal: usuario.sucursal,
+          productoId: producto.id,
+          codigo: producto.codigo,
+          ubicacionId: ubicacionOrigenId,
+          vencimiento,
+          cantidadSolicitada,
+          cantidadDisponible,
+          tipoError,
+          detalle,
+        }),
+      });
+    } catch (error) {
+      console.error("No se pudo registrar la alerta:", error);
+    }
+  }
+
   async function buscarProducto(codigoIngresado: string) {
     const codigoLimpio = codigoIngresado.trim();
 
@@ -404,6 +594,8 @@ export default function Movimientos({ usuario }: Props) {
       setBuscandoProducto(true);
       setAviso(null);
       setProducto(null);
+      setLotesDisponibles([]);
+      setLoteSeleccionadoId("");
 
       const response = await fetch(
         `/api/productos-movimientos?codigo=${encodeURIComponent(
@@ -425,7 +617,6 @@ export default function Movimientos({ usuario }: Props) {
           texto:
             "El producto no existe en PRODUCTOS. Primero debe cargarse desde Inventario.",
         });
-
         return;
       }
 
@@ -492,10 +683,7 @@ export default function Movimientos({ usuario }: Props) {
     setDistribuciones((actuales) =>
       actuales.map((distribucion) =>
         distribucion.idLocal === idLocal
-          ? {
-              ...distribucion,
-              [campo]: valor,
-            }
+          ? { ...distribucion, [campo]: valor }
           : distribucion
       )
     );
@@ -519,13 +707,32 @@ export default function Movimientos({ usuario }: Props) {
     });
   }
 
-  function validarFormularioActual() {
+  function obtenerVencimientoActual() {
+    if (necesitaLoteExistente) {
+      return {
+        fecha: loteSeleccionado?.vencimiento ?? null,
+        error: loteSeleccionado
+          ? ""
+          : "Seleccioná un lote disponible.",
+      };
+    }
+
+    if (sinVencimiento) {
+      return { fecha: null, error: "" };
+    }
+
+    return normalizarFechaManual(vencimientoTexto);
+  }
+
+  async function validarFormularioActual() {
     if (!producto) {
       return "Escaneá o buscá un producto.";
     }
 
-    if (!sinVencimiento && !vencimiento) {
-      return "Indicá el vencimiento o marcá Sin vencimiento.";
+    const vencimientoActual = obtenerVencimientoActual();
+
+    if (vencimientoActual.error) {
+      return vencimientoActual.error;
     }
 
     if (modo === "recepcion") {
@@ -582,90 +789,78 @@ export default function Movimientos({ usuario }: Props) {
       return "La cantidad debe ser mayor que cero.";
     }
 
-    return "";
-  }
+    if (
+      necesitaLoteExistente &&
+      lotesDisponibles.length === 0
+    ) {
+      await registrarErrorStock(
+        "SIN STOCK",
+        "No hay lotes con stock disponible en la ubicación seleccionada.",
+        cantidadNumero,
+        0,
+        null
+      );
 
-  async function validarStockYFefo() {
-    if (!producto || !ubicacionOrigenId || modo === "recepcion") {
-      return {
-        error: "",
-        alerta: "",
-      };
+      return "No hay stock disponible para este producto en el origen.";
     }
 
     if (
-      modo !== "reposicion" &&
-      configuracionActual.tipoMovimiento !== "EGRESO" &&
-      configuracionActual.tipoMovimiento !== "AJUSTE -"
+      necesitaLoteExistente &&
+      loteSeleccionado &&
+      cantidadNumero > loteSeleccionado.cantidad
     ) {
-      return {
-        error: "",
-        alerta: "",
-      };
+      const detalle =
+        `Stock insuficiente. Disponible: ${loteSeleccionado.cantidad}. ` +
+        `Solicitado: ${cantidadNumero}.`;
+
+      await registrarErrorStock(
+        "STOCK INSUFICIENTE",
+        detalle,
+        cantidadNumero,
+        loteSeleccionado.cantidad,
+        loteSeleccionado.vencimiento
+      );
+
+      return (
+        `${detalle} Revisá la fecha o la cantidad.`
+      );
     }
 
-    const fechaSeleccionada = sinVencimiento
-      ? ""
-      : vencimiento;
+    if (
+      necesitaLoteExistente &&
+      loteSeleccionado &&
+      lotesDisponibles[0] &&
+      loteSeleccionado.id !== lotesDisponibles[0].id
+    ) {
+      const recomendado = lotesDisponibles[0];
 
-    const params = new URLSearchParams({
-      productoId: producto.id,
-      ubicacionId: ubicacionOrigenId,
-    });
+      const detalle =
+        `Se intentó seleccionar ${formatearFecha(
+          loteSeleccionado.vencimiento
+        )} cuando FEFO recomienda ${formatearFecha(
+          recomendado.vencimiento
+        )}.`;
 
-    if (fechaSeleccionada) {
-      params.set("vencimiento", fechaSeleccionada);
+      await registrarErrorStock(
+        "ERROR FEFO",
+        detalle,
+        cantidadNumero,
+        recomendado.cantidad,
+        loteSeleccionado.vencimiento
+      );
+
+      return (
+        `FEFO: primero debe utilizarse el lote ${formatearFecha(
+          recomendado.vencimiento
+        )}, con ${recomendado.cantidad} unidades disponibles.`
+      );
     }
 
-    const response = await fetch(
-      `/api/stock-lotes?${params.toString()}`
-    );
-
-    const data = (await response.json()) as RespuestaStock;
-
-    if (!response.ok || !data.ok) {
-      return {
-        error:
-          data.error || "No se pudo consultar el stock disponible.",
-        alerta: "",
-      };
-    }
-
-    const lotes = data.lotes || [];
-
-    const loteSeleccionado = sinVencimiento
-      ? lotes.find((lote) => lote.vencimiento === null) || null
-      : data.loteSeleccionado || null;
-
-    const cantidadDisponible = loteSeleccionado?.cantidad || 0;
-
-    if (Number(cantidad) > cantidadDisponible) {
-      return {
-        error:
-          `Stock insuficiente. Disponible para ese lote: ` +
-          `${cantidadDisponible}.`,
-        alerta: "",
-      };
-    }
-
-    if (data.alertaFefo && data.loteAnterior) {
-      return {
-        error: "",
-        alerta:
-          `FEFO: existe una fecha anterior: ` +
-          `${formatearFecha(data.loteAnterior.vencimiento)} ` +
-          `con ${data.loteAnterior.cantidad} unidades.`,
-      };
-    }
-
-    return {
-      error: "",
-      alerta: "",
-    };
+    return "";
   }
 
   async function agregarALista() {
-    const errorFormulario = validarFormularioActual();
+    const errorFormulario = await validarFormularioActual();
 
     if (errorFormulario) {
       setAviso({
@@ -674,6 +869,8 @@ export default function Movimientos({ usuario }: Props) {
       });
       return;
     }
+
+    const vencimientoActual = obtenerVencimientoActual();
 
     if (modo === "recepcion") {
       const grupoRecepcionId =
@@ -700,7 +897,7 @@ export default function Movimientos({ usuario }: Props) {
             ubicacionOrigenNombre: "",
             ubicacionDestinoId: distribucion.ubicacionId,
             ubicacionDestinoNombre: ubicacion?.nombre || "",
-            vencimiento: sinVencimiento ? null : vencimiento,
+            vencimiento: vencimientoActual.fecha,
             cantidad: Number(distribucion.cantidad),
             observacion: observacion.trim(),
           };
@@ -717,21 +914,6 @@ export default function Movimientos({ usuario }: Props) {
       });
 
       limpiarProductoActual();
-      return;
-    }
-
-    setAviso({
-      tipo: "info",
-      texto: "Validando stock...",
-    });
-
-    const validacionStock = await validarStockYFefo();
-
-    if (validacionStock.error) {
-      setAviso({
-        tipo: "error",
-        texto: validacionStock.error,
-      });
       return;
     }
 
@@ -758,19 +940,16 @@ export default function Movimientos({ usuario }: Props) {
         configuracionActual.necesitaDestino
           ? ubicacionDestino?.nombre || ""
           : "",
-      vencimiento: sinVencimiento ? null : vencimiento,
+      vencimiento: vencimientoActual.fecha,
       cantidad: Number(cantidad),
       observacion: observacion.trim(),
-      alerta: validacionStock.alerta,
     };
 
     setLista((actual) => [...actual, movimiento]);
 
     setAviso({
-      tipo: validacionStock.alerta ? "alerta" : "exito",
-      texto:
-        validacionStock.alerta ||
-        "Movimiento agregado a la lista.",
+      tipo: "exito",
+      texto: "Producto agregado a la carga.",
     });
 
     limpiarProductoActual();
@@ -782,7 +961,9 @@ export default function Movimientos({ usuario }: Props) {
     setCantidad("");
     setObservacion("");
     setSinVencimiento(false);
-    setVencimiento(fechaHoy());
+    setVencimientoTexto("");
+    setLotesDisponibles([]);
+    setLoteSeleccionadoId("");
 
     if (modo === "recepcion") {
       const ubicacionPreferida =
@@ -817,17 +998,13 @@ export default function Movimientos({ usuario }: Props) {
       await esperar(1500);
 
       const response = await fetch(
-        `/api/movimientos?ids=${encodeURIComponent(
-          ids.join(",")
-        )}`
+        `/api/movimientos?ids=${encodeURIComponent(ids.join(","))}`
       );
 
       const data =
         (await response.json()) as RespuestaMovimientos;
 
-      if (!response.ok || !data.ok) {
-        continue;
-      }
+      if (!response.ok || !data.ok) continue;
 
       ultimaRespuesta = data.movimientos || [];
 
@@ -837,9 +1014,7 @@ export default function Movimientos({ usuario }: Props) {
           Boolean(movimiento.errorMotor)
       );
 
-      if (terminados.length === ids.length) {
-        break;
-      }
+      if (terminados.length === ids.length) break;
     }
 
     return ultimaRespuesta;
@@ -1011,7 +1186,7 @@ export default function Movimientos({ usuario }: Props) {
           }
           onClick={() => setModo("individual")}
         >
-          Individual
+          Ajustes
         </button>
       </div>
 
@@ -1033,9 +1208,9 @@ export default function Movimientos({ usuario }: Props) {
                 onChange={(event) =>
                   setTipoIndividual(event.target.value)
                 }
-                disabled={guardando}
+                disabled={guardando || esTransferencia}
               >
-                {tiposIndividuales.map((tipo) => (
+                {tiposAjustes.map((tipo) => (
                   <option key={tipo} value={tipo}>
                     {tipo}
                   </option>
@@ -1052,7 +1227,7 @@ export default function Movimientos({ usuario }: Props) {
                 }
                 disabled={guardando}
               >
-                {motivosIndividuales.map((motivo) => (
+                {motivosAjustes.map((motivo) => (
                   <option key={motivo} value={motivo}>
                     {motivo}
                   </option>
@@ -1076,7 +1251,10 @@ export default function Movimientos({ usuario }: Props) {
                 >
                   <option value="">Seleccionar</option>
 
-                  {ubicaciones.map((ubicacion) => (
+                  {(modo === "reposicion"
+                    ? ubicacionesOrigenReposicion
+                    : ubicaciones
+                  ).map((ubicacion) => (
                     <option key={ubicacion.id} value={ubicacion.id}>
                       {ubicacion.tipoUbicacion}
                     </option>
@@ -1088,21 +1266,29 @@ export default function Movimientos({ usuario }: Props) {
             {configuracionActual.necesitaDestino && (
               <label className="mov-field">
                 Ubicación destino
-                <select
-                  value={ubicacionDestinoId}
-                  onChange={(event) =>
-                    setUbicacionDestinoId(event.target.value)
-                  }
-                  disabled={cargandoUbicaciones || guardando}
-                >
-                  <option value="">Seleccionar</option>
+                {modo === "reposicion" ? (
+                  <input
+                    value="GÓNDOLA"
+                    disabled
+                    aria-label="Ubicación destino"
+                  />
+                ) : (
+                  <select
+                    value={ubicacionDestinoId}
+                    onChange={(event) =>
+                      setUbicacionDestinoId(event.target.value)
+                    }
+                    disabled={cargandoUbicaciones || guardando}
+                  >
+                    <option value="">Seleccionar</option>
 
-                  {ubicaciones.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.tipoUbicacion}
-                    </option>
-                  ))}
-                </select>
+                    {ubicaciones.map((ubicacion) => (
+                      <option key={ubicacion.id} value={ubicacion.id}>
+                        {ubicacion.tipoUbicacion}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </label>
             )}
           </div>
@@ -1117,6 +1303,8 @@ export default function Movimientos({ usuario }: Props) {
               onChange={(event) => {
                 setCodigo(event.target.value);
                 setProducto(null);
+                setLotesDisponibles([]);
+                setLoteSeleccionadoId("");
               }}
               onBlur={() => {
                 if (codigo.trim() && !producto) {
@@ -1159,39 +1347,107 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
 
-        <div className="mov-date-title-row">
-          <strong>Vencimiento</strong>
+        {necesitaFechaManual && (
+          <>
+            <div className="mov-date-title-row">
+              <strong>Vencimiento</strong>
 
-          <button
-            type="button"
-            className={
-              sinVencimiento
-                ? "mov-no-expiry mov-no-expiry-active"
-                : "mov-no-expiry"
-            }
-            onClick={() =>
-              setSinVencimiento(!sinVencimiento)
-            }
-            disabled={guardando}
-          >
-            {sinVencimiento
-              ? "Sin vencimiento ✓"
-              : "Sin vencimiento"}
-          </button>
-        </div>
+              <button
+                type="button"
+                className={
+                  sinVencimiento
+                    ? "mov-no-expiry mov-no-expiry-active"
+                    : "mov-no-expiry"
+                }
+                onClick={() =>
+                  setSinVencimiento(!sinVencimiento)
+                }
+                disabled={guardando}
+              >
+                {sinVencimiento
+                  ? "Sin vencimiento ✓"
+                  : "Sin vencimiento"}
+              </button>
+            </div>
 
-        {!sinVencimiento && (
-          <label className="mov-field mov-expiry-field">
-            Fecha
-            <input
-              type="date"
-              value={vencimiento}
-              onChange={(event) =>
-                setVencimiento(event.target.value)
-              }
-              disabled={guardando}
-            />
-          </label>
+            {!sinVencimiento && (
+              <label className="mov-field mov-expiry-field">
+                Fecha manual
+                <input
+                  type="text"
+                  value={vencimientoTexto}
+                  onChange={(event) =>
+                    setVencimientoTexto(event.target.value)
+                  }
+                  placeholder="Ej: 25/9, 1-10-26 o 01/10/2026"
+                  inputMode="numeric"
+                  disabled={guardando}
+                />
+                <small className="mov-field-help">
+                  Si no escribís el año, se completa con el actual.
+                </small>
+              </label>
+            )}
+          </>
+        )}
+
+        {necesitaLoteExistente && producto && (
+          <section className="mov-lots-section">
+            <div className="mov-lots-title">
+              <div>
+                <strong>Lotes disponibles</strong>
+                <span>Ordenados por vencimiento</span>
+              </div>
+
+              {cargandoLotes && <small>Consultando...</small>}
+            </div>
+
+            {!ubicacionOrigenId ? (
+              <div className="mov-empty">
+                Seleccioná una ubicación de origen.
+              </div>
+            ) : !cargandoLotes && lotesDisponibles.length === 0 ? (
+              <div className="mov-message mov-message-error">
+                No hay stock disponible para este producto en la
+                ubicación seleccionada.
+              </div>
+            ) : (
+              <div className="mov-lots-list">
+                {lotesDisponibles.map((lote, index) => (
+                  <label
+                    key={lote.id}
+                    className={
+                      loteSeleccionadoId === lote.id
+                        ? "mov-lot-option mov-lot-option-active"
+                        : "mov-lot-option"
+                    }
+                  >
+                    <input
+                      type="radio"
+                      name="lote-stock"
+                      value={lote.id}
+                      checked={loteSeleccionadoId === lote.id}
+                      onChange={() =>
+                        setLoteSeleccionadoId(lote.id)
+                      }
+                      disabled={guardando}
+                    />
+
+                    <div>
+                      <strong>
+                        {formatearFecha(lote.vencimiento)}
+                      </strong>
+                      <span>{lote.cantidad} unidades disponibles</span>
+                    </div>
+
+                    {index === 0 && (
+                      <small>Recomendado FEFO</small>
+                    )}
+                  </label>
+                ))}
+              </div>
+            )}
+          </section>
         )}
 
         {modo === "recepcion" ? (
@@ -1309,6 +1565,12 @@ export default function Movimientos({ usuario }: Props) {
               placeholder="Ej: 12"
               disabled={guardando}
             />
+
+            {loteSeleccionado && (
+              <small className="mov-field-help">
+                Disponible en este lote: {loteSeleccionado.cantidad}
+              </small>
+            )}
           </label>
         )}
 
@@ -1329,11 +1591,11 @@ export default function Movimientos({ usuario }: Props) {
           type="button"
           className="mov-add-button"
           onClick={agregarALista}
-          disabled={guardando || buscandoProducto}
+          disabled={guardando || buscandoProducto || cargandoLotes}
         >
           {modo === "recepcion"
             ? "+ Agregar producto a la recepción"
-            : "+ Agregar a la carga"}
+            : "+ Agregar producto a la carga"}
         </button>
 
         {aviso && (
@@ -1375,9 +1637,7 @@ export default function Movimientos({ usuario }: Props) {
                 key={item.idLocal}
                 className="mov-list-item"
               >
-                <div className="mov-list-number">
-                  {index + 1}
-                </div>
+                <div className="mov-list-number">{index + 1}</div>
 
                 <div className="mov-list-content">
                   <strong>{item.nombreProducto}</strong>
@@ -1387,27 +1647,17 @@ export default function Movimientos({ usuario }: Props) {
                   </span>
 
                   {item.ubicacionOrigenNombre && (
-                    <p>
-                      Origen: {item.ubicacionOrigenNombre}
-                    </p>
+                    <p>Origen: {item.ubicacionOrigenNombre}</p>
                   )}
 
                   {item.ubicacionDestinoNombre && (
-                    <p>
-                      Destino: {item.ubicacionDestinoNombre}
-                    </p>
+                    <p>Destino: {item.ubicacionDestinoNombre}</p>
                   )}
 
                   <p>
                     {formatearFecha(item.vencimiento)} ·{" "}
                     {item.cantidad} unidades
                   </p>
-
-                  {item.alerta && (
-                    <div className="mov-inline-alert">
-                      {item.alerta}
-                    </div>
-                  )}
                 </div>
 
                 <button

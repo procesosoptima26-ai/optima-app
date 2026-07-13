@@ -74,7 +74,6 @@ type RespuestaStock = {
 
 type MovimientoPendiente = {
   idLocal: number;
-  grupoRecepcionId?: number;
   productoId: string;
   codigo: string;
   nombreProducto: string;
@@ -117,13 +116,11 @@ type Aviso = {
   texto: string;
 };
 
-type DistribucionRecepcion = {
-  idLocal: number;
-  ubicacionId: string;
-  cantidad: string;
-};
-
-const motivosIngreso = ["COMPRA", "DEVOLUCIÓN", "OTRO INGRESO"];
+const motivosIngreso = [
+  "COMPRA",
+  "DEVOLUCIÓN",
+  "OTRO INGRESO",
+];
 
 const motivosEgreso = [
   "VENTA",
@@ -145,14 +142,6 @@ const tiposIndividuales = [
 
 function fechaHoy() {
   return new Date().toISOString().slice(0, 10);
-}
-
-function crearDistribucion(ubicacionId = ""): DistribucionRecepcion {
-  return {
-    idLocal: Date.now() + Math.floor(Math.random() * 100000),
-    ubicacionId,
-    cantidad: "",
-  };
 }
 
 function formatearFecha(fecha: string | null) {
@@ -194,10 +183,6 @@ export default function Movimientos({ usuario }: Props) {
   const [cantidad, setCantidad] = useState("");
   const [observacion, setObservacion] = useState("");
 
-  const [distribuciones, setDistribuciones] = useState<
-    DistribucionRecepcion[]
-  >([crearDistribucion()]);
-
   const [lista, setLista] = useState<MovimientoPendiente[]>([]);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -222,23 +207,13 @@ export default function Movimientos({ usuario }: Props) {
     [ubicaciones, ubicacionDestinoId]
   );
 
-  const totalDistribucion = useMemo(() => {
-    return distribuciones.reduce((total, distribucion) => {
-      const cantidadNumerica = Number(distribucion.cantidad);
-
-      return Number.isFinite(cantidadNumerica)
-        ? total + cantidadNumerica
-        : total;
-    }, 0);
-  }, [distribuciones]);
-
   const configuracionActual = useMemo(() => {
     if (modo === "recepcion") {
       return {
         tipoMovimiento: "INGRESO",
         motivo: "COMPRA",
         necesitaOrigen: false,
-        necesitaDestino: false,
+        necesitaDestino: true,
       };
     }
 
@@ -295,43 +270,14 @@ export default function Movimientos({ usuario }: Props) {
     setAviso(null);
 
     if (modo === "recepcion") {
-      const ubicacionPreferida =
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
-        ) ||
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
-        ) ||
-        ubicaciones[0];
-
       setUbicacionOrigenId("");
-      setDistribuciones([
-        crearDistribucion(ubicacionPreferida?.id || ""),
-      ]);
-    }
-
-    if (modo === "reposicion") {
-      const origenPreferido =
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
-        ) ||
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
-        );
-
-      const destinoPreferido = ubicaciones.find(
-        (ubicacion) => ubicacion.tipoUbicacion === "GÓNDOLA"
-      );
-
-      setUbicacionOrigenId(origenPreferido?.id || "");
-      setUbicacionDestinoId(destinoPreferido?.id || "");
     }
 
     if (modo === "individual") {
       setUbicacionOrigenId("");
       setUbicacionDestinoId("");
     }
-  }, [modo, ubicaciones]);
+  }, [modo]);
 
   async function cargarUbicaciones() {
     try {
@@ -353,6 +299,27 @@ export default function Movimientos({ usuario }: Props) {
       }
 
       setUbicaciones(data.ubicaciones);
+
+      const galponODeposito =
+        data.ubicaciones.find(
+          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
+        ) ||
+        data.ubicaciones.find(
+          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
+        );
+
+      const gondola = data.ubicaciones.find(
+        (ubicacion) => ubicacion.tipoUbicacion === "GÓNDOLA"
+      );
+
+      if (galponODeposito) {
+        setUbicacionOrigenId(galponODeposito.id);
+        setUbicacionDestinoId(galponODeposito.id);
+      }
+
+      if (modo === "reposicion" && gondola) {
+        setUbicacionDestinoId(gondola.id);
+      }
     } catch (error) {
       console.error("Error cargando ubicaciones:", error);
 
@@ -459,99 +426,9 @@ export default function Movimientos({ usuario }: Props) {
     }
   }
 
-  function agregarDistribucion() {
-    const ubicacionesUsadas = new Set(
-      distribuciones
-        .map((distribucion) => distribucion.ubicacionId)
-        .filter(Boolean)
-    );
-
-    const siguienteUbicacion = ubicaciones.find(
-      (ubicacion) => !ubicacionesUsadas.has(ubicacion.id)
-    );
-
-    if (!siguienteUbicacion) {
-      setAviso({
-        tipo: "alerta",
-        texto: "Ya agregaste todas las ubicaciones disponibles.",
-      });
-      return;
-    }
-
-    setDistribuciones((actuales) => [
-      ...actuales,
-      crearDistribucion(siguienteUbicacion.id),
-    ]);
-  }
-
-  function actualizarDistribucion(
-    idLocal: number,
-    campo: "ubicacionId" | "cantidad",
-    valor: string
-  ) {
-    setDistribuciones((actuales) =>
-      actuales.map((distribucion) =>
-        distribucion.idLocal === idLocal
-          ? {
-              ...distribucion,
-              [campo]: valor,
-            }
-          : distribucion
-      )
-    );
-  }
-
-  function quitarDistribucion(idLocal: number) {
-    setDistribuciones((actuales) => {
-      if (actuales.length === 1) {
-        return [
-          {
-            ...actuales[0],
-            ubicacionId: "",
-            cantidad: "",
-          },
-        ];
-      }
-
-      return actuales.filter(
-        (distribucion) => distribucion.idLocal !== idLocal
-      );
-    });
-  }
-
   function validarFormularioActual() {
     if (!producto) {
       return "Escaneá o buscá un producto.";
-    }
-
-    if (!sinVencimiento && !vencimiento) {
-      return "Indicá el vencimiento o marcá Sin vencimiento.";
-    }
-
-    if (modo === "recepcion") {
-      const distribucionesValidas = distribuciones.filter(
-        (distribucion) =>
-          distribucion.ubicacionId &&
-          Number(distribucion.cantidad) > 0
-      );
-
-      if (distribucionesValidas.length === 0) {
-        return "Cargá al menos una ubicación con cantidad mayor a cero.";
-      }
-
-      if (distribucionesValidas.length !== distribuciones.length) {
-        return "Completá ubicación y cantidad en todas las filas.";
-      }
-
-      const idsUbicaciones = distribucionesValidas.map(
-        (distribucion) => distribucion.ubicacionId
-      );
-
-      if (new Set(idsUbicaciones).size !== idsUbicaciones.length) {
-        return "No podés repetir la misma ubicación.";
-      }
-
-      return "";
     }
 
     if (
@@ -571,7 +448,8 @@ export default function Movimientos({ usuario }: Props) {
     if (
       ubicacionOrigenId &&
       ubicacionDestinoId &&
-      ubicacionOrigenId === ubicacionDestinoId
+      ubicacionOrigenId === ubicacionDestinoId &&
+      modo === "reposicion"
     ) {
       return "El origen y el destino no pueden ser iguales.";
     }
@@ -582,11 +460,15 @@ export default function Movimientos({ usuario }: Props) {
       return "La cantidad debe ser mayor que cero.";
     }
 
+    if (!sinVencimiento && !vencimiento) {
+      return "Indicá el vencimiento o marcá Sin vencimiento.";
+    }
+
     return "";
   }
 
   async function validarStockYFefo() {
-    if (!producto || !ubicacionOrigenId || modo === "recepcion") {
+    if (!producto || !ubicacionOrigenId) {
       return {
         error: "",
         alerta: "",
@@ -637,7 +519,8 @@ export default function Movimientos({ usuario }: Props) {
       ? lotes.find((lote) => lote.vencimiento === null) || null
       : data.loteSeleccionado || null;
 
-    const cantidadDisponible = loteSeleccionado?.cantidad || 0;
+    const cantidadDisponible =
+      loteSeleccionado?.cantidad || 0;
 
     if (Number(cantidad) > cantidadDisponible) {
       return {
@@ -672,51 +555,7 @@ export default function Movimientos({ usuario }: Props) {
         tipo: "error",
         texto: errorFormulario,
       });
-      return;
-    }
 
-    if (modo === "recepcion") {
-      const grupoRecepcionId =
-        Date.now() + Math.floor(Math.random() * 10000);
-
-      const nuevosMovimientos = distribuciones.map(
-        (distribucion, index): MovimientoPendiente => {
-          const ubicacion = ubicaciones.find(
-            (item) => item.id === distribucion.ubicacionId
-          );
-
-          return {
-            idLocal:
-              grupoRecepcionId +
-              index +
-              Math.floor(Math.random() * 1000),
-            grupoRecepcionId,
-            productoId: producto!.id,
-            codigo: producto!.codigo,
-            nombreProducto: producto!.nombre,
-            tipoMovimiento: "INGRESO",
-            motivo: "COMPRA",
-            ubicacionOrigenId: "",
-            ubicacionOrigenNombre: "",
-            ubicacionDestinoId: distribucion.ubicacionId,
-            ubicacionDestinoNombre: ubicacion?.nombre || "",
-            vencimiento: sinVencimiento ? null : vencimiento,
-            cantidad: Number(distribucion.cantidad),
-            observacion: observacion.trim(),
-          };
-        }
-      );
-
-      setLista((actual) => [...actual, ...nuevosMovimientos]);
-
-      setAviso({
-        tipo: "exito",
-        texto:
-          `${producto!.nombre} agregado. ` +
-          `Total recibido: ${totalDistribucion} unidades.`,
-      });
-
-      limpiarProductoActual();
       return;
     }
 
@@ -732,6 +571,7 @@ export default function Movimientos({ usuario }: Props) {
         tipo: "error",
         texto: validacionStock.error,
       });
+
       return;
     }
 
@@ -740,7 +580,8 @@ export default function Movimientos({ usuario }: Props) {
       productoId: producto!.id,
       codigo: producto!.codigo,
       nombreProducto: producto!.nombre,
-      tipoMovimiento: configuracionActual.tipoMovimiento,
+      tipoMovimiento:
+        configuracionActual.tipoMovimiento,
       motivo: configuracionActual.motivo,
       ubicacionOrigenId:
         configuracionActual.necesitaOrigen
@@ -783,21 +624,6 @@ export default function Movimientos({ usuario }: Props) {
     setObservacion("");
     setSinVencimiento(false);
     setVencimiento(fechaHoy());
-
-    if (modo === "recepcion") {
-      const ubicacionPreferida =
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
-        ) ||
-        ubicaciones.find(
-          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
-        ) ||
-        ubicaciones[0];
-
-      setDistribuciones([
-        crearDistribucion(ubicacionPreferida?.id || ""),
-      ]);
-    }
 
     window.setTimeout(() => {
       codigoInputRef.current?.focus();
@@ -851,6 +677,7 @@ export default function Movimientos({ usuario }: Props) {
         tipo: "error",
         texto: "No hay movimientos agregados.",
       });
+
       return;
     }
 
@@ -872,7 +699,8 @@ export default function Movimientos({ usuario }: Props) {
           sucursal: usuario.sucursal,
           movimientos: lista.map((movimiento) => ({
             productoId: movimiento.productoId,
-            tipoMovimiento: movimiento.tipoMovimiento,
+            tipoMovimiento:
+              movimiento.tipoMovimiento,
             motivo: movimiento.motivo,
             ubicacionOrigenId:
               movimiento.ubicacionOrigenId || undefined,
@@ -960,7 +788,9 @@ export default function Movimientos({ usuario }: Props) {
     <section className="mov-module">
       <div className="mov-title-row">
         <div>
-          <p className="module-label mov-module-label">MÓDULO</p>
+          <p className="module-label mov-module-label">
+            MÓDULO
+          </p>
           <h2>Movimientos</h2>
           <span>
             {usuario.sucursal} · {usuario.nombre}
@@ -1062,51 +892,59 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
 
-        {modo !== "recepcion" && (
-          <div className="mov-two-columns">
-            {configuracionActual.necesitaOrigen && (
-              <label className="mov-field">
-                Ubicación origen
-                <select
-                  value={ubicacionOrigenId}
-                  onChange={(event) =>
-                    setUbicacionOrigenId(event.target.value)
-                  }
-                  disabled={cargandoUbicaciones || guardando}
-                >
-                  <option value="">Seleccionar</option>
+        <div className="mov-two-columns">
+          {configuracionActual.necesitaOrigen && (
+            <label className="mov-field">
+              Ubicación origen
+              <select
+                value={ubicacionOrigenId}
+                onChange={(event) =>
+                  setUbicacionOrigenId(event.target.value)
+                }
+                disabled={
+                  cargandoUbicaciones || guardando
+                }
+              >
+                <option value="">Seleccionar</option>
 
-                  {ubicaciones.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.tipoUbicacion}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
+                {ubicaciones.map((ubicacion) => (
+                  <option
+                    key={ubicacion.id}
+                    value={ubicacion.id}
+                  >
+                    {ubicacion.tipoUbicacion}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
-            {configuracionActual.necesitaDestino && (
-              <label className="mov-field">
-                Ubicación destino
-                <select
-                  value={ubicacionDestinoId}
-                  onChange={(event) =>
-                    setUbicacionDestinoId(event.target.value)
-                  }
-                  disabled={cargandoUbicaciones || guardando}
-                >
-                  <option value="">Seleccionar</option>
+          {configuracionActual.necesitaDestino && (
+            <label className="mov-field">
+              Ubicación destino
+              <select
+                value={ubicacionDestinoId}
+                onChange={(event) =>
+                  setUbicacionDestinoId(event.target.value)
+                }
+                disabled={
+                  cargandoUbicaciones || guardando
+                }
+              >
+                <option value="">Seleccionar</option>
 
-                  {ubicaciones.map((ubicacion) => (
-                    <option key={ubicacion.id} value={ubicacion.id}>
-                      {ubicacion.tipoUbicacion}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-          </div>
-        )}
+                {ubicaciones.map((ubicacion) => (
+                  <option
+                    key={ubicacion.id}
+                    value={ubicacion.id}
+                  >
+                    {ubicacion.tipoUbicacion}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+        </div>
 
         <label className="mov-field">
           Código
@@ -1180,122 +1018,27 @@ export default function Movimientos({ usuario }: Props) {
           </button>
         </div>
 
-        {!sinVencimiento && (
-          <label className="mov-field mov-expiry-field">
-            Fecha
-            <input
-              type="date"
-              value={vencimiento}
-              onChange={(event) =>
-                setVencimiento(event.target.value)
-              }
-              disabled={guardando}
-            />
-          </label>
-        )}
-
-        {modo === "recepcion" ? (
-          <section className="mov-distribution-section">
-            <div className="mov-distribution-title-row">
-              <strong>Distribución</strong>
-
-              <button
-                type="button"
-                className="mov-add-location-button"
-                onClick={agregarDistribucion}
-                disabled={
-                  guardando ||
-                  distribuciones.length >= ubicaciones.length
+        <div
+          className={
+            sinVencimiento
+              ? "mov-two-columns mov-only-quantity"
+              : "mov-two-columns"
+          }
+        >
+          {!sinVencimiento && (
+            <label className="mov-field">
+              Fecha
+              <input
+                type="date"
+                value={vencimiento}
+                onChange={(event) =>
+                  setVencimiento(event.target.value)
                 }
-              >
-                + Agregar ubicación
-              </button>
-            </div>
+                disabled={guardando}
+              />
+            </label>
+          )}
 
-            <div className="mov-distribution-list">
-              {distribuciones.map((distribucion) => {
-                const ubicacionesUsadas = new Set(
-                  distribuciones
-                    .filter(
-                      (item) =>
-                        item.idLocal !== distribucion.idLocal
-                    )
-                    .map((item) => item.ubicacionId)
-                    .filter(Boolean)
-                );
-
-                return (
-                  <div
-                    className="mov-distribution-row"
-                    key={distribucion.idLocal}
-                  >
-                    <select
-                      value={distribucion.ubicacionId}
-                      onChange={(event) =>
-                        actualizarDistribucion(
-                          distribucion.idLocal,
-                          "ubicacionId",
-                          event.target.value
-                        )
-                      }
-                      disabled={cargandoUbicaciones || guardando}
-                      aria-label="Ubicación destino"
-                    >
-                      <option value="">Ubicación</option>
-
-                      {ubicaciones.map((ubicacion) => (
-                        <option
-                          key={ubicacion.id}
-                          value={ubicacion.id}
-                          disabled={ubicacionesUsadas.has(
-                            ubicacion.id
-                          )}
-                        >
-                          {ubicacion.tipoUbicacion}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={distribucion.cantidad}
-                      onChange={(event) =>
-                        actualizarDistribucion(
-                          distribucion.idLocal,
-                          "cantidad",
-                          event.target.value
-                        )
-                      }
-                      placeholder="Cant."
-                      inputMode="decimal"
-                      disabled={guardando}
-                      aria-label="Cantidad"
-                    />
-
-                    <button
-                      type="button"
-                      className="mov-remove-location-button"
-                      onClick={() =>
-                        quitarDistribucion(distribucion.idLocal)
-                      }
-                      disabled={guardando}
-                      aria-label="Quitar ubicación"
-                    >
-                      ×
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="mov-distribution-total">
-              <span>Total recibido</span>
-              <strong>{totalDistribucion} unidades</strong>
-            </div>
-          </section>
-        ) : (
           <label className="mov-field">
             Cantidad
             <input
@@ -1310,7 +1053,7 @@ export default function Movimientos({ usuario }: Props) {
               disabled={guardando}
             />
           </label>
-        )}
+        </div>
 
         <label className="mov-field">
           Observación
@@ -1331,9 +1074,7 @@ export default function Movimientos({ usuario }: Props) {
           onClick={agregarALista}
           disabled={guardando || buscandoProducto}
         >
-          {modo === "recepcion"
-            ? "+ Agregar producto a la recepción"
-            : "+ Agregar a la carga"}
+          + Agregar a la carga
         </button>
 
         {aviso && (
@@ -1460,7 +1201,8 @@ export default function Movimientos({ usuario }: Props) {
               >
                 <div>
                   <strong>
-                    {movimiento.nombreProducto || "Producto"}
+                    {movimiento.nombreProducto ||
+                      "Producto"}
                   </strong>
 
                   <p>
@@ -1469,7 +1211,9 @@ export default function Movimientos({ usuario }: Props) {
                   </p>
 
                   {movimiento.errorMotor && (
-                    <small>{movimiento.errorMotor}</small>
+                    <small>
+                      {movimiento.errorMotor}
+                    </small>
                   )}
                 </div>
 
@@ -1495,7 +1239,9 @@ export default function Movimientos({ usuario }: Props) {
         </div>
 
         {cargandoHistorial ? (
-          <div className="mov-empty">Cargando historial...</div>
+          <div className="mov-empty">
+            Cargando historial...
+          </div>
         ) : historial.length === 0 ? (
           <div className="mov-empty">
             Todavía no hay movimientos registrados.
@@ -1509,7 +1255,8 @@ export default function Movimientos({ usuario }: Props) {
               >
                 <div>
                   <strong>
-                    {movimiento.nombreProducto || "Producto"}
+                    {movimiento.nombreProducto ||
+                      "Producto"}
                   </strong>
 
                   <span>
@@ -1518,12 +1265,16 @@ export default function Movimientos({ usuario }: Props) {
                   </span>
 
                   <p>
-                    {formatearFecha(movimiento.vencimiento)} ·{" "}
-                    {movimiento.cantidad} unidades
+                    {formatearFecha(
+                      movimiento.vencimiento
+                    )}{" "}
+                    · {movimiento.cantidad} unidades
                   </p>
 
                   {movimiento.errorMotor && (
-                    <small>{movimiento.errorMotor}</small>
+                    <small>
+                      {movimiento.errorMotor}
+                    </small>
                   )}
                 </div>
 

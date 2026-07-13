@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import CuentasCorrientesMock from "./modules/cuentasCorrientes/CuentasCorrientes";
-import Movimientos from "./modules/movimientos/Movimientos";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -43,7 +42,6 @@ type UsuarioSesion = {
   nombre: string;
   empresa: string;
   rol: string;
-  sucursal: string;
   modulos: string[];
 };
 
@@ -1597,9 +1595,6 @@ function App() {
     if (vistaActiva === "inventario") {
       return renderInventario();
     }
-  if (vistaActiva === "movimientos") {
-    return <Movimientos usuario={usuarioSesion} />;
-  }
 
     if (vistaActiva === "cuentasCorrientes") {
       return <CuentasCorrientesMock />;

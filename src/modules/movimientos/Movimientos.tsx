@@ -2113,3 +2113,4 @@ export default function Movimientos({ usuario }: Props) {
     </section>
   );
 }
+

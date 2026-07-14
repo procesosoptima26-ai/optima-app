@@ -307,6 +307,9 @@ export default function Movimientos({ usuario }: Props) {
   >([crearDistribucion()]);
 
   const [lista, setLista] = useState<MovimientoPendiente[]>([]);
+  const [grupoRecepcionEditando, setGrupoRecepcionEditando] = useState<
+    number | null
+  >(null);
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -363,6 +366,25 @@ export default function Movimientos({ usuario }: Props) {
       return Number.isFinite(valor) ? total + valor : total;
     }, 0);
   }, [lotesDisponibles, cantidadesPorLote]);
+
+  const gruposCarga = useMemo(() => {
+    const grupos = new Map<string, MovimientoPendiente[]>();
+
+    lista.forEach((movimiento) => {
+      const clave = movimiento.grupoRecepcionId
+        ? `recepcion-${movimiento.grupoRecepcionId}`
+        : `movimiento-${movimiento.idLocal}`;
+
+      const movimientosDelGrupo = grupos.get(clave) || [];
+      movimientosDelGrupo.push(movimiento);
+      grupos.set(clave, movimientosDelGrupo);
+    });
+
+    return Array.from(grupos.entries()).map(([clave, movimientos]) => ({
+      clave,
+      movimientos,
+    }));
+  }, [lista]);
 
   const esTransferencia =
     modo === "individual" &&
@@ -1050,20 +1072,99 @@ export default function Movimientos({ usuario }: Props) {
       return;
     }
 
-    setLista((actual) => [
-      ...actual,
-      ...resultadoActual.movimientos,
-    ]);
+    if (modo === "recepcion" && grupoRecepcionEditando !== null) {
+      const movimientosEditados = resultadoActual.movimientos.map(
+        (movimiento, index) => ({
+          ...movimiento,
+          idLocal:
+            grupoRecepcionEditando +
+            index +
+            Math.floor(Math.random() * 1000),
+          grupoRecepcionId: grupoRecepcionEditando,
+        })
+      );
 
-    setAviso({
-      tipo: "exito",
-      texto:
-        modo === "reposicion"
-          ? `${totalReposicion} unidades agregadas a la reposición.`
-          : "Producto agregado a la carga.",
-    });
+      setLista((actual) => [
+        ...actual.filter(
+          (movimiento) =>
+            movimiento.grupoRecepcionId !== grupoRecepcionEditando
+        ),
+        ...movimientosEditados,
+      ]);
+
+      setAviso({
+        tipo: "exito",
+        texto: "Cambios guardados en la carga actual.",
+      });
+    } else {
+      setLista((actual) => [
+        ...actual,
+        ...resultadoActual.movimientos,
+      ]);
+
+      setAviso({
+        tipo: "exito",
+        texto:
+          modo === "reposicion"
+            ? `${totalReposicion} unidades agregadas a la reposición.`
+            : "Producto agregado a la carga.",
+      });
+    }
 
     limpiarFormularioActual(true);
+  }
+
+  function editarRecepcion(grupoRecepcionId: number) {
+    const movimientos = lista.filter(
+      (movimiento) =>
+        movimiento.grupoRecepcionId === grupoRecepcionId
+    );
+
+    const primero = movimientos[0];
+
+    if (!primero) return;
+
+    setModo("recepcion");
+    setGrupoRecepcionEditando(grupoRecepcionId);
+    setCodigo(primero.codigo);
+    setProducto({
+      id: primero.productoId,
+      codigo: primero.codigo,
+      codigoNormalizado: primero.codigo.replace(/^0+(?=\d)/, ""),
+      nombre: primero.nombreProducto,
+      producto: primero.nombreProducto,
+      marca: "",
+      presentacion: "",
+      especificacion: "",
+    });
+    setProductoNoEncontrado(false);
+    setSinVencimiento(primero.vencimiento === null);
+    setVencimientoTexto(
+      primero.vencimiento ? formatearFecha(primero.vencimiento) : ""
+    );
+    setObservacion(primero.observacion);
+    setDistribuciones(
+      movimientos.map((movimiento, index) => ({
+        idLocal:
+          Date.now() + index + Math.floor(Math.random() * 10000),
+        ubicacionId: movimiento.ubicacionDestinoId,
+        cantidad: String(movimiento.cantidad),
+      }))
+    );
+    setAviso({
+      tipo: "info",
+      texto: "Estás editando un producto de la recepción.",
+    });
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelarEdicion() {
+    limpiarFormularioActual(true);
+    setAviso({
+      tipo: "info",
+      texto: "Edición cancelada. La carga original no se modificó.",
+    });
   }
 
   async function concluirYGuardar() {
@@ -1082,10 +1183,31 @@ export default function Movimientos({ usuario }: Props) {
         return;
       }
 
-      movimientosFinales = [
-        ...movimientosFinales,
-        ...resultadoActual.movimientos,
-      ];
+      if (modo === "recepcion" && grupoRecepcionEditando !== null) {
+        const movimientosEditados = resultadoActual.movimientos.map(
+          (movimiento, index) => ({
+            ...movimiento,
+            idLocal:
+              grupoRecepcionEditando +
+              index +
+              Math.floor(Math.random() * 1000),
+            grupoRecepcionId: grupoRecepcionEditando,
+          })
+        );
+
+        movimientosFinales = [
+          ...movimientosFinales.filter(
+            (movimiento) =>
+              movimiento.grupoRecepcionId !== grupoRecepcionEditando
+          ),
+          ...movimientosEditados,
+        ];
+      } else {
+        movimientosFinales = [
+          ...movimientosFinales,
+          ...resultadoActual.movimientos,
+        ];
+      }
     }
 
     if (movimientosFinales.length === 0) {
@@ -1116,6 +1238,7 @@ export default function Movimientos({ usuario }: Props) {
     setLotesDisponibles([]);
     setLoteSeleccionadoId("");
     setCantidadesPorLote({});
+    setGrupoRecepcionEditando(null);
     setAviso(null);
 
     if (modo === "recepcion") {
@@ -1152,10 +1275,24 @@ export default function Movimientos({ usuario }: Props) {
     limpiarFormularioActual(true);
   }
 
-  function eliminarDeLista(idLocal: number) {
-    setLista((actual) =>
-      actual.filter((item) => item.idLocal !== idLocal)
+  function eliminarGrupoDeLista(movimientos: MovimientoPendiente[]) {
+    const ids = new Set(
+      movimientos.map((movimiento) => movimiento.idLocal)
     );
+
+    setLista((actual) =>
+      actual.filter((movimiento) => !ids.has(movimiento.idLocal))
+    );
+
+    if (
+      grupoRecepcionEditando !== null &&
+      movimientos.some(
+        (movimiento) =>
+          movimiento.grupoRecepcionId === grupoRecepcionEditando
+      )
+    ) {
+      limpiarFormularioActual(false);
+    }
   }
 
   async function consultarProcesamiento(ids: string[]) {
@@ -1893,8 +2030,21 @@ export default function Movimientos({ usuario }: Props) {
               creandoProducto
             }
           >
-            + Agregar otro producto
+            {grupoRecepcionEditando !== null
+              ? "Guardar cambios"
+              : "+ Agregar otro producto"}
           </button>
+
+          {grupoRecepcionEditando !== null && (
+            <button
+              type="button"
+              className="mov-cancel-edit-button"
+              onClick={cancelarEdicion}
+              disabled={guardando}
+            >
+              Cancelar edición
+            </button>
+          )}
 
           <button
             type="button"
@@ -1945,46 +2095,93 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         ) : (
           <div className="mov-list">
-            {lista.map((item, index) => (
-              <article
-                key={item.idLocal}
-                className="mov-list-item"
-              >
-                <div className="mov-list-number">{index + 1}</div>
+            {gruposCarga.map((grupo, index) => {
+              const primero = grupo.movimientos[0];
+              const totalGrupo = grupo.movimientos.reduce(
+                (total, movimiento) => total + movimiento.cantidad,
+                0
+              );
+              const esRecepcionAgrupada = Boolean(
+                primero.grupoRecepcionId
+              );
 
-                <div className="mov-list-content">
-                  <strong>{item.nombreProducto}</strong>
-
-                  <span>
-                    {item.tipoMovimiento} · {item.motivo}
-                  </span>
-
-                  {item.ubicacionOrigenNombre && (
-                    <p>Origen: {item.ubicacionOrigenNombre}</p>
-                  )}
-
-                  {item.ubicacionDestinoNombre && (
-                    <p>Destino: {item.ubicacionDestinoNombre}</p>
-                  )}
-
-                  <p>
-                    {formatearFecha(item.vencimiento)} ·{" "}
-                    {item.cantidad} unidades
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  className="mov-delete-button"
-                  onClick={() =>
-                    eliminarDeLista(item.idLocal)
-                  }
-                  disabled={guardando}
+              return (
+                <article
+                  key={grupo.clave}
+                  className="mov-list-item"
                 >
-                  Quitar
-                </button>
-              </article>
-            ))}
+                  <div className="mov-list-number">{index + 1}</div>
+
+                  <div className="mov-list-content">
+                    <strong>{primero.nombreProducto}</strong>
+
+                    <span>
+                      {primero.tipoMovimiento} · {primero.motivo}
+                    </span>
+
+                    {primero.ubicacionOrigenNombre && (
+                      <p>Origen: {primero.ubicacionOrigenNombre}</p>
+                    )}
+
+                    {esRecepcionAgrupada ? (
+                      <>
+                        {grupo.movimientos.map((movimiento) => (
+                          <p key={movimiento.idLocal}>
+                            {movimiento.ubicacionDestinoNombre}: {" "}
+                            {movimiento.cantidad} unidades
+                          </p>
+                        ))}
+                        <p>
+                          {formatearFecha(primero.vencimiento)} · Total: {" "}
+                          {totalGrupo} unidades
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        {primero.ubicacionDestinoNombre && (
+                          <p>
+                            Destino: {primero.ubicacionDestinoNombre}
+                          </p>
+                        )}
+                        <p>
+                          {formatearFecha(primero.vencimiento)} · {" "}
+                          {primero.cantidad} unidades
+                        </p>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="mov-list-actions">
+                    {esRecepcionAgrupada &&
+                      primero.grupoRecepcionId && (
+                        <button
+                          type="button"
+                          className="mov-edit-button"
+                          onClick={() =>
+                            editarRecepcion(
+                              primero.grupoRecepcionId as number
+                            )
+                          }
+                          disabled={guardando}
+                        >
+                          Editar
+                        </button>
+                      )}
+
+                    <button
+                      type="button"
+                      className="mov-delete-button"
+                      onClick={() =>
+                        eliminarGrupoDeLista(grupo.movimientos)
+                      }
+                      disabled={guardando}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         )}
       </section>
@@ -2113,4 +2310,3 @@ export default function Movimientos({ usuario }: Props) {
     </section>
   );
 }
-

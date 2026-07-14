@@ -340,9 +340,7 @@ function armarCamposMovimiento(
 ): Record<string, unknown> {
   const fields: Record<string, unknown> = {
     PRODUCTO: [
-      {
-        id: normalizarTexto(movimiento.productoId),
-      },
+      normalizarTexto(movimiento.productoId),
     ],
     TIPO_MOVIMIENTO: normalizarOpcion(
       movimiento.tipoMovimiento
@@ -375,17 +373,13 @@ function armarCamposMovimiento(
 
   if (ubicacionOrigenId) {
     fields["UBICACIÓN ORIGEN"] = [
-      {
-        id: ubicacionOrigenId,
-      },
+      ubicacionOrigenId,
     ];
   }
 
   if (ubicacionDestinoId) {
     fields["UBICACIÓN DESTINO"] = [
-      {
-        id: ubicacionDestinoId,
-      },
+      ubicacionDestinoId,
     ];
   }
 
@@ -753,4 +747,3 @@ export default async function handler(
     });
   }
 }
-

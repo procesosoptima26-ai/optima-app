@@ -892,3 +892,112 @@
     flex-wrap: wrap;
   }
 }
+/* AJUSTE VISUAL DE BOTONES - OPTIMA */
+
+.mov-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Limpiar carga: liviano, blanco y azul */
+.mov-clear-all-button {
+  min-height: 42px;
+  border: 1px solid rgba(8, 63, 136, 0.22) !important;
+  border-radius: 14px !important;
+  padding: 9px 13px !important;
+  background: #ffffff !important;
+  color: var(--optima-blue) !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  box-shadow: none !important;
+}
+
+.mov-clear-all-button:hover {
+  border-color: var(--optima-blue) !important;
+  background: var(--optima-blue-soft) !important;
+}
+
+/* Actualizar: azul suave */
+.mov-refresh-button {
+  min-height: 42px;
+  border: 1px solid rgba(8, 63, 136, 0.16) !important;
+  border-radius: 14px !important;
+  padding: 9px 13px !important;
+  background: var(--optima-blue-soft) !important;
+  color: var(--optima-blue) !important;
+  font-size: 12px !important;
+  font-weight: 900 !important;
+  box-shadow: none !important;
+}
+
+.mov-refresh-button:hover {
+  border-color: rgba(8, 63, 136, 0.3) !important;
+  background: #e5f0ff !important;
+}
+
+/* Contenedor de botones inferiores */
+.mov-form-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+/* Agregar otro producto: secundario en verde */
+.mov-add-button {
+  width: 100% !important;
+  min-height: 50px !important;
+  border: 1.5px solid var(--optima-green) !important;
+  border-radius: 17px !important;
+  background: #ffffff !important;
+  color: var(--optima-green-dark) !important;
+  font-weight: 950 !important;
+  box-shadow: none !important;
+}
+
+.mov-add-button:hover {
+  background: var(--optima-green-soft) !important;
+}
+
+/* Concluir y guardar: acción principal */
+.mov-finish-button {
+  width: 100% !important;
+  min-height: 54px !important;
+  border: none !important;
+  border-radius: 17px !important;
+  background: var(--optima-blue) !important;
+  color: #ffffff !important;
+  font-weight: 950 !important;
+  box-shadow: 0 12px 24px rgba(8, 63, 136, 0.18) !important;
+}
+
+.mov-finish-button:hover {
+  background: var(--optima-blue-dark) !important;
+}
+
+/* Estados desactivados */
+.mov-clear-all-button:disabled,
+.mov-refresh-button:disabled,
+.mov-add-button:disabled,
+.mov-finish-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.55 !important;
+}
+
+/* Ajuste móvil */
+@media (max-width: 640px) {
+  .mov-header-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .mov-clear-all-button,
+  .mov-refresh-button {
+    min-width: auto;
+    min-height: 40px;
+    padding: 8px 11px !important;
+  }
+}

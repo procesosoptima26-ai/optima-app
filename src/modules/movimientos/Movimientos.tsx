@@ -116,6 +116,13 @@ type DistribucionRecepcion = {
   cantidad: string;
 };
 
+type LoteRecepcion = {
+  idLocal: number;
+  sinVencimiento: boolean;
+  vencimientoTexto: string;
+  distribuciones: DistribucionRecepcion[];
+};
+
 type NuevoProducto = {
   producto: string;
   marca: string;
@@ -145,6 +152,15 @@ function crearDistribucion(ubicacionId = ""): DistribucionRecepcion {
     idLocal: Date.now() + Math.floor(Math.random() * 100000),
     ubicacionId,
     cantidad: "",
+  };
+}
+
+function crearLoteRecepcion(ubicacionId = ""): LoteRecepcion {
+  return {
+    idLocal: Date.now() + Math.floor(Math.random() * 100000),
+    sinVencimiento: false,
+    vencimientoTexto: "",
+    distribuciones: [crearDistribucion(ubicacionId)],
   };
 }
 
@@ -302,9 +318,9 @@ export default function Movimientos({ usuario }: Props) {
   >({});
   const [cargandoLotes, setCargandoLotes] = useState(false);
 
-  const [distribuciones, setDistribuciones] = useState<
-    DistribucionRecepcion[]
-  >([crearDistribucion()]);
+  const [lotesRecepcion, setLotesRecepcion] = useState<
+    LoteRecepcion[]
+  >([crearLoteRecepcion()]);
 
   const [lista, setLista] = useState<MovimientoPendiente[]>([]);
   const [grupoRecepcionEditando, setGrupoRecepcionEditando] = useState<
@@ -350,14 +366,21 @@ export default function Movimientos({ usuario }: Props) {
   );
 
   const totalDistribucion = useMemo(() => {
-    return distribuciones.reduce((total, distribucion) => {
-      const cantidadNumerica = Number(distribucion.cantidad);
+    return lotesRecepcion.reduce((totalGeneral, lote) => {
+      const totalLote = lote.distribuciones.reduce(
+        (subtotal, distribucion) => {
+          const cantidadNumerica = Number(distribucion.cantidad);
 
-      return Number.isFinite(cantidadNumerica)
-        ? total + cantidadNumerica
-        : total;
+          return Number.isFinite(cantidadNumerica)
+            ? subtotal + cantidadNumerica
+            : subtotal;
+        },
+        0
+      );
+
+      return totalGeneral + totalLote;
     }, 0);
-  }, [distribuciones]);
+  }, [lotesRecepcion]);
 
   const totalReposicion = useMemo(() => {
     return lotesDisponibles.reduce((total, lote) => {
@@ -463,8 +486,8 @@ export default function Movimientos({ usuario }: Props) {
 
       setUbicacionOrigenId("");
       setUbicacionDestinoId("");
-      setDistribuciones([
-        crearDistribucion(ubicacionPreferida?.id || ""),
+      setLotesRecepcion([
+        crearLoteRecepcion(ubicacionPreferida?.id || ""),
       ]);
     }
 
@@ -760,61 +783,134 @@ export default function Movimientos({ usuario }: Props) {
     }
   }
 
-  function agregarDistribucion() {
-    const ubicacionesUsadas = new Set(
-      distribuciones
-        .map((distribucion) => distribucion.ubicacionId)
-        .filter(Boolean)
-    );
+  function agregarLoteRecepcion() {
+    const ubicacionPreferida =
+      ubicaciones.find(
+        (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
+      ) ||
+      ubicaciones.find(
+        (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
+      ) ||
+      ubicaciones[0];
 
-    const siguienteUbicacion = ubicaciones.find(
-      (ubicacion) => !ubicacionesUsadas.has(ubicacion.id)
-    );
-
-    if (!siguienteUbicacion) {
-      setAviso({
-        tipo: "alerta",
-        texto: "Ya agregaste todas las ubicaciones disponibles.",
-      });
-      return;
-    }
-
-    setDistribuciones((actuales) => [
+    setLotesRecepcion((actuales) => [
       ...actuales,
-      crearDistribucion(siguienteUbicacion.id),
+      crearLoteRecepcion(ubicacionPreferida?.id || ""),
     ]);
   }
 
-  function actualizarDistribucion(
-    idLocal: number,
-    campo: "ubicacionId" | "cantidad",
-    valor: string
+  function actualizarLoteRecepcion(
+    loteId: number,
+    campo: "sinVencimiento" | "vencimientoTexto",
+    valor: boolean | string
   ) {
-    setDistribuciones((actuales) =>
-      actuales.map((distribucion) =>
-        distribucion.idLocal === idLocal
-          ? { ...distribucion, [campo]: valor }
-          : distribucion
+    setLotesRecepcion((actuales) =>
+      actuales.map((lote) =>
+        lote.idLocal === loteId
+          ? { ...lote, [campo]: valor }
+          : lote
       )
     );
   }
 
-  function quitarDistribucion(idLocal: number) {
-    setDistribuciones((actuales) => {
+  function quitarLoteRecepcion(loteId: number) {
+    setLotesRecepcion((actuales) => {
       if (actuales.length === 1) {
-        return [
-          {
-            ...actuales[0],
-            ubicacionId: "",
-            cantidad: "",
-          },
-        ];
+        return actuales;
       }
 
-      return actuales.filter(
-        (distribucion) => distribucion.idLocal !== idLocal
-      );
+      return actuales.filter((lote) => lote.idLocal !== loteId);
     });
+  }
+
+  function agregarDistribucion(loteId: number) {
+    setLotesRecepcion((actuales) =>
+      actuales.map((lote) => {
+        if (lote.idLocal !== loteId) return lote;
+
+        const ubicacionesUsadas = new Set(
+          lote.distribuciones
+            .map((distribucion) => distribucion.ubicacionId)
+            .filter(Boolean)
+        );
+
+        const siguienteUbicacion = ubicaciones.find(
+          (ubicacion) => !ubicacionesUsadas.has(ubicacion.id)
+        );
+
+        if (!siguienteUbicacion) {
+          setAviso({
+            tipo: "alerta",
+            texto: "Ya agregaste todas las ubicaciones disponibles para este vencimiento.",
+          });
+
+          return lote;
+        }
+
+        return {
+          ...lote,
+          distribuciones: [
+            ...lote.distribuciones,
+            crearDistribucion(siguienteUbicacion.id),
+          ],
+        };
+      })
+    );
+  }
+
+  function actualizarDistribucion(
+    loteId: number,
+    distribucionId: number,
+    campo: "ubicacionId" | "cantidad",
+    valor: string
+  ) {
+    setLotesRecepcion((actuales) =>
+      actuales.map((lote) =>
+        lote.idLocal === loteId
+          ? {
+              ...lote,
+              distribuciones: lote.distribuciones.map(
+                (distribucion) =>
+                  distribucion.idLocal === distribucionId
+                    ? { ...distribucion, [campo]: valor }
+                    : distribucion
+              ),
+            }
+          : lote
+      )
+    );
+  }
+
+  function quitarDistribucion(
+    loteId: number,
+    distribucionId: number
+  ) {
+    setLotesRecepcion((actuales) =>
+      actuales.map((lote) => {
+        if (lote.idLocal !== loteId) return lote;
+
+        if (lote.distribuciones.length === 1) {
+          return {
+            ...lote,
+            distribuciones: [
+              {
+                ...lote.distribuciones[0],
+                ubicacionId: "",
+                cantidad: "",
+              },
+            ],
+          };
+        }
+
+        return {
+          ...lote,
+          distribuciones: lote.distribuciones.filter(
+            (distribucion) =>
+              distribucion.idLocal !== distribucionId
+          ),
+        };
+      })
+    );
   }
 
   function obtenerVencimientoActual() {
@@ -846,76 +942,104 @@ export default function Movimientos({ usuario }: Props) {
     }
 
     if (modo === "recepcion") {
-      const vencimientoActual = obtenerVencimientoActual();
-
-      if (vencimientoActual.error) {
-        return { movimientos: [], error: vencimientoActual.error };
-      }
-
-      const distribucionesValidas = distribuciones.filter(
-        (distribucion) =>
-          distribucion.ubicacionId &&
-          Number(distribucion.cantidad) > 0
-      );
-
-      if (distribucionesValidas.length === 0) {
+      if (lotesRecepcion.length === 0) {
         return {
           movimientos: [],
-          error:
-            "Cargá al menos una ubicación con cantidad mayor a cero.",
-        };
-      }
-
-      if (distribucionesValidas.length !== distribuciones.length) {
-        return {
-          movimientos: [],
-          error: "Completá ubicación y cantidad en todas las filas.",
-        };
-      }
-
-      const idsUbicaciones = distribucionesValidas.map(
-        (distribucion) => distribucion.ubicacionId
-      );
-
-      if (new Set(idsUbicaciones).size !== idsUbicaciones.length) {
-        return {
-          movimientos: [],
-          error: "No podés repetir la misma ubicación.",
+          error: "Agregá al menos un vencimiento.",
         };
       }
 
       const grupoRecepcionId =
+        grupoRecepcionEditando ??
         Date.now() + Math.floor(Math.random() * 10000);
+
+      const movimientosRecepcion: MovimientoPendiente[] = [];
+
+      for (let indiceLote = 0; indiceLote < lotesRecepcion.length; indiceLote += 1) {
+        const lote = lotesRecepcion[indiceLote];
+
+        const vencimientoActual = lote.sinVencimiento
+          ? { fecha: null, error: "" }
+          : normalizarFechaManual(lote.vencimientoTexto);
+
+        if (vencimientoActual.error) {
+          return {
+            movimientos: [],
+            error: `Vencimiento ${indiceLote + 1}: ${vencimientoActual.error}`,
+          };
+        }
+
+        const distribucionesValidas = lote.distribuciones.filter(
+          (distribucion) =>
+            distribucion.ubicacionId &&
+            Number(distribucion.cantidad) > 0
+        );
+
+        if (distribucionesValidas.length === 0) {
+          return {
+            movimientos: [],
+            error:
+              `Vencimiento ${indiceLote + 1}: cargá al menos una ubicación con cantidad mayor a cero.`,
+          };
+        }
+
+        if (
+          distribucionesValidas.length !==
+          lote.distribuciones.length
+        ) {
+          return {
+            movimientos: [],
+            error:
+              `Vencimiento ${indiceLote + 1}: completá ubicación y cantidad en todas las filas.`,
+          };
+        }
+
+        const idsUbicaciones = distribucionesValidas.map(
+          (distribucion) => distribucion.ubicacionId
+        );
+
+        if (
+          new Set(idsUbicaciones).size !==
+          idsUbicaciones.length
+        ) {
+          return {
+            movimientos: [],
+            error:
+              `Vencimiento ${indiceLote + 1}: no podés repetir la misma ubicación.`,
+          };
+        }
+
+        lote.distribuciones.forEach((distribucion, indiceDistribucion) => {
+          const ubicacion = ubicaciones.find(
+            (item) => item.id === distribucion.ubicacionId
+          );
+
+          movimientosRecepcion.push({
+            idLocal:
+              grupoRecepcionId +
+              indiceLote * 1000 +
+              indiceDistribucion +
+              Math.floor(Math.random() * 100),
+            grupoRecepcionId,
+            productoId: producto.id,
+            codigo: producto.codigo,
+            nombreProducto: producto.nombre,
+            tipoMovimiento: "INGRESO",
+            motivo: "COMPRA",
+            ubicacionOrigenId: "",
+            ubicacionOrigenNombre: "",
+            ubicacionDestinoId: distribucion.ubicacionId,
+            ubicacionDestinoNombre: ubicacion?.nombre || "",
+            vencimiento: vencimientoActual.fecha,
+            cantidad: Number(distribucion.cantidad),
+            observacion: observacion.trim(),
+          });
+        });
+      }
 
       return {
         error: "",
-        movimientos: distribuciones.map(
-          (distribucion, index): MovimientoPendiente => {
-            const ubicacion = ubicaciones.find(
-              (item) => item.id === distribucion.ubicacionId
-            );
-
-            return {
-              idLocal:
-                grupoRecepcionId +
-                index +
-                Math.floor(Math.random() * 1000),
-              grupoRecepcionId,
-              productoId: producto.id,
-              codigo: producto.codigo,
-              nombreProducto: producto.nombre,
-              tipoMovimiento: "INGRESO",
-              motivo: "COMPRA",
-              ubicacionOrigenId: "",
-              ubicacionOrigenNombre: "",
-              ubicacionDestinoId: distribucion.ubicacionId,
-              ubicacionDestinoNombre: ubicacion?.nombre || "",
-              vencimiento: vencimientoActual.fecha,
-              cantidad: Number(distribucion.cantidad),
-              observacion: observacion.trim(),
-            };
-          }
-        ),
+        movimientos: movimientosRecepcion,
       };
     }
 
@@ -1138,18 +1262,46 @@ export default function Movimientos({ usuario }: Props) {
       especificacion: "",
     });
     setProductoNoEncontrado(false);
-    setSinVencimiento(primero.vencimiento === null);
-    setVencimientoTexto(
-      primero.vencimiento ? formatearFecha(primero.vencimiento) : ""
-    );
     setObservacion(primero.observacion);
-    setDistribuciones(
-      movimientos.map((movimiento, index) => ({
-        idLocal:
-          Date.now() + index + Math.floor(Math.random() * 10000),
-        ubicacionId: movimiento.ubicacionDestinoId,
-        cantidad: String(movimiento.cantidad),
-      }))
+
+    const lotesPorFecha = new Map<
+      string,
+      MovimientoPendiente[]
+    >();
+
+    movimientos.forEach((movimiento) => {
+      const claveFecha =
+        movimiento.vencimiento || "SIN VENCIMIENTO";
+      const actuales = lotesPorFecha.get(claveFecha) || [];
+      actuales.push(movimiento);
+      lotesPorFecha.set(claveFecha, actuales);
+    });
+
+    setLotesRecepcion(
+      Array.from(lotesPorFecha.entries()).map(
+        ([claveFecha, movimientosFecha], indiceLote) => ({
+          idLocal:
+            Date.now() +
+            indiceLote +
+            Math.floor(Math.random() * 10000),
+          sinVencimiento: claveFecha === "SIN VENCIMIENTO",
+          vencimientoTexto:
+            claveFecha === "SIN VENCIMIENTO"
+              ? ""
+              : formatearFecha(claveFecha),
+          distribuciones: movimientosFecha.map(
+            (movimiento, indiceDistribucion) => ({
+              idLocal:
+                Date.now() +
+                indiceLote * 100 +
+                indiceDistribucion +
+                Math.floor(Math.random() * 10000),
+              ubicacionId: movimiento.ubicacionDestinoId,
+              cantidad: String(movimiento.cantidad),
+            })
+          ),
+        })
+      )
     );
     setAviso({
       tipo: "info",
@@ -1251,8 +1403,8 @@ export default function Movimientos({ usuario }: Props) {
         ) ||
         ubicaciones[0];
 
-      setDistribuciones([
-        crearDistribucion(ubicacionPreferida?.id || ""),
+      setLotesRecepcion([
+        crearLoteRecepcion(ubicacionPreferida?.id || ""),
       ]);
     }
 
@@ -1737,7 +1889,7 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
 
-        {necesitaFechaManual && (
+        {necesitaFechaManual && modo !== "recepcion" && (
           <>
             <div className="mov-date-title-row">
               <strong>Vencimiento</strong>
@@ -1882,99 +2034,204 @@ export default function Movimientos({ usuario }: Props) {
         )}
 
         {modo === "recepcion" ? (
-          <section className="mov-distribution-section">
-            <div className="mov-distribution-title-row">
-              <strong>Distribución</strong>
+          <section className="mov-reception-lots-section">
+            <div className="mov-reception-lots-heading">
+              <div>
+                <strong>Vencimientos y cantidades</strong>
+                <span>
+                  Podés cargar varias fechas para el mismo producto.
+                </span>
+              </div>
 
               <button
                 type="button"
-                className="mov-add-location-button"
-                onClick={agregarDistribucion}
-                disabled={
-                  guardando ||
-                  distribuciones.length >= ubicaciones.length
-                }
+                className="mov-add-expiry-button"
+                onClick={agregarLoteRecepcion}
+                disabled={guardando}
               >
-                + Agregar ubicación
+                + Otro
               </button>
             </div>
 
-            <div className="mov-distribution-list">
-              {distribuciones.map((distribucion) => {
-                const ubicacionesUsadas = new Set(
-                  distribuciones
-                    .filter(
-                      (item) =>
-                        item.idLocal !== distribucion.idLocal
-                    )
-                    .map((item) => item.ubicacionId)
-                    .filter(Boolean)
-                );
+            <div className="mov-reception-lots-list">
+              {lotesRecepcion.map((lote, indiceLote) => (
+                <article
+                  key={lote.idLocal}
+                  className="mov-reception-lot-card"
+                >
+                  <div className="mov-reception-lot-header">
+                    <div>
+                      <span>VENCIMIENTO</span>
+                      <strong>{indiceLote + 1}</strong>
+                    </div>
 
-                return (
-                  <div
-                    className="mov-distribution-row"
-                    key={distribucion.idLocal}
-                  >
-                    <select
-                      value={distribucion.ubicacionId}
-                      onChange={(event) =>
-                        actualizarDistribucion(
-                          distribucion.idLocal,
-                          "ubicacionId",
-                          event.target.value
-                        )
-                      }
-                      disabled={cargandoUbicaciones || guardando}
-                      aria-label="Ubicación destino"
-                    >
-                      <option value="">Ubicación</option>
+                    {lotesRecepcion.length > 1 && (
+                      <button
+                        type="button"
+                        className="mov-remove-expiry-button"
+                        onClick={() =>
+                          quitarLoteRecepcion(lote.idLocal)
+                        }
+                        disabled={guardando}
+                      >
+                        Quitar
+                      </button>
+                    )}
+                  </div>
 
-                      {ubicaciones.map((ubicacion) => (
-                        <option
-                          key={ubicacion.id}
-                          value={ubicacion.id}
-                          disabled={ubicacionesUsadas.has(
-                            ubicacion.id
-                          )}
-                        >
-                          {ubicacion.tipoUbicacion}
-                        </option>
-                      ))}
-                    </select>
-
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={distribucion.cantidad}
-                      onChange={(event) =>
-                        actualizarDistribucion(
-                          distribucion.idLocal,
-                          "cantidad",
-                          event.target.value
-                        )
-                      }
-                      placeholder="Cant."
-                      inputMode="decimal"
-                      disabled={guardando}
-                      aria-label="Cantidad"
-                    />
+                  <div className="mov-date-title-row">
+                    <strong>Fecha</strong>
 
                     <button
                       type="button"
-                      className="mov-remove-location-button"
+                      className={
+                        lote.sinVencimiento
+                          ? "mov-no-expiry mov-no-expiry-active"
+                          : "mov-no-expiry"
+                      }
                       onClick={() =>
-                        quitarDistribucion(distribucion.idLocal)
+                        actualizarLoteRecepcion(
+                          lote.idLocal,
+                          "sinVencimiento",
+                          !lote.sinVencimiento
+                        )
                       }
                       disabled={guardando}
-                      aria-label="Quitar ubicación"
                     >
-                      ×
+                      {lote.sinVencimiento
+                        ? "Sin vencimiento ✓"
+                        : "Sin vencimiento"}
                     </button>
                   </div>
-                );
-              })}
+
+                  {!lote.sinVencimiento && (
+                    <label className="mov-field mov-expiry-field">
+                      Fecha manual
+                      <input
+                        type="text"
+                        value={lote.vencimientoTexto}
+                        onChange={(event) =>
+                          actualizarLoteRecepcion(
+                            lote.idLocal,
+                            "vencimientoTexto",
+                            event.target.value
+                          )
+                        }
+                        placeholder="25/4, 4/27 o 25/4/27"
+                        inputMode="text"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        disabled={guardando}
+                      />
+                    </label>
+                  )}
+
+                  <div className="mov-distribution-title-row">
+                    <strong>Distribución</strong>
+
+                    <button
+                      type="button"
+                      className="mov-add-location-button"
+                      onClick={() =>
+                        agregarDistribucion(lote.idLocal)
+                      }
+                      disabled={
+                        guardando ||
+                        lote.distribuciones.length >=
+                          ubicaciones.length
+                      }
+                    >
+                      + Ubicación
+                    </button>
+                  </div>
+
+                  <div className="mov-distribution-list">
+                    {lote.distribuciones.map((distribucion) => {
+                      const ubicacionesUsadas = new Set(
+                        lote.distribuciones
+                          .filter(
+                            (item) =>
+                              item.idLocal !==
+                              distribucion.idLocal
+                          )
+                          .map((item) => item.ubicacionId)
+                          .filter(Boolean)
+                      );
+
+                      return (
+                        <div
+                          className="mov-distribution-row"
+                          key={distribucion.idLocal}
+                        >
+                          <select
+                            value={distribucion.ubicacionId}
+                            onChange={(event) =>
+                              actualizarDistribucion(
+                                lote.idLocal,
+                                distribucion.idLocal,
+                                "ubicacionId",
+                                event.target.value
+                              )
+                            }
+                            disabled={
+                              cargandoUbicaciones || guardando
+                            }
+                            aria-label="Ubicación destino"
+                          >
+                            <option value="">Ubicación</option>
+
+                            {ubicaciones.map((ubicacion) => (
+                              <option
+                                key={ubicacion.id}
+                                value={ubicacion.id}
+                                disabled={ubicacionesUsadas.has(
+                                  ubicacion.id
+                                )}
+                              >
+                                {ubicacion.tipoUbicacion}
+                              </option>
+                            ))}
+                          </select>
+
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={distribucion.cantidad}
+                            onChange={(event) =>
+                              actualizarDistribucion(
+                                lote.idLocal,
+                                distribucion.idLocal,
+                                "cantidad",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Cant."
+                            inputMode="decimal"
+                            disabled={guardando}
+                            aria-label="Cantidad"
+                          />
+
+                          <button
+                            type="button"
+                            className="mov-remove-location-button"
+                            onClick={() =>
+                              quitarDistribucion(
+                                lote.idLocal,
+                                distribucion.idLocal
+                              )
+                            }
+                            disabled={guardando}
+                            aria-label="Quitar ubicación"
+                          >
+                            ×
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ))}
             </div>
 
             <div className="mov-distribution-total">
@@ -2127,13 +2384,13 @@ export default function Movimientos({ usuario }: Props) {
                       <>
                         {grupo.movimientos.map((movimiento) => (
                           <p key={movimiento.idLocal}>
-                            {movimiento.ubicacionDestinoNombre}: {" "}
+                            {formatearFecha(movimiento.vencimiento)} ·{" "}
+                            {movimiento.ubicacionDestinoNombre}:{" "}
                             {movimiento.cantidad} unidades
                           </p>
                         ))}
                         <p>
-                          {formatearFecha(primero.vencimiento)} · Total: {" "}
-                          {totalGrupo} unidades
+                          Total del producto: {totalGrupo} unidades
                         </p>
                       </>
                     ) : (

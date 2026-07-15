@@ -1184,3 +1184,155 @@
     flex: 1 1 110px;
   }
 }
+/* RECEPCIÓN CON VARIOS VENCIMIENTOS */
+
+.mov-reception-lots-section {
+  margin: 2px 0 13px;
+  padding: 11px;
+  border: 1px solid var(--optima-border);
+  border-radius: 17px;
+  background: var(--optima-soft-surface);
+}
+
+.mov-reception-lots-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.mov-reception-lots-heading strong,
+.mov-reception-lots-heading span {
+  display: block;
+}
+
+.mov-reception-lots-heading strong {
+  color: var(--optima-blue);
+  font-size: 16px;
+}
+
+.mov-reception-lots-heading span {
+  margin-top: 2px;
+  color: var(--optima-muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.mov-add-expiry-button {
+  flex: 0 0 auto;
+  min-height: 37px;
+  border: 1px solid var(--optima-green-action-border);
+  border-radius: 999px;
+  padding: 8px 13px;
+  background: var(--optima-green-action-soft);
+  color: var(--optima-green-action-text);
+  font-size: 12px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.mov-add-expiry-button:hover {
+  border-color: var(--optima-green);
+  background: var(--optima-green-action-hover);
+}
+
+.mov-reception-lots-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mov-reception-lot-card {
+  padding: 11px;
+  border: 1px solid rgba(8, 63, 136, 0.15);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+.mov-reception-lot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 9px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.mov-reception-lot-header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mov-reception-lot-header span {
+  color: var(--optima-green-dark);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.mov-reception-lot-header strong {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--optima-blue-soft);
+  color: var(--optima-blue);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.mov-remove-expiry-button {
+  border: 1px solid rgba(8, 63, 136, 0.16);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #ffffff;
+  color: var(--optima-blue);
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.mov-remove-expiry-button:hover {
+  border-color: #fecaca;
+  background: #fff7f7;
+  color: #b91c1c;
+}
+
+.mov-reception-lot-card .mov-expiry-field {
+  max-width: none;
+}
+
+.mov-reception-lot-card .mov-distribution-title-row {
+  margin-top: 2px;
+}
+
+.mov-add-expiry-button:disabled,
+.mov-remove-expiry-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 420px) {
+  .mov-reception-lots-section {
+    padding: 9px;
+  }
+
+  .mov-reception-lots-heading {
+    align-items: flex-start;
+  }
+
+  .mov-add-expiry-button {
+    min-height: 35px;
+    padding: 7px 11px;
+  }
+
+  .mov-reception-lot-card {
+    padding: 9px;
+  }
+}

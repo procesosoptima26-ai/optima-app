@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import CuentasCorrientesMock from "./modules/cuentasCorrientes/CuentasCorrientes";
-import Movimientos from "./modules/movimientos/Movimientos";
+import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -1598,7 +1598,7 @@ function App() {
       return renderInventario();
     }
   if (vistaActiva === "movimientos") {
-    return <Movimientos usuario={usuarioSesion} />;
+    return <MovimientosModule usuario={usuarioSesion} />;
   }
 
     if (vistaActiva === "cuentasCorrientes") {

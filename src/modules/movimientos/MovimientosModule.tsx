@@ -16,7 +16,7 @@ type Props = {
   usuario: UsuarioSesion;
 };
 
-type ModoMovimiento = "recepcion" | "reposicion" | "individual";
+type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock";
 
 type Producto = {
   id: string;
@@ -64,6 +64,25 @@ type RespuestaUbicaciones = {
 type RespuestaStock = {
   ok?: boolean;
   lotes?: LoteStock[];
+  error?: string;
+};
+
+type LoteStockGeneral = LoteStock & {
+  codigo: string;
+  nombreProducto: string;
+  producto: string;
+  marca: string;
+  presentacion: string;
+  especificacion: string;
+  sucursal: string;
+  tipoUbicacion: string;
+};
+
+type RespuestaStockGeneral = {
+  ok?: boolean;
+  cantidadTotal?: number;
+  cantidadLotes?: number;
+  lotes?: LoteStockGeneral[];
   error?: string;
 };
 
@@ -319,6 +338,11 @@ export default function Movimientos({ usuario }: Props) {
   >({});
   const [cargandoLotes, setCargandoLotes] = useState(false);
 
+  const [stockGeneral, setStockGeneral] = useState<LoteStockGeneral[]>([]);
+  const [cargandoStockGeneral, setCargandoStockGeneral] = useState(false);
+  const [busquedaStock, setBusquedaStock] = useState("");
+  const [filtroUbicacionStock, setFiltroUbicacionStock] = useState("TODAS");
+
   const [lotesRecepcion, setLotesRecepcion] = useState<
     LoteRecepcion[]
   >([crearLoteRecepcion()]);
@@ -390,6 +414,85 @@ export default function Movimientos({ usuario }: Props) {
       return Number.isFinite(valor) ? total + valor : total;
     }, 0);
   }, [lotesDisponibles, cantidadesPorLote]);
+
+  const tiposUbicacionStock = useMemo(() => {
+    return [
+      "TODAS",
+      ...Array.from(
+        new Set(
+          stockGeneral
+            .map((lote) => lote.tipoUbicacion)
+            .filter(Boolean)
+        )
+      ).sort((a, b) => a.localeCompare(b, "es")),
+    ];
+  }, [stockGeneral]);
+
+  const stockFiltrado = useMemo(() => {
+    const texto = busquedaStock.trim().toLowerCase();
+
+    return stockGeneral.filter((lote) => {
+      const coincideUbicacion =
+        filtroUbicacionStock === "TODAS" ||
+        lote.tipoUbicacion === filtroUbicacionStock;
+
+      const coincideBusqueda =
+        !texto ||
+        [
+          lote.codigo,
+          lote.nombreProducto,
+          lote.producto,
+          lote.marca,
+          lote.presentacion,
+          lote.especificacion,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(texto);
+
+      return coincideUbicacion && coincideBusqueda;
+    });
+  }, [stockGeneral, busquedaStock, filtroUbicacionStock]);
+
+  const productosStock = useMemo(() => {
+    const grupos = new Map<
+      string,
+      {
+        productoId: string;
+        codigo: string;
+        nombreProducto: string;
+        lotes: LoteStockGeneral[];
+        total: number;
+      }
+    >();
+
+    stockFiltrado.forEach((lote) => {
+      const actual = grupos.get(lote.productoId) || {
+        productoId: lote.productoId,
+        codigo: lote.codigo,
+        nombreProducto: lote.nombreProducto,
+        lotes: [],
+        total: 0,
+      };
+
+      actual.lotes.push(lote);
+      actual.total += lote.cantidad;
+      grupos.set(lote.productoId, actual);
+    });
+
+    return Array.from(grupos.values()).sort((a, b) =>
+      a.nombreProducto.localeCompare(b.nombreProducto, "es", {
+        sensitivity: "base",
+      })
+    );
+  }, [stockFiltrado]);
+
+  const totalStockVisible = useMemo(() => {
+    return stockFiltrado.reduce(
+      (total, lote) => total + lote.cantidad,
+      0
+    );
+  }, [stockFiltrado]);
 
   const gruposCarga = useMemo(() => {
     const grupos = new Map<string, MovimientoPendiente[]>();
@@ -492,6 +595,12 @@ export default function Movimientos({ usuario }: Props) {
   }, [usuario.sucursal]);
 
   useEffect(() => {
+    if (modo === "stock") {
+      cargarStockGeneral();
+    }
+  }, [modo, usuario.sucursal]);
+
+  useEffect(() => {
     limpiarFormularioActual(false);
 
     if (modo === "recepcion") {
@@ -519,6 +628,11 @@ export default function Movimientos({ usuario }: Props) {
     }
 
     if (modo === "individual") {
+      setUbicacionOrigenId("");
+      setUbicacionDestinoId("");
+    }
+
+    if (modo === "stock") {
       setUbicacionOrigenId("");
       setUbicacionDestinoId("");
     }
@@ -629,6 +743,40 @@ export default function Movimientos({ usuario }: Props) {
       console.error("Error cargando historial:", error);
     } finally {
       setCargandoHistorial(false);
+    }
+  }
+
+  async function cargarStockGeneral() {
+    try {
+      setCargandoStockGeneral(true);
+
+      const response = await fetch(
+        `/api/stock-lotes?vista=general&sucursal=${encodeURIComponent(
+          usuario.sucursal
+        )}`
+      );
+
+      const data = (await response.json()) as RespuestaStockGeneral;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.error || "No se pudo cargar el stock actual."
+        );
+      }
+
+      setStockGeneral(data.lotes || []);
+    } catch (error) {
+      console.error("Error cargando stock general:", error);
+
+      setAviso({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo cargar el stock actual.",
+      });
+    } finally {
+      setCargandoStockGeneral(false);
     }
   }
 
@@ -1693,8 +1841,130 @@ export default function Movimientos({ usuario }: Props) {
         >
           Ajustes
         </button>
+
+        <button
+          type="button"
+          className={
+            modo === "stock"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("stock")}
+        >
+          Stock
+        </button>
       </div>
 
+      {modo === "stock" ? (
+        <section className="mov-card mov-stock-card">
+          <div className="mov-stock-header">
+            <div>
+              <span>CONSULTA</span>
+              <h3>Stock actual</h3>
+              <p>Mercadería disponible en {usuario.sucursal}.</p>
+            </div>
+
+            <button
+              type="button"
+              className="mov-refresh-button"
+              onClick={cargarStockGeneral}
+              disabled={cargandoStockGeneral}
+            >
+              {cargandoStockGeneral
+                ? "Actualizando..."
+                : "Actualizar stock"}
+            </button>
+          </div>
+
+          <div className="mov-stock-filters">
+            <label className="mov-field">
+              Buscar producto
+              <input
+                type="search"
+                value={busquedaStock}
+                onChange={(event) =>
+                  setBusquedaStock(event.target.value)
+                }
+                placeholder="Código, nombre, marca..."
+              />
+            </label>
+
+            <label className="mov-field">
+              Ubicación
+              <select
+                value={filtroUbicacionStock}
+                onChange={(event) =>
+                  setFiltroUbicacionStock(event.target.value)
+                }
+              >
+                {tiposUbicacionStock.map((tipo) => (
+                  <option key={tipo} value={tipo}>
+                    {tipo === "TODAS" ? "Todas" : tipo}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="mov-stock-summary">
+            <div>
+              <span>Productos visibles</span>
+              <strong>{productosStock.length}</strong>
+            </div>
+            <div>
+              <span>Lotes visibles</span>
+              <strong>{stockFiltrado.length}</strong>
+            </div>
+            <div>
+              <span>Unidades visibles</span>
+              <strong>{totalStockVisible}</strong>
+            </div>
+          </div>
+
+          {cargandoStockGeneral ? (
+            <div className="mov-empty">Cargando stock actual...</div>
+          ) : productosStock.length === 0 ? (
+            <div className="mov-empty">
+              No encontramos mercadería con esos filtros.
+            </div>
+          ) : (
+            <div className="mov-stock-products">
+              {productosStock.map((grupo) => (
+                <article
+                  key={grupo.productoId}
+                  className="mov-stock-product"
+                >
+                  <div className="mov-stock-product-title">
+                    <div>
+                      <strong>{grupo.nombreProducto}</strong>
+                      <span>Código: {grupo.codigo || "Sin código"}</span>
+                    </div>
+
+                    <div className="mov-stock-product-total">
+                      <span>Total</span>
+                      <strong>{grupo.total}</strong>
+                    </div>
+                  </div>
+
+                  <div className="mov-stock-lots">
+                    {grupo.lotes.map((lote) => (
+                      <div key={lote.id} className="mov-stock-lot">
+                        <div>
+                          <span className="mov-stock-location">
+                            {lote.tipoUbicacion || lote.ubicacionNombre}
+                          </span>
+                          <p>{formatearFecha(lote.vencimiento)}</p>
+                        </div>
+                        <strong>{lote.cantidad} unidades</strong>
+                      </div>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : (
       <section className="mov-card">
         <div className="mov-operation-summary">
           <span>Operación actual</span>
@@ -2373,7 +2643,9 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
       </section>
+      )}
 
+      {modo !== "stock" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>
@@ -2489,8 +2761,9 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
       </section>
+      )}
 
-      {resultado.length > 0 && (
+      {modo !== "stock" && resultado.length > 0 && (
         <section className="mov-card">
           <div className="mov-section-header">
             <div>
@@ -2539,6 +2812,7 @@ export default function Movimientos({ usuario }: Props) {
         </section>
       )}
 
+      {modo !== "stock" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>
@@ -2600,6 +2874,7 @@ export default function Movimientos({ usuario }: Props) {
           </div>
         )}
       </section>
+      )}
 
       {scannerAbierto && (
         <BarcodeScanner

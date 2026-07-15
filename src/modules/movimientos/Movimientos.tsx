@@ -134,6 +134,7 @@ const tiposAjustes = ["INGRESO", "EGRESO", "AJUSTE +", "AJUSTE -"];
 
 const motivosAjustes = [
   "TRANSFERENCIA",
+  "VUELVE A DEPÓSITO",
   "DEVOLUCIÓN",
   "ROTURA",
   "MAL ESTADO",
@@ -413,6 +414,10 @@ export default function Movimientos({ usuario }: Props) {
     modo === "individual" &&
     motivoIndividual === "TRANSFERENCIA";
 
+  const esVuelveADeposito =
+    modo === "individual" &&
+    motivoIndividual === "VUELVE A DEPÓSITO";
+
   const esMovimientoNegativo =
     modo === "reposicion" ||
     esTransferencia ||
@@ -444,6 +449,15 @@ export default function Movimientos({ usuario }: Props) {
       };
     }
 
+    if (esVuelveADeposito) {
+      return {
+        tipoMovimiento: "AJUSTE -",
+        motivo: "VUELVE A DEPÓSITO",
+        necesitaOrigen: true,
+        necesitaDestino: true,
+      };
+    }
+
     return {
       tipoMovimiento: esTransferencia ? "EGRESO" : tipoIndividual,
       motivo: motivoIndividual,
@@ -456,7 +470,13 @@ export default function Movimientos({ usuario }: Props) {
         (tipoIndividual === "INGRESO" ||
           tipoIndividual === "AJUSTE +"),
     };
-  }, [modo, tipoIndividual, motivoIndividual, esTransferencia]);
+  }, [
+    modo,
+    tipoIndividual,
+    motivoIndividual,
+    esTransferencia,
+    esVuelveADeposito,
+  ]);
 
   const loteSeleccionado = useMemo(
     () =>
@@ -513,8 +533,31 @@ export default function Movimientos({ usuario }: Props) {
     if (motivoIndividual === "TRANSFERENCIA") {
       setTipoIndividual("EGRESO");
       setUbicacionDestinoId("");
+      return;
     }
-  }, [motivoIndividual]);
+
+    if (motivoIndividual === "VUELVE A DEPÓSITO") {
+      setTipoIndividual("AJUSTE -");
+
+      const gondola = ubicaciones.find(
+        (ubicacion) => ubicacion.tipoUbicacion === "GÓNDOLA"
+      );
+
+      const destinoPreferido =
+        ubicaciones.find(
+          (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
+        ) ||
+        ubicaciones.find(
+          (ubicacion) => ubicacion.tipoUbicacion === "GALPÓN"
+        ) ||
+        ubicaciones.find(
+          (ubicacion) => ubicacion.tipoUbicacion === "CÁMARA"
+        );
+
+      setUbicacionOrigenId(gondola?.id || "");
+      setUbicacionDestinoId(destinoPreferido?.id || "");
+    }
+  }, [motivoIndividual, ubicaciones]);
 
   useEffect(() => {
     if (
@@ -1670,7 +1713,11 @@ export default function Movimientos({ usuario }: Props) {
                 onChange={(event) =>
                   setTipoIndividual(event.target.value)
                 }
-                disabled={guardando || esTransferencia}
+                disabled={
+                  guardando ||
+                  esTransferencia ||
+                  esVuelveADeposito
+                }
               >
                 {tiposAjustes.map((tipo) => (
                   <option key={tipo} value={tipo}>

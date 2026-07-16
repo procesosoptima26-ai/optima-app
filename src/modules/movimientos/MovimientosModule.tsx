@@ -135,6 +135,18 @@ type DistribucionRecepcion = {
   cantidad: string;
 };
 
+type DestinoReposicion = {
+  idLocal: number;
+  ubicacionId: string;
+  cantidadesPorLote: Record<string, string>;
+};
+
+type StockDepositoAviso = {
+  ubicacionId: string;
+  ubicacionNombre: string;
+  cantidadTotal: number;
+};
+
 type LoteRecepcion = {
   idLocal: number;
   sinVencimiento: boolean;
@@ -181,6 +193,14 @@ function crearLoteRecepcion(ubicacionId = ""): LoteRecepcion {
     sinVencimiento: false,
     vencimientoTexto: "",
     distribuciones: [crearDistribucion(ubicacionId)],
+  };
+}
+
+function crearDestinoReposicion(ubicacionId = ""): DestinoReposicion {
+  return {
+    idLocal: Date.now() + Math.floor(Math.random() * 100000),
+    ubicacionId,
+    cantidadesPorLote: {},
   };
 }
 
@@ -333,9 +353,16 @@ export default function Movimientos({ usuario }: Props) {
 
   const [lotesDisponibles, setLotesDisponibles] = useState<LoteStock[]>([]);
   const [loteSeleccionadoId, setLoteSeleccionadoId] = useState("");
-  const [cantidadesPorLote, setCantidadesPorLote] = useState<
-    Record<string, string>
-  >({});
+const [, setCantidadesPorLote] = useState<
+  Record<string, string>
+>({});
+  const [destinosReposicion, setDestinosReposicion] = useState<
+    DestinoReposicion[]
+  >([crearDestinoReposicion()]);
+  const [stockDepositoAviso, setStockDepositoAviso] =
+    useState<StockDepositoAviso | null>(null);
+  const [cargandoStockDeposito, setCargandoStockDeposito] =
+    useState(false);
   const [cargandoLotes, setCargandoLotes] = useState(false);
 
   const [stockGeneral, setStockGeneral] = useState<LoteStockGeneral[]>([]);
@@ -408,12 +435,20 @@ export default function Movimientos({ usuario }: Props) {
   }, [lotesRecepcion]);
 
   const totalReposicion = useMemo(() => {
-    return lotesDisponibles.reduce((total, lote) => {
-      const valor = Number(cantidadesPorLote[lote.id] || 0);
+    return destinosReposicion.reduce((totalGeneral, destino) => {
+      const subtotal = lotesDisponibles.reduce((totalLote, lote) => {
+        const valor = Number(
+          destino.cantidadesPorLote[lote.id] || 0
+        );
 
-      return Number.isFinite(valor) ? total + valor : total;
+        return Number.isFinite(valor)
+          ? totalLote + valor
+          : totalLote;
+      }, 0);
+
+      return totalGeneral + subtotal;
     }, 0);
-  }, [lotesDisponibles, cantidadesPorLote]);
+  }, [destinosReposicion, lotesDisponibles]);
 
   const tiposUbicacionStock = useMemo(() => {
     return [
@@ -625,6 +660,10 @@ export default function Movimientos({ usuario }: Props) {
         ubicacionesOrigenReposicion[0]?.id || ""
       );
       setUbicacionDestinoId(ubicacionGondola?.id || "");
+      setDestinosReposicion([
+        crearDestinoReposicion(ubicacionGondola?.id || ""),
+      ]);
+      setStockDepositoAviso(null);
     }
 
     if (modo === "individual") {
@@ -684,8 +723,41 @@ export default function Movimientos({ usuario }: Props) {
       setLotesDisponibles([]);
       setLoteSeleccionadoId("");
       setCantidadesPorLote({});
+      setDestinosReposicion((actuales) =>
+        actuales.map((destino) => ({
+          ...destino,
+          cantidadesPorLote: {},
+        }))
+      );
     }
   }, [producto, ubicacionOrigenId, necesitaLoteExistente]);
+
+  useEffect(() => {
+    if (
+      modo !== "reposicion" ||
+      !producto ||
+      ubicacionOrigen?.tipoUbicacion !== "GALPÓN"
+    ) {
+      setStockDepositoAviso(null);
+      return;
+    }
+
+    const deposito = ubicaciones.find(
+      (ubicacion) => ubicacion.tipoUbicacion === "DEPÓSITO"
+    );
+
+    if (!deposito) {
+      setStockDepositoAviso(null);
+      return;
+    }
+
+    consultarStockDeposito(producto.id, deposito);
+  }, [
+    modo,
+    producto,
+    ubicacionOrigen,
+    ubicaciones,
+  ]);
 
   async function cargarUbicaciones() {
     try {
@@ -827,6 +899,143 @@ export default function Movimientos({ usuario }: Props) {
     } finally {
       setCargandoLotes(false);
     }
+  }
+
+  async function consultarStockDeposito(
+    productoId: string,
+    deposito: Ubicacion
+  ) {
+    try {
+      setCargandoStockDeposito(true);
+
+      const params = new URLSearchParams({
+        productoId,
+        ubicacionId: deposito.id,
+      });
+
+      const response = await fetch(
+        `/api/stock-lotes?${params.toString()}`
+      );
+
+      const data = (await response.json()) as RespuestaStock;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.error || "No se pudo consultar el stock en Depósito."
+        );
+      }
+
+      const cantidadTotal = (data.lotes || []).reduce(
+        (total, lote) =>
+          lote.cantidad > 0 ? total + lote.cantidad : total,
+        0
+      );
+
+      if (cantidadTotal > 0) {
+        setStockDepositoAviso({
+          ubicacionId: deposito.id,
+          ubicacionNombre: deposito.nombre,
+          cantidadTotal:
+            Math.round(cantidadTotal * 1000) / 1000,
+        });
+      } else {
+        setStockDepositoAviso(null);
+      }
+    } catch (error) {
+      console.error("Error consultando stock en Depósito:", error);
+      setStockDepositoAviso(null);
+    } finally {
+      setCargandoStockDeposito(false);
+    }
+  }
+
+  function agregarDestinoReposicion() {
+    const ubicacionesUsadas = new Set(
+      destinosReposicion
+        .map((destino) => destino.ubicacionId)
+        .filter(Boolean)
+    );
+
+    const siguienteUbicacion = ubicaciones.find(
+      (ubicacion) =>
+        ubicacion.id !== ubicacionOrigenId &&
+        !ubicacionesUsadas.has(ubicacion.id)
+    );
+
+    if (!siguienteUbicacion) {
+      setAviso({
+        tipo: "alerta",
+        texto:
+          "No hay otra ubicación disponible para agregar como destino.",
+      });
+      return;
+    }
+
+    setDestinosReposicion((actuales) => [
+      ...actuales,
+      crearDestinoReposicion(siguienteUbicacion.id),
+    ]);
+  }
+
+  function actualizarDestinoReposicion(
+    destinoId: number,
+    ubicacionId: string
+  ) {
+    setDestinosReposicion((actuales) =>
+      actuales.map((destino) =>
+        destino.idLocal === destinoId
+          ? {
+              ...destino,
+              ubicacionId,
+            }
+          : destino
+      )
+    );
+  }
+
+  function actualizarCantidadDestinoReposicion(
+    destinoId: number,
+    loteId: string,
+    valor: string
+  ) {
+    setDestinosReposicion((actuales) =>
+      actuales.map((destino) =>
+        destino.idLocal === destinoId
+          ? {
+              ...destino,
+              cantidadesPorLote: {
+                ...destino.cantidadesPorLote,
+                [loteId]: valor,
+              },
+            }
+          : destino
+      )
+    );
+  }
+
+  function quitarDestinoReposicion(destinoId: number) {
+    setDestinosReposicion((actuales) => {
+      if (actuales.length === 1) {
+        return actuales;
+      }
+
+      return actuales.filter(
+        (destino) => destino.idLocal !== destinoId
+      );
+    });
+  }
+
+  function cambiarOrigenADeposito() {
+    if (!stockDepositoAviso) return;
+
+    setUbicacionOrigenId(stockDepositoAviso.ubicacionId);
+    setStockDepositoAviso(null);
+
+    setAviso({
+      tipo: "exito",
+      texto:
+        "Origen cambiado a Depósito. Ahora se utilizará primero el stock abierto.",
+    });
   }
 
   async function buscarProducto(codigoIngresado: string) {
@@ -1266,52 +1475,120 @@ export default function Movimientos({ usuario }: Props) {
     }
 
     if (modo === "reposicion") {
-      const lotesUsados = lotesDisponibles
-        .map((lote) => ({
-          lote,
-          cantidad: Number(cantidadesPorLote[lote.id] || 0),
-        }))
-        .filter((item) => item.cantidad > 0);
+      const destinosValidos = destinosReposicion.filter(
+        (destino) => destino.ubicacionId
+      );
 
-      if (lotesUsados.length === 0) {
+      if (destinosValidos.length === 0) {
         return {
           movimientos: [],
-          error: "Ingresá una cantidad en al menos un lote.",
+          error: "Agregá al menos una ubicación de destino.",
         };
       }
 
-      for (const item of lotesUsados) {
-        if (item.cantidad > item.lote.cantidad) {
+      if (destinosValidos.length !== destinosReposicion.length) {
+        return {
+          movimientos: [],
+          error: "Completá todas las ubicaciones de destino.",
+        };
+      }
+
+      const idsDestinos = destinosValidos.map(
+        (destino) => destino.ubicacionId
+      );
+
+      if (new Set(idsDestinos).size !== idsDestinos.length) {
+        return {
+          movimientos: [],
+          error: "No podés repetir una ubicación de destino.",
+        };
+      }
+
+      if (idsDestinos.includes(ubicacionOrigenId)) {
+        return {
+          movimientos: [],
+          error: "El origen no puede repetirse como destino.",
+        };
+      }
+
+      const movimientosReposicion: MovimientoPendiente[] = [];
+      const totalPorLote = new Map<string, number>();
+
+      destinosValidos.forEach((destino, indiceDestino) => {
+        const ubicacionDestinoActual = ubicaciones.find(
+          (ubicacion) => ubicacion.id === destino.ubicacionId
+        );
+
+        lotesDisponibles.forEach((lote, indiceLote) => {
+          const cantidadDestino = Number(
+            destino.cantidadesPorLote[lote.id] || 0
+          );
+
+          if (
+            !Number.isFinite(cantidadDestino) ||
+            cantidadDestino < 0
+          ) {
+            return;
+          }
+
+          if (cantidadDestino === 0) {
+            return;
+          }
+
+          totalPorLote.set(
+            lote.id,
+            (totalPorLote.get(lote.id) || 0) + cantidadDestino
+          );
+
+          movimientosReposicion.push({
+            idLocal:
+              Date.now() +
+              indiceDestino * 1000 +
+              indiceLote +
+              Math.floor(Math.random() * 10000),
+            productoId: producto.id,
+            codigo: producto.codigo,
+            nombreProducto: producto.nombre,
+            tipoMovimiento: "EGRESO",
+            motivo: "REPOSICIÓN",
+            ubicacionOrigenId,
+            ubicacionOrigenNombre: ubicacionOrigen?.nombre || "",
+            ubicacionDestinoId: destino.ubicacionId,
+            ubicacionDestinoNombre:
+              ubicacionDestinoActual?.nombre || "",
+            vencimiento: lote.vencimiento,
+            cantidad: cantidadDestino,
+            observacion: observacion.trim(),
+          });
+        });
+      });
+
+      if (movimientosReposicion.length === 0) {
+        return {
+          movimientos: [],
+          error:
+            "Ingresá una cantidad en al menos un lote y destino.",
+        };
+      }
+
+      for (const lote of lotesDisponibles) {
+        const totalSolicitado = totalPorLote.get(lote.id) || 0;
+
+        if (totalSolicitado > lote.cantidad) {
           return {
             movimientos: [],
             error:
               `Stock insuficiente en ${formatearFecha(
-                item.lote.vencimiento
-              )}. Disponible: ${item.lote.cantidad}.`,
+                lote.vencimiento
+              )}. Disponible: ${lote.cantidad}. ` +
+              `Total distribuido: ${totalSolicitado}.`,
           };
         }
       }
 
       return {
         error: "",
-        movimientos: lotesUsados.map((item, index) => ({
-          idLocal:
-            Date.now() +
-            index +
-            Math.floor(Math.random() * 10000),
-          productoId: producto.id,
-          codigo: producto.codigo,
-          nombreProducto: producto.nombre,
-          tipoMovimiento: "EGRESO",
-          motivo: "REPOSICIÓN",
-          ubicacionOrigenId,
-          ubicacionOrigenNombre: ubicacionOrigen?.nombre || "",
-          ubicacionDestinoId,
-          ubicacionDestinoNombre: ubicacionDestino?.nombre || "",
-          vencimiento: item.lote.vencimiento,
-          cantidad: item.cantidad,
-          observacion: observacion.trim(),
-        })),
+        movimientos: movimientosReposicion,
       };
     }
 
@@ -1581,6 +1858,10 @@ export default function Movimientos({ usuario }: Props) {
     setLotesDisponibles([]);
     setLoteSeleccionadoId("");
     setCantidadesPorLote({});
+    setDestinosReposicion([
+      crearDestinoReposicion(ubicacionGondola?.id || ""),
+    ]);
+    setStockDepositoAviso(null);
     setGrupoRecepcionEditando(null);
     setAviso(null);
 
@@ -2042,16 +2323,10 @@ export default function Movimientos({ usuario }: Props) {
               </label>
             )}
 
-            {configuracionActual.necesitaDestino && (
-              <label className="mov-field">
-                Ubicación destino
-                {modo === "reposicion" ? (
-                  <input
-                    value="GÓNDOLA"
-                    disabled
-                    aria-label="Ubicación destino"
-                  />
-                ) : (
+            {configuracionActual.necesitaDestino &&
+              modo !== "reposicion" && (
+                <label className="mov-field">
+                  Ubicación destino
                   <select
                     value={ubicacionDestinoId}
                     onChange={(event) =>
@@ -2067,9 +2342,37 @@ export default function Movimientos({ usuario }: Props) {
                       </option>
                     ))}
                   </select>
-                )}
-              </label>
-            )}
+                </label>
+              )}
+          </div>
+        )}
+
+        {modo === "reposicion" &&
+          ubicacionOrigen?.tipoUbicacion === "GALPÓN" &&
+          cargandoStockDeposito && (
+            <div className="mov-message mov-message-info">
+              Consultando si hay stock disponible en Depósito...
+            </div>
+          )}
+
+        {modo === "reposicion" && stockDepositoAviso && (
+          <div className="mov-deposito-alert">
+            <div>
+              <strong>Hay stock disponible en Depósito</strong>
+              <p>
+                Este producto tiene {stockDepositoAviso.cantidadTotal} unidades
+                en Depósito. Conviene utilizar ese stock antes de abrir una caja
+                del Galpón.
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={cambiarOrigenADeposito}
+              disabled={guardando}
+            >
+              Cambiar origen a Depósito
+            </button>
           </div>
         )}
 
@@ -2274,44 +2577,163 @@ export default function Movimientos({ usuario }: Props) {
               </div>
             ) : modo === "reposicion" ? (
               <>
-                <div className="mov-lots-list">
-                  {lotesDisponibles.map((lote, index) => (
-                    <div
-                      key={lote.id}
-                      className="mov-lot-quantity-row"
-                    >
-                      <div className="mov-lot-quantity-info">
-                        <strong>{formatearFecha(lote.vencimiento)}</strong>
-                        <span>{lote.cantidad} disponibles</span>
-                        {index === 0 && (
-                          <small>Recomendado FEFO</small>
-                        )}
-                      </div>
+                <div className="mov-reposition-destinations-heading">
+                  <div>
+                    <strong>Distribución por destino</strong>
+                    <span>
+                      Podés enviar parte a Góndola y el sobrante a Depósito.
+                    </span>
+                  </div>
 
-                      <input
-                        type="number"
-                        min="0"
-                        max={lote.cantidad}
-                        step="0.01"
-                        value={cantidadesPorLote[lote.id] || ""}
-                        onChange={(event) =>
-                          setCantidadesPorLote((actual) => ({
-                            ...actual,
-                            [lote.id]: event.target.value,
-                          }))
-                        }
-                        placeholder="Cant."
-                        inputMode="decimal"
-                        aria-label={`Cantidad del lote ${formatearFecha(
-                          lote.vencimiento
-                        )}`}
-                      />
-                    </div>
-                  ))}
+                  <button
+                    type="button"
+                    className="mov-add-location-button"
+                    onClick={agregarDestinoReposicion}
+                    disabled={
+                      guardando ||
+                      destinosReposicion.length >=
+                        Math.max(ubicaciones.length - 1, 1)
+                    }
+                  >
+                    + Otro destino
+                  </button>
+                </div>
+
+                <div className="mov-reposition-destinations">
+                  {destinosReposicion.map((destino, indiceDestino) => {
+                    const ubicacionesUsadas = new Set(
+                      destinosReposicion
+                        .filter(
+                          (item) => item.idLocal !== destino.idLocal
+                        )
+                        .map((item) => item.ubicacionId)
+                        .filter(Boolean)
+                    );
+
+                    const totalDestino = lotesDisponibles.reduce(
+                      (total, lote) => {
+                        const valor = Number(
+                          destino.cantidadesPorLote[lote.id] || 0
+                        );
+
+                        return Number.isFinite(valor)
+                          ? total + valor
+                          : total;
+                      },
+                      0
+                    );
+
+                    return (
+                      <article
+                        key={destino.idLocal}
+                        className="mov-reposition-destination-card"
+                      >
+                        <div className="mov-reposition-destination-header">
+                          <div>
+                            <span>DESTINO</span>
+                            <strong>{indiceDestino + 1}</strong>
+                          </div>
+
+                          {destinosReposicion.length > 1 && (
+                            <button
+                              type="button"
+                              className="mov-remove-expiry-button"
+                              onClick={() =>
+                                quitarDestinoReposicion(destino.idLocal)
+                              }
+                              disabled={guardando}
+                            >
+                              Quitar
+                            </button>
+                          )}
+                        </div>
+
+                        <label className="mov-field">
+                          Ubicación destino
+                          <select
+                            value={destino.ubicacionId}
+                            onChange={(event) =>
+                              actualizarDestinoReposicion(
+                                destino.idLocal,
+                                event.target.value
+                              )
+                            }
+                            disabled={cargandoUbicaciones || guardando}
+                          >
+                            <option value="">Seleccionar</option>
+
+                            {ubicaciones.map((ubicacion) => (
+                              <option
+                                key={ubicacion.id}
+                                value={ubicacion.id}
+                                disabled={
+                                  ubicacion.id === ubicacionOrigenId ||
+                                  ubicacionesUsadas.has(ubicacion.id)
+                                }
+                              >
+                                {ubicacion.tipoUbicacion}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <div className="mov-lots-list">
+                          {lotesDisponibles.map((lote, index) => (
+                            <div
+                              key={`${destino.idLocal}-${lote.id}`}
+                              className="mov-lot-quantity-row"
+                            >
+                              <div className="mov-lot-quantity-info">
+                                <strong>
+                                  {formatearFecha(lote.vencimiento)}
+                                </strong>
+                                <span>{lote.cantidad} disponibles</span>
+                                {index === 0 && (
+                                  <small>Recomendado FEFO</small>
+                                )}
+                              </div>
+
+                              <input
+                                type="number"
+                                min="0"
+                                max={lote.cantidad}
+                                step="0.01"
+                                value={
+                                  destino.cantidadesPorLote[lote.id] || ""
+                                }
+                                onChange={(event) =>
+                                  actualizarCantidadDestinoReposicion(
+                                    destino.idLocal,
+                                    lote.id,
+                                    event.target.value
+                                  )
+                                }
+                                placeholder="Cant."
+                                inputMode="decimal"
+                                aria-label={`Cantidad para ${
+                                  ubicaciones.find(
+                                    (ubicacion) =>
+                                      ubicacion.id === destino.ubicacionId
+                                  )?.tipoUbicacion || "destino"
+                                } del lote ${formatearFecha(
+                                  lote.vencimiento
+                                )}`}
+                              />
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mov-distribution-total">
+                          <span>Total de este destino</span>
+                          <strong>{totalDestino} unidades</strong>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
 
                 <div className="mov-distribution-total">
-                  <span>Total a reponer</span>
+                  <span>Total a retirar del origen</span>
                   <strong>{totalReposicion} unidades</strong>
                 </div>
               </>

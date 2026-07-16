@@ -1382,3 +1382,168 @@
   .mov-stock-lot { align-items:flex-start; }
   .mov-stock-lot > strong { font-size:13px; text-align:right; }
 }
+
+
+/* REPOSICIÓN CON VARIOS DESTINOS */
+
+.mov-reposition-destinations-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 4px 0 10px;
+}
+
+.mov-reposition-destinations-heading strong,
+.mov-reposition-destinations-heading span {
+  display: block;
+}
+
+.mov-reposition-destinations-heading strong {
+  color: var(--optima-blue);
+  font-size: 16px;
+}
+
+.mov-reposition-destinations-heading span {
+  margin-top: 3px;
+  color: var(--optima-muted);
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.mov-reposition-destinations {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mov-reposition-destination-card {
+  padding: 11px;
+  border: 1px solid rgba(8, 63, 136, 0.16);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.045);
+}
+
+.mov-reposition-destination-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e8eef5;
+}
+
+.mov-reposition-destination-header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mov-reposition-destination-header span {
+  color: var(--optima-green-dark);
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+}
+
+.mov-reposition-destination-header strong {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--optima-blue-soft);
+  color: var(--optima-blue);
+  font-size: 13px;
+  font-weight: 950;
+}
+
+/* ALERTA DE STOCK EN DEPÓSITO */
+
+.mov-deposito-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 13px;
+  padding: 13px;
+  border: 1px solid #fde68a;
+  border-radius: 16px;
+  background: #fffbeb;
+}
+
+.mov-deposito-alert strong {
+  display: block;
+  color: #92400e;
+  font-size: 15px;
+}
+
+.mov-deposito-alert p {
+  margin: 4px 0 0;
+  color: #a16207;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.4;
+}
+
+.mov-deposito-alert button {
+  flex: 0 0 auto;
+  min-height: 40px;
+  border: 1px solid #f59e0b;
+  border-radius: 13px;
+  padding: 9px 12px;
+  background: #ffffff;
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.mov-deposito-alert button:hover {
+  background: #fef3c7;
+}
+
+.mov-deposito-alert button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@media (max-width: 640px) {
+  .mov-reposition-destinations-heading {
+    align-items: flex-start;
+  }
+
+  .mov-reposition-destinations-heading .mov-add-location-button {
+    flex: 0 0 auto;
+  }
+
+  .mov-deposito-alert {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .mov-deposito-alert button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .mov-reposition-destination-card {
+    padding: 9px;
+  }
+
+  .mov-reposition-destinations-heading {
+    gap: 8px;
+  }
+
+  .mov-reposition-destinations-heading span {
+    font-size: 10px;
+  }
+
+  .mov-deposito-alert {
+    padding: 11px;
+  }
+}

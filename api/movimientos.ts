@@ -351,7 +351,6 @@ function armarCamposMovimiento(
     PROCESADO: false,
     ERROR_MOTOR: "",
     "REQUIERE_REVISIÓN": Boolean(movimiento.requiereRevision),
-    REVISADO: false,
   };
 
   const ubicacionOrigenId = normalizarTexto(

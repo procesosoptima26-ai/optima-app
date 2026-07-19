@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
-import CuentasCorrientesMock from "./modules/cuentasCorrientes/CuentasCorrientes";
+import CuentasCorrientes from "./modules/cuentasCorrientes/CuentasCorrientes";
+import CuentasCorrientesProveedores from "./modules/cuentasCorrientes/CuentasCorrientesProveedores";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
@@ -1642,10 +1643,10 @@ function App() {
 
     if (vistaActiva === "cuentasCorrientes") {
       if (cuentaCorrienteSubvista === "proveedores") {
-        return renderModuloEnDesarrollo("PROVEEDORES");
+        return <CuentasCorrientesProveedores />;
       }
 
-      return <CuentasCorrientesMock />;
+      return <CuentasCorrientes />;
     }
 
     if (vistaActiva === "usuario") {

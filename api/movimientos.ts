@@ -440,8 +440,16 @@ async function crearMovimientos(
 
     if (!response.ok) {
       console.error("Error creando movimientos:", data);
+
+      const detalle =
+        data &&
+        typeof data === "object" &&
+        "error" in data
+          ? JSON.stringify(data.error)
+          : JSON.stringify(data);
+
       throw new Error(
-        "Airtable rechazó uno o más movimientos"
+        `Airtable rechazó uno o más movimientos. Detalle: ${detalle}`
       );
     }
 

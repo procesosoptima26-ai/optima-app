@@ -33,6 +33,7 @@ type MovimientoPayload = {
   cantidad: number | string;
   responsable?: string;
   observacion?: string;
+  requiereRevision?: boolean;
 };
 
 type GuardarMovimientosPayload = {
@@ -349,6 +350,8 @@ function armarCamposMovimiento(
     CANTIDAD: normalizarCantidad(movimiento.cantidad),
     PROCESADO: false,
     ERROR_MOTOR: "",
+    "REQUIERE_REVISIÓN": Boolean(movimiento.requiereRevision),
+    REVISADO: false,
   };
 
   const ubicacionOrigenId = normalizarTexto(
@@ -549,6 +552,118 @@ async function leerMovimientosRecientes(
     .slice(0, limite);
 }
 
+async function leerAjustesPendientes(
+  sucursal: string,
+  limite: number
+) {
+  const token = getEnv("AIRTABLE_TOKEN");
+  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv(
+    "AIRTABLE_MOVIMIENTOS_TABLE_NAME"
+  );
+
+  const ubicaciones = await leerUbicaciones();
+
+  const ubicacionesPermitidas = new Set(
+    ubicaciones
+      .filter((ubicacion) => ubicacion.sucursal === sucursal)
+      .map((ubicacion) => ubicacion.id)
+  );
+
+  const url = new URL(
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+      tableName
+    )}`
+  );
+
+  url.searchParams.set("pageSize", "100");
+  url.searchParams.set(
+    "filterByFormula",
+    'AND({REQUIERE_REVISIÓN}=1,{REVISADO}=0)'
+  );
+  url.searchParams.append(
+    "sort[0][field]",
+    "FECHA_HORA"
+  );
+  url.searchParams.append(
+    "sort[0][direction]",
+    "desc"
+  );
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = (await response.json()) as AirtableResponse;
+
+  if (!response.ok) {
+    console.error("Error leyendo ajustes pendientes:", data);
+    throw new Error(
+      "No se pudieron consultar los ajustes pendientes"
+    );
+  }
+
+  return (data.records || [])
+    .filter((record) => {
+      const origenId = obtenerPrimerIdVinculado(
+        record.fields["UBICACIÓN ORIGEN"]
+      );
+
+      const destinoId = obtenerPrimerIdVinculado(
+        record.fields["UBICACIÓN DESTINO"]
+      );
+
+      return (
+        (origenId && ubicacionesPermitidas.has(origenId)) ||
+        (destinoId && ubicacionesPermitidas.has(destinoId))
+      );
+    })
+    .slice(0, limite);
+}
+
+async function marcarMovimientoComoRevisado(id: string) {
+  const token = getEnv("AIRTABLE_TOKEN");
+  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv(
+    "AIRTABLE_MOVIMIENTOS_TABLE_NAME"
+  );
+
+  const url = new URL(
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+      tableName
+    )}/${encodeURIComponent(id)}`
+  );
+
+  const response = await fetch(url.toString(), {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields: {
+        REVISADO: true,
+      },
+      typecast: true,
+    }),
+  });
+
+  const data = (await response.json()) as AirtableRecord & {
+    error?: unknown;
+  };
+
+  if (!response.ok) {
+    console.error("Error marcando movimiento como revisado:", data);
+    throw new Error(
+      "No se pudo marcar el ajuste como revisado"
+    );
+  }
+
+  return data;
+}
+
 function transformarMovimiento(record: AirtableRecord) {
   return {
     id: record.id,
@@ -589,6 +704,10 @@ function transformarMovimiento(record: AirtableRecord) {
     errorMotor: normalizarTexto(
       record.fields.ERROR_MOTOR
     ),
+    requiereRevision: Boolean(
+      record.fields["REQUIERE_REVISIÓN"]
+    ),
+    revisado: Boolean(record.fields.REVISADO),
   };
 }
 
@@ -682,7 +801,62 @@ export default async function handler(
       });
     }
 
+    if (req.method === "PATCH") {
+      const id = normalizarTexto(req.body?.id);
+
+      if (!id || !id.startsWith("rec")) {
+        return res.status(400).json({
+          ok: false,
+          error: "Falta un ID de movimiento válido.",
+        });
+      }
+
+      const actualizado = await marcarMovimientoComoRevisado(id);
+
+      return res.status(200).json({
+        ok: true,
+        movimiento: transformarMovimiento(actualizado),
+      });
+    }
+
     if (req.method === "GET") {
+      const ajustesPendientes =
+        normalizarTexto(req.query.ajustesPendientes).toLowerCase() ===
+        "true";
+
+      if (ajustesPendientes) {
+        const sucursal = normalizarSucursal(
+          req.query.sucursal
+        );
+
+        if (!sucursal) {
+          return res.status(400).json({
+            ok: false,
+            error:
+              "Falta indicar la sucursal para consultar ajustes pendientes.",
+          });
+        }
+
+        const limiteSolicitado = Number(req.query.limite);
+        const limite =
+          Number.isFinite(limiteSolicitado) &&
+          limiteSolicitado > 0
+            ? Math.min(Math.floor(limiteSolicitado), 50)
+            : 50;
+
+        const pendientes = await leerAjustesPendientes(
+          sucursal,
+          limite
+        );
+
+        return res.status(200).json({
+          ok: true,
+          sucursal,
+          cantidad: pendientes.length,
+          movimientos: pendientes.map(transformarMovimiento),
+        });
+      }
+
       const idsTexto = normalizarTexto(req.query.ids);
 
       if (idsTexto) {

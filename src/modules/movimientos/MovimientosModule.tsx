@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import BarcodeScanner from "../../components/BarcodeScanner";
+import { tienePermiso } from "../../config/permisos";
 import "./Movimientos.css";
 
 type UsuarioSesion = {
@@ -116,6 +117,8 @@ type MovimientoProcesado = {
   observacion: string;
   procesado: boolean;
   errorMotor: string;
+  requiereRevision?: boolean;
+  revisado?: boolean;
 };
 
 type RespuestaMovimientos = {
@@ -212,6 +215,24 @@ function formatearFecha(fecha: string | null) {
   if (partes.length !== 3) return fecha;
 
   return `${partes[2]}/${partes[1]}/${partes[0]}`;
+}
+
+function formatearFechaHora(fecha: string) {
+  if (!fecha) return "Sin fecha";
+
+  const valor = new Date(fecha);
+
+  if (Number.isNaN(valor.getTime())) {
+    return fecha;
+  }
+
+  return valor.toLocaleString("es-AR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function normalizarFechaManual(valor: string): {
@@ -388,6 +409,17 @@ const [, setCantidadesPorLote] = useState<
   const [resultado, setResultado] = useState<MovimientoProcesado[]>([]);
   const [historial, setHistorial] = useState<MovimientoProcesado[]>([]);
   const [cargandoHistorial, setCargandoHistorial] = useState(false);
+  const [ajustesPendientes, setAjustesPendientes] = useState<
+    MovimientoProcesado[]
+  >([]);
+  const [cargandoAjustesPendientes, setCargandoAjustesPendientes] =
+    useState(false);
+  const [revisandoAjusteId, setRevisandoAjusteId] = useState("");
+
+  const puedeRevisarAjustes = tienePermiso(
+    usuario.rol,
+    "movimientos.revisarAjustes"
+  );
 
   const ubicacionOrigen = useMemo(
     () =>
@@ -635,7 +667,13 @@ const [, setCantidadesPorLote] = useState<
   useEffect(() => {
     cargarUbicaciones();
     cargarHistorial();
-  }, [usuario.sucursal]);
+
+    if (puedeRevisarAjustes) {
+      cargarAjustesPendientes();
+    } else {
+      setAjustesPendientes([]);
+    }
+  }, [usuario.sucursal, puedeRevisarAjustes]);
 
   useEffect(() => {
     if (modo === "stock") {
@@ -823,6 +861,93 @@ const [, setCantidadesPorLote] = useState<
       console.error("Error cargando historial:", error);
     } finally {
       setCargandoHistorial(false);
+    }
+  }
+
+  async function cargarAjustesPendientes() {
+    if (!puedeRevisarAjustes) return;
+
+    try {
+      setCargandoAjustesPendientes(true);
+
+      const params = new URLSearchParams({
+        ajustesPendientes: "true",
+        sucursal: usuario.sucursal,
+        limite: "50",
+      });
+
+      const response = await fetch(
+        `/api/movimientos?${params.toString()}`
+      );
+
+      const data =
+        (await response.json()) as RespuestaMovimientos;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.error || "No se pudieron cargar los ajustes pendientes."
+        );
+      }
+
+      setAjustesPendientes(data.movimientos || []);
+    } catch (error) {
+      console.error("Error cargando ajustes pendientes:", error);
+
+      setAviso({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron cargar los ajustes pendientes.",
+      });
+    } finally {
+      setCargandoAjustesPendientes(false);
+    }
+  }
+
+  async function marcarAjusteComoRevisado(id: string) {
+    if (!puedeRevisarAjustes || !id) return;
+
+    try {
+      setRevisandoAjusteId(id);
+
+      const response = await fetch("/api/movimientos", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      });
+
+      const data =
+        (await response.json()) as RespuestaMovimientos;
+
+      if (!response.ok || !data.ok) {
+        throw new Error(
+          data.error || "No se pudo marcar el ajuste como revisado."
+        );
+      }
+
+      setAjustesPendientes((actuales) =>
+        actuales.filter((movimiento) => movimiento.id !== id)
+      );
+
+      setAviso({
+        tipo: "exito",
+        texto: "Ajuste marcado como visto.",
+      });
+    } catch (error) {
+      console.error("Error marcando ajuste como revisado:", error);
+
+      setAviso({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo marcar el ajuste como revisado.",
+      });
+    } finally {
+      setRevisandoAjusteId("");
     }
   }
 
@@ -2047,6 +2172,10 @@ const [, setCantidadesPorLote] = useState<
       }
 
       await cargarHistorial();
+
+      if (puedeRevisarAjustes) {
+        await cargarAjustesPendientes();
+      }
     } catch (error) {
       console.error("Error guardando movimientos:", error);
 
@@ -2129,6 +2258,9 @@ const [, setCantidadesPorLote] = useState<
           onClick={() => setModo("individual")}
         >
           Ajustes
+          {puedeRevisarAjustes && ajustesPendientes.length > 0
+            ? ` (${ajustesPendientes.length})`
+            : ""}
         </button>
 
         <button
@@ -2143,6 +2275,93 @@ const [, setCantidadesPorLote] = useState<
           Stock
         </button>
       </div>
+
+      {puedeRevisarAjustes && (
+        <section className="mov-card">
+          <div className="mov-section-header">
+            <div>
+              <span>Notificaciones</span>
+              <h3>
+                Ajustes para revisar
+                {ajustesPendientes.length > 0
+                  ? ` · ${ajustesPendientes.length}`
+                  : ""}
+              </h3>
+            </div>
+
+            <button
+              type="button"
+              className="mov-refresh-button"
+              onClick={cargarAjustesPendientes}
+              disabled={cargandoAjustesPendientes}
+            >
+              {cargandoAjustesPendientes
+                ? "Actualizando..."
+                : "Actualizar avisos"}
+            </button>
+          </div>
+
+          {cargandoAjustesPendientes ? (
+            <div className="mov-empty">
+              Cargando ajustes pendientes...
+            </div>
+          ) : ajustesPendientes.length === 0 ? (
+            <div className="mov-empty">
+              No hay ajustes pendientes de revisión.
+            </div>
+          ) : (
+            <div className="mov-history">
+              {ajustesPendientes.map((movimiento) => (
+                <article
+                  key={movimiento.id}
+                  className="mov-history-item"
+                >
+                  <div>
+                    <strong>
+                      {movimiento.nombreProducto || "Producto"}
+                    </strong>
+
+                    <span>
+                      {movimiento.tipoMovimiento} ·{" "}
+                      {movimiento.motivo}
+                    </span>
+
+                    <p>
+                      {movimiento.cantidad} unidades ·{" "}
+                      {formatearFecha(movimiento.vencimiento)}
+                    </p>
+
+                    <p>
+                      Responsable:{" "}
+                      {movimiento.responsable || "Sin informar"}
+                    </p>
+
+                    <small>
+                      {formatearFechaHora(movimiento.fechaHora)}
+                      {movimiento.observacion
+                        ? ` · ${movimiento.observacion}`
+                        : ""}
+                    </small>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="mov-edit-button"
+                    onClick={() =>
+                      marcarAjusteComoRevisado(movimiento.id)
+                    }
+                    disabled={revisandoAjusteId === movimiento.id}
+                  >
+                    {revisandoAjusteId === movimiento.id
+                      ? "Marcando..."
+                      : "Marcar como visto"}
+                  </button>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {modo === "stock" ? (
         <section className="mov-card mov-stock-card">

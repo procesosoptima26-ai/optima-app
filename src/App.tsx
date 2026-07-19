@@ -1641,13 +1641,15 @@ function App() {
       );
     }
 
-    if (vistaActiva === "cuentasCorrientes") {
-      if (cuentaCorrienteSubvista === "proveedores") {
-        return <CuentasCorrientesProveedores />;
-      }
+if (vistaActiva === "cuentasCorrientes") {
+  if (cuentaCorrienteSubvista === "proveedores") {
+    return (
+      <CuentasCorrientesProveedores usuario={usuarioSesion} />
+    );
+  }
 
-      return <CuentasCorrientes />;
-    }
+  return <CuentasCorrientes usuario={usuarioSesion} />;
+}
 
     if (vistaActiva === "usuario") {
       return renderUsuario();
@@ -1891,3 +1893,4 @@ function App() {
 }
 
 export default App;
+

@@ -30,6 +30,17 @@ type MovimientoPayload = {
   responsable?: string;
 };
 
+type ActualizarMovimientoPayload = {
+  id: string;
+  fecha: string;
+  comprobante?: string;
+  medioPago?: MedioPago;
+  datosPago?: string;
+  importe: number;
+  observacion?: string;
+  responsable?: string;
+};
+
 function getEnv(name: string) {
   const value = process.env[name];
 
@@ -45,8 +56,7 @@ function getAirtableConfig() {
     token: getEnv("AIRTABLE_TOKEN"),
     baseId: getEnv("AIRTABLE_CC_BASE_ID"),
     movimientosTable:
-      process.env.AIRTABLE_MOVIMIENTOS_PROVEEDORES_TABLE_NAME ||
-      "MOVIMIENTOS_PROVEEDORES",
+      process.env.AIRTABLE_MOVIMIENTOS_PROVEEDORES_TABLE_NAME || "MOVIMIENTOS_PROVEEDORES",
   };
 }
 
@@ -72,12 +82,12 @@ function normalizarNumero(valor: unknown): number {
   return 0;
 }
 
-function obtenerPrimerProveedorId(valor: unknown): string {
-  if (Array.isArray(valor) && typeof valor[0] === "string") {
-    return valor[0];
+function obtenerProveedorIds(valor: unknown): string[] {
+  if (Array.isArray(valor)) {
+    return valor.filter((item): item is string => typeof item === "string");
   }
 
-  return "";
+  return [];
 }
 
 function convertirFechaParaAirtable(fecha: string) {
@@ -116,7 +126,7 @@ function convertirFechaParaMostrar(valor: unknown) {
 function mapearMovimiento(record: AirtableRecord) {
   return {
     id: record.id,
-    proveedorId: obtenerPrimerProveedorId(record.fields.PROVEEDORES),
+    proveedorIds: obtenerProveedorIds(record.fields.PROVEEDORES),
     fecha: convertirFechaParaMostrar(record.fields.FECHA),
     tipoMovimiento: normalizarTexto(record.fields.TIPO_MOVIMIENTO) as TipoMovimiento,
     comprobante: normalizarTexto(record.fields.COMPROBANTE),
@@ -157,7 +167,7 @@ async function listarMovimientos(proveedorId: string) {
 
   return (data.records || [])
     .map(mapearMovimiento)
-    .filter((movimiento) => movimiento.proveedorId === proveedorId);
+    .filter((movimiento) => movimiento.proveedorIds.includes(proveedorId));
 }
 
 async function crearMovimiento(payload: MovimientoPayload) {
@@ -201,18 +211,26 @@ async function crearMovimiento(payload: MovimientoPayload) {
 
   if (payload.tipoMovimiento === "PAGO REALIZADO" && payload.medioPago) {
     fields.MEDIO_DE_PAGO = payload.medioPago;
+  } else {
+    fields.MEDIO_DE_PAGO = null;
   }
 
   if (payload.datosPago?.trim()) {
     fields.DATOS_PAGO = payload.datosPago.trim();
+  } else {
+    fields.DATOS_PAGO = null;
   }
 
   if (payload.observacion?.trim()) {
     fields["OBSERVACIÓN"] = payload.observacion.trim();
+  } else {
+    fields["OBSERVACIÓN"] = null;
   }
 
   if (payload.responsable?.trim()) {
     fields.RESPONSABLE = payload.responsable.trim();
+  } else {
+    fields.RESPONSABLE = null;
   }
 
   const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
@@ -251,6 +269,84 @@ async function crearMovimiento(payload: MovimientoPayload) {
   return mapearMovimiento(record);
 }
 
+async function actualizarMovimiento(payload: ActualizarMovimientoPayload) {
+  const { token, baseId, movimientosTable } = getAirtableConfig();
+
+  if (!payload.id?.trim()) {
+    throw new Error("Falta el id del movimiento");
+  }
+
+  if (!payload.fecha?.trim()) {
+    throw new Error("Falta la fecha");
+  }
+
+  const importeNumero = Number(payload.importe);
+
+  if (!importeNumero || importeNumero <= 0) {
+    throw new Error("El importe debe ser mayor a cero");
+  }
+
+  const recordUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+    movimientosTable
+  )}/${payload.id}`;
+
+  const actualResponse = await fetch(recordUrl, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const actualData = (await actualResponse.json()) as AirtableRecord & { error?: unknown };
+
+  if (!actualResponse.ok) {
+    console.error("Error consultando movimiento de proveedor:", actualData);
+    throw new Error("No se pudo consultar el movimiento");
+  }
+
+  const tipoMovimientoActual = normalizarTexto(actualData.fields.TIPO_MOVIMIENTO) as TipoMovimiento;
+
+  if (tipoMovimientoActual === "PAGO REALIZADO" && !payload.medioPago?.trim()) {
+    throw new Error("Falta el medio de pago");
+  }
+
+  const fields: Record<string, unknown> = {
+    FECHA: convertirFechaParaAirtable(payload.fecha),
+    COMPROBANTE: payload.comprobante?.trim() || null,
+    IMPORTE: importeNumero,
+    "OBSERVACIÓN": payload.observacion?.trim() || null,
+    RESPONSABLE: payload.responsable?.trim() || null,
+  };
+
+  if (tipoMovimientoActual === "PAGO REALIZADO") {
+    fields.MEDIO_DE_PAGO = payload.medioPago?.trim() || null;
+    fields.DATOS_PAGO = payload.datosPago?.trim() || null;
+  } else {
+    fields.MEDIO_DE_PAGO = null;
+    fields.DATOS_PAGO = null;
+  }
+
+  const response = await fetch(recordUrl, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields,
+      typecast: true,
+    }),
+  });
+
+  const data = (await response.json()) as AirtableRecord & { error?: unknown };
+
+  if (!response.ok) {
+    console.error("Error actualizando movimiento de proveedor:", data);
+    throw new Error("No se pudo actualizar el movimiento en Airtable");
+  }
+
+  return mapearMovimiento(data);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "GET") {
@@ -273,6 +369,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "POST") {
       const movimiento = await crearMovimiento(req.body as MovimientoPayload);
+
+      return res.status(200).json({
+        ok: true,
+        movimiento,
+      });
+    }
+
+    if (req.method === "PATCH") {
+      const movimiento = await actualizarMovimiento(req.body as ActualizarMovimientoPayload);
 
       return res.status(200).json({
         ok: true,

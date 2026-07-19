@@ -1,8 +1,197 @@
 import { useEffect, useMemo, useState } from "react";
 import "./CuentasCorrientes.css";
 
-type EstadoCliente = "DEBE" | "AL DIA" | "A FAVOR" | string;
+type RolUsuario = "USUARIO" | "ADMIN" | string;
 type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "ECHEQ" | "";
+type Mensaje = { tipo: "info" | "exito" | "error"; texto: string } | null;
+
+type UsuarioSesion = {
+  usuario: string;
+  nombre: string;
+  empresa: string;
+  rol: RolUsuario;
+  sucursal: string;
+  modulos: string[];
+};
+
+function formatearPesos(valor: number) {
+  return valor.toLocaleString("es-AR", {
+    style: "currency",
+    currency: "ARS",
+    maximumFractionDigits: 0,
+  });
+}
+
+function obtenerFechaHoyInput() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatearFechaParaMostrar(fecha: string) {
+  if (!fecha) return "Sin fecha";
+
+  const match = fecha.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (match) {
+    return `${match[3]}/${match[2]}/${match[1]}`;
+  }
+
+  return fecha;
+}
+
+function abrirVentanaImpresion(html: string) {
+  const ventana = window.open("", "_blank", "width=900,height=700");
+
+  if (!ventana) {
+    throw new Error("No se pudo abrir la ventana para exportar.");
+  }
+
+  ventana.document.open();
+  ventana.document.write(html);
+  ventana.document.close();
+  ventana.focus();
+
+  window.setTimeout(() => {
+    ventana.print();
+  }, 350);
+}
+
+function construirHtmlExportacion(params: {
+  titulo: string;
+  subtitulo: string;
+  saldoActual: number;
+  movimientos: Array<{
+    fecha: string;
+    titulo: string;
+    detalle: string;
+    observacion: string;
+    responsable: string;
+    importeFirmado: number;
+  }>;
+}) {
+  const totalPositivos = params.movimientos
+    .filter((movimiento) => movimiento.importeFirmado > 0)
+    .reduce((total, movimiento) => total + movimiento.importeFirmado, 0);
+
+  const totalNegativos = params.movimientos
+    .filter((movimiento) => movimiento.importeFirmado < 0)
+    .reduce((total, movimiento) => total + Math.abs(movimiento.importeFirmado), 0);
+
+  const filas = params.movimientos
+    .map(
+      (movimiento) => `
+        <tr>
+          <td>${movimiento.fecha || "-"}</td>
+          <td>${movimiento.titulo || "-"}</td>
+          <td>${movimiento.detalle || "-"}</td>
+          <td>${movimiento.observacion || "-"}</td>
+          <td>${movimiento.responsable || "-"}</td>
+          <td style="text-align:right;">${
+            movimiento.importeFirmado > 0 ? "+" : "-"
+          }${formatearPesos(Math.abs(movimiento.importeFirmado))}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${params.titulo}</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            padding: 32px;
+            color: #0f172a;
+          }
+          h1 {
+            margin: 0 0 6px;
+            color: #083f88;
+            font-size: 28px;
+          }
+          p {
+            margin: 0 0 12px;
+          }
+          .meta {
+            margin-bottom: 18px;
+            color: #475569;
+          }
+          .summary {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin: 18px 0 24px;
+          }
+          .box {
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            padding: 12px;
+          }
+          .box strong {
+            display: block;
+            margin-top: 8px;
+            color: #083f88;
+            font-size: 20px;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 10px;
+            font-size: 13px;
+            vertical-align: top;
+          }
+          th {
+            background: #eff6ff;
+            color: #083f88;
+            text-align: left;
+          }
+        </style>
+      </head>
+      <body>
+        <h1>OPTIMA</h1>
+        <p class="meta">${params.subtitulo}</p>
+
+        <div class="summary">
+          <div class="box">
+            <span>Saldo actual</span>
+            <strong>${formatearPesos(params.saldoActual)}</strong>
+          </div>
+          <div class="box">
+            <span>Total cargos</span>
+            <strong>${formatearPesos(totalPositivos)}</strong>
+          </div>
+          <div class="box">
+            <span>Total pagos</span>
+            <strong>${formatearPesos(totalNegativos)}</strong>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Comprobante</th>
+              <th>Detalle</th>
+              <th>Observación</th>
+              <th>Responsable</th>
+              <th>Importe</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filas || '<tr><td colspan="6">Sin movimientos para exportar.</td></tr>'}
+          </tbody>
+        </table>
+      </body>
+    </html>
+  `;
+}
+
+
+type EstadoCliente = "DEBE" | "AL DIA" | "A FAVOR" | string;
 type TipoMovimiento = "REMITO EMITIDO" | "PAGO RECIBIDO";
 type Vista = "lista" | "detalle" | "formulario" | "nuevoCliente";
 
@@ -45,13 +234,9 @@ type RespuestaMovimientos = {
   error?: string;
 };
 
-function formatearPesos(valor: number) {
-  return valor.toLocaleString("es-AR", {
-    style: "currency",
-    currency: "ARS",
-    maximumFractionDigits: 0,
-  });
-}
+type Props = {
+  usuario: UsuarioSesion;
+};
 
 function obtenerEstadoDesdeSaldo(saldo: number): EstadoCliente {
   if (saldo > 0) return "DEBE";
@@ -69,32 +254,19 @@ function obtenerClaseEstado(estado: EstadoCliente) {
   return estado.toLowerCase().replaceAll(" ", "-");
 }
 
-function obtenerFechaHoyInput() {
-  return new Date().toISOString().slice(0, 10);
-}
+export default function CuentasCorrientes({ usuario }: Props) {
+  const esAdmin = usuario.rol === "ADMIN";
 
-function formatearFechaParaMostrar(fecha: string) {
-  if (!fecha) return "Sin fecha";
-
-  const partes = fecha.split("-");
-
-  if (partes.length === 3) {
-    return `${partes[2]}/${partes[1]}/${partes[0]}`;
-  }
-
-  return fecha;
-}
-
-export default function CuentasCorrientes() {
   const [vista, setVista] = useState<Vista>("lista");
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [clienteSeleccionadoId, setClienteSeleccionadoId] = useState<string | null>(null);
+  const [movimientoEditandoId, setMovimientoEditandoId] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [cargandoClientes, setCargandoClientes] = useState(false);
   const [cargandoMovimientos, setCargandoMovimientos] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [mensaje, setMensaje] = useState<{ tipo: "info" | "exito" | "error"; texto: string } | null>(null);
+  const [mensaje, setMensaje] = useState<Mensaje>(null);
   const [tipoFormulario, setTipoFormulario] = useState<TipoMovimiento>("REMITO EMITIDO");
 
   const [nuevoCliente, setNuevoCliente] = useState({
@@ -191,6 +363,7 @@ export default function CuentasCorrientes() {
 
   async function abrirDetalle(clienteId: string) {
     setClienteSeleccionadoId(clienteId);
+    setMovimientoEditandoId(null);
     setVista("detalle");
     await cargarMovimientos(clienteId);
   }
@@ -198,12 +371,14 @@ export default function CuentasCorrientes() {
   function volverALista() {
     setVista("lista");
     setClienteSeleccionadoId(null);
+    setMovimientoEditandoId(null);
     setMovimientos([]);
     setMensaje(null);
     cargarClientes();
   }
 
   function abrirFormulario(tipo: TipoMovimiento) {
+    setMovimientoEditandoId(null);
     setTipoFormulario(tipo);
     setFormMovimiento({
       fecha: obtenerFechaHoyInput(),
@@ -215,6 +390,27 @@ export default function CuentasCorrientes() {
       responsable: "",
     });
     setMensaje(null);
+    setVista("formulario");
+  }
+
+  function editarMovimiento(movimiento: Movimiento) {
+    if (!esAdmin) return;
+
+    setMovimientoEditandoId(movimiento.id);
+    setTipoFormulario(movimiento.tipoMovimiento);
+    setFormMovimiento({
+      fecha: movimiento.fecha.includes("/") ? movimiento.fecha.split("/").reverse().join("-") : movimiento.fecha,
+      comprobante: movimiento.comprobante,
+      medioPago: movimiento.medioPago || "",
+      datosPago: movimiento.datosPago,
+      importe: String(movimiento.importe),
+      observacion: movimiento.observacion,
+      responsable: movimiento.responsable,
+    });
+    setMensaje({
+      tipo: "info",
+      texto: "Editando movimiento guardado.",
+    });
     setVista("formulario");
   }
 
@@ -284,25 +480,42 @@ export default function CuentasCorrientes() {
       setGuardando(true);
       setMensaje({
         tipo: "info",
-        texto: tipoFormulario === "REMITO EMITIDO" ? "Guardando remito..." : "Guardando pago...",
+        texto: movimientoEditandoId
+          ? "Actualizando movimiento..."
+          : tipoFormulario === "REMITO EMITIDO"
+          ? "Guardando remito..."
+          : "Guardando pago...",
       });
 
       const response = await fetch("/api/movimientos-cc", {
-        method: "POST",
+        method: movimientoEditandoId ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          clienteId: clienteSeleccionadoId,
-          fecha: formMovimiento.fecha,
-          tipoMovimiento: tipoFormulario,
-          comprobante: formMovimiento.comprobante,
-          medioPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.medioPago : "",
-          datosPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.datosPago : "",
-          importe: importeNumerico,
-          observacion: formMovimiento.observacion,
-          responsable: formMovimiento.responsable,
-        }),
+        body: JSON.stringify(
+          movimientoEditandoId
+            ? {
+                id: movimientoEditandoId,
+                fecha: formMovimiento.fecha,
+                comprobante: formMovimiento.comprobante,
+                medioPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.medioPago : "",
+                datosPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.datosPago : "",
+                importe: importeNumerico,
+                observacion: formMovimiento.observacion,
+                responsable: formMovimiento.responsable,
+              }
+            : {
+                clienteId: clienteSeleccionadoId,
+                fecha: formMovimiento.fecha,
+                tipoMovimiento: tipoFormulario,
+                comprobante: formMovimiento.comprobante,
+                medioPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.medioPago : "",
+                datosPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.datosPago : "",
+                importe: importeNumerico,
+                observacion: formMovimiento.observacion,
+                responsable: formMovimiento.responsable,
+              }
+        ),
       });
 
       const data = (await response.json()) as RespuestaMovimientos;
@@ -311,40 +524,68 @@ export default function CuentasCorrientes() {
         throw new Error(data.error || "No se pudo guardar el movimiento");
       }
 
-      const deltaSaldo =
-        tipoFormulario === "REMITO EMITIDO" ? importeNumerico : -importeNumerico;
-
-      setClientes((actuales) =>
-        actuales.map((cliente) =>
-          cliente.id === clienteSeleccionadoId
-            ? {
-                ...cliente,
-                saldoActual: cliente.saldoActual + deltaSaldo,
-                estado: obtenerEstadoDesdeSaldo(cliente.saldoActual + deltaSaldo),
-              }
-            : cliente
-        )
-      );
-
       await cargarMovimientos(clienteSeleccionadoId);
+      await cargarClientes();
+      setMovimientoEditandoId(null);
       setVista("detalle");
-
-      window.setTimeout(() => {
-        cargarClientes();
-      }, 900);
 
       setMensaje({
         tipo: "exito",
-        texto: tipoFormulario === "REMITO EMITIDO" ? "Remito guardado correctamente." : "Pago guardado correctamente.",
+        texto: movimientoEditandoId
+          ? "Movimiento actualizado correctamente."
+          : tipoFormulario === "REMITO EMITIDO"
+          ? "Remito guardado correctamente."
+          : "Pago guardado correctamente.",
       });
     } catch (error) {
       console.error("Error guardando movimiento:", error);
       setMensaje({
         tipo: "error",
-        texto: tipoFormulario === "REMITO EMITIDO" ? "No se pudo guardar el remito." : "No se pudo guardar el pago.",
+        texto: movimientoEditandoId
+          ? "No se pudo actualizar el movimiento."
+          : tipoFormulario === "REMITO EMITIDO"
+          ? "No se pudo guardar el remito."
+          : "No se pudo guardar el pago.",
       });
     } finally {
       setGuardando(false);
+    }
+  }
+
+  function exportarHistorial() {
+    if (!esAdmin || !clienteSeleccionado) return;
+
+    try {
+      const html = construirHtmlExportacion({
+        titulo: `Cuenta corriente - ${clienteSeleccionado.cliente}`,
+        subtitulo: `Cliente: ${clienteSeleccionado.cliente} · Exportado desde OPTIMA`,
+        saldoActual: clienteSeleccionado.saldoActual,
+        movimientos: movimientos.map((movimiento) => {
+          const esPago = movimiento.tipoMovimiento === "PAGO RECIBIDO";
+
+          return {
+            fecha: formatearFechaParaMostrar(movimiento.fecha),
+            titulo:
+              movimiento.comprobante || (esPago ? "Pago recibido" : "Remito emitido"),
+            detalle: esPago
+              ? `Pago recibido${movimiento.medioPago ? ` · ${movimiento.medioPago}` : ""}${
+                  movimiento.datosPago ? ` · ${movimiento.datosPago}` : ""
+                }`
+              : "Remito emitido",
+            observacion: movimiento.observacion,
+            responsable: movimiento.responsable,
+            importeFirmado: movimiento.importeFirmado,
+          };
+        }),
+      });
+
+      abrirVentanaImpresion(html);
+    } catch (error) {
+      console.error("Error exportando historial:", error);
+      setMensaje({
+        tipo: "error",
+        texto: "No se pudo exportar el historial.",
+      });
     }
   }
 
@@ -500,6 +741,12 @@ export default function CuentasCorrientes() {
               <button className="cc-green-button" type="button" onClick={() => abrirFormulario("PAGO RECIBIDO")}>
                 Registrar pago
               </button>
+
+              {esAdmin && (
+                <button className="cc-soft-button" type="button" onClick={exportarHistorial}>
+                  Exportar historial
+                </button>
+              )}
             </div>
           </section>
 
@@ -525,10 +772,23 @@ export default function CuentasCorrientes() {
                       {movimiento.responsable && <p>Responsable: {movimiento.responsable}</p>}
                     </div>
 
-                    <strong className={esPago ? "cc-amount-negative" : "cc-amount-positive"}>
-                      {movimiento.importeFirmado > 0 ? "+" : "-"}
-                      {formatearPesos(Math.abs(movimiento.importeFirmado))}
-                    </strong>
+                    <div>
+                      <strong className={esPago ? "cc-amount-negative" : "cc-amount-positive"}>
+                        {movimiento.importeFirmado > 0 ? "+" : "-"}
+                        {formatearPesos(Math.abs(movimiento.importeFirmado))}
+                      </strong>
+
+                      {esAdmin && (
+                        <button
+                          className="cc-soft-button"
+                          type="button"
+                          onClick={() => editarMovimiento(movimiento)}
+                          style={{ marginTop: "10px" }}
+                        >
+                          Editar
+                        </button>
+                      )}
+                    </div>
                   </article>
                 );
               })
@@ -540,7 +800,13 @@ export default function CuentasCorrientes() {
       {vista === "formulario" && clienteSeleccionado && (
         <section className="cc-card cc-form-card">
           <p>Cliente: {clienteSeleccionado.cliente}</p>
-          <h3>{tipoFormulario === "REMITO EMITIDO" ? "Registrar remito" : "Registrar pago"}</h3>
+          <h3>
+            {movimientoEditandoId
+              ? "Editar movimiento"
+              : tipoFormulario === "REMITO EMITIDO"
+              ? "Registrar remito"
+              : "Registrar pago"}
+          </h3>
 
           <label>
             Fecha *
@@ -617,11 +883,18 @@ export default function CuentasCorrientes() {
           </label>
 
           <button className="cc-primary-button cc-full-button" type="button" onClick={guardarMovimiento} disabled={guardando}>
-            {guardando ? "Guardando..." : tipoFormulario === "REMITO EMITIDO" ? "Guardar remito" : "Guardar pago"}
+            {guardando
+              ? movimientoEditandoId
+                ? "Actualizando..."
+                : "Guardando..."
+              : movimientoEditandoId
+              ? "Actualizar movimiento"
+              : tipoFormulario === "REMITO EMITIDO"
+              ? "Guardar remito"
+              : "Guardar pago"}
           </button>
         </section>
       )}
     </section>
   );
 }
-

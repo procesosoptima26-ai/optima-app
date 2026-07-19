@@ -350,7 +350,7 @@ function armarCamposMovimiento(
     CANTIDAD: normalizarCantidad(movimiento.cantidad),
     PROCESADO: false,
     ERROR_MOTOR: "",
-    "REQUIERE_REVISIÓN": Boolean(movimiento.requiereRevision),
+    "REQUIERE_REVISION": Boolean(movimiento.requiereRevision),
   };
 
   const ubicacionOrigenId = normalizarTexto(
@@ -586,7 +586,7 @@ async function leerAjustesPendientes(
   url.searchParams.set("pageSize", "100");
   url.searchParams.set(
     "filterByFormula",
-    'AND({REQUIERE_REVISIÓN}=1,{REVISADO}=0)'
+    'AND({REQUIERE_REVISION}=1,{REVISADO}=0)'
   );
   url.searchParams.append(
     "sort[0][field]",
@@ -712,7 +712,7 @@ function transformarMovimiento(record: AirtableRecord) {
       record.fields.ERROR_MOTOR
     ),
     requiereRevision: Boolean(
-      record.fields["REQUIERE_REVISIÓN"]
+      record.fields["REQUIERE_REVISION"]
     ),
     revisado: Boolean(record.fields.REVISADO),
   };

@@ -14,6 +14,7 @@ type UsuarioSesion = {
 
 type Props = {
   usuario: UsuarioSesion;
+  modoInicial?: ModoMovimiento;
 };
 
 type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock";
@@ -320,10 +321,13 @@ function esperar(milisegundos: number) {
   });
 }
 
-export default function Movimientos({ usuario }: Props) {
+export default function Movimientos({
+  usuario,
+  modoInicial = "recepcion",
+}: Props) {
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [modo, setModo] = useState<ModoMovimiento>("recepcion");
+  const [modo, setModo] = useState<ModoMovimiento>(modoInicial);
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);
   const [cargandoUbicaciones, setCargandoUbicaciones] = useState(false);
 
@@ -623,6 +627,10 @@ const [, setCantidadesPorLote] = useState<
       ) || null,
     [lotesDisponibles, loteSeleccionadoId]
   );
+
+  useEffect(() => {
+    setModo(modoInicial);
+  }, [modoInicial]);
 
   useEffect(() => {
     cargarUbicaciones();

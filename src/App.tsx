@@ -88,17 +88,20 @@ type VistaActiva =
   | "inventario"
   | "movimientos"
   | "cuentasCorrientes"
-  | "automatizaciones"
+  | "facturacion"
   | "reportes"
   | "ajustes"
   | "usuario";
+
+type MovimientoSubvista = "recepcion" | "reposicion" | "stock" | "individual";
+type CuentaCorrienteSubvista = "clientes" | "proveedores";
 
 type MenuIconKey =
   | "login"
   | "inventario"
   | "movimientos"
   | "cuentasCorrientes"
-  | "automatizaciones"
+  | "facturacion"
   | "reportes"
   | "ajustes"
   | "usuario";
@@ -138,9 +141,9 @@ const itemsMenu: ItemMenu[] = [
     icono: "cuentasCorrientes",
   },
   {
-    id: "automatizaciones",
-    etiqueta: "AUTOMATIZACIONES",
-    icono: "automatizaciones",
+    id: "facturacion",
+    etiqueta: "FACTURACIÓN",
+    icono: "facturacion",
   },
   {
     id: "reportes",
@@ -164,7 +167,7 @@ const moduloPorVista: Record<ModuloVista, string> = {
   inventario: "INVENTARIO",
   movimientos: "MOVIMIENTOS",
   cuentasCorrientes: "CUENTAS_CORRIENTES",
-  automatizaciones: "AUTOMATIZACIONES",
+  facturacion: "FACTURACION",
   reportes: "REPORTES",
   ajustes: "AJUSTES",
   usuario: "USUARIO",
@@ -394,7 +397,7 @@ function renderIcon(icono: MenuIconKey) {
       return <IconMovements />;
     case "cuentasCorrientes":
       return <IconAccounts />;
-    case "automatizaciones":
+    case "facturacion":
       return <IconAutomation />;
     case "reportes":
       return <IconReports />;
@@ -412,6 +415,13 @@ function App() {
 
   const [vistaActiva, setVistaActiva] = useState<VistaActiva>("inicio");
   const [menuAbierto, setMenuAbierto] = useState(false);
+  const [movimientoSubvista, setMovimientoSubvista] =
+    useState<MovimientoSubvista>("recepcion");
+  const [cuentaCorrienteSubvista, setCuentaCorrienteSubvista] =
+    useState<CuentaCorrienteSubvista>("clientes");
+  const [grupoMovimientosAbierto, setGrupoMovimientosAbierto] = useState(false);
+  const [grupoCuentaCorrienteAbierto, setGrupoCuentaCorrienteAbierto] =
+    useState(false);
 
   const [sesionCargada, setSesionCargada] = useState(false);
   const [usuarioSesion, setUsuarioSesion] = useState<UsuarioSesion | null>(null);
@@ -1044,6 +1054,28 @@ function App() {
     setMenuAbierto(false);
   }
 
+  function abrirMovimiento(subvista: MovimientoSubvista) {
+    if (!usuarioPuedeVer("movimientos")) return;
+
+    setMovimientoSubvista(subvista);
+    setVistaActiva("movimientos");
+    setGrupoMovimientosAbierto(true);
+    setMenuAbierto(false);
+  }
+
+  function abrirCuentaCorriente(subvista: CuentaCorrienteSubvista) {
+    if (!usuarioPuedeVer("cuentasCorrientes")) return;
+
+    setCuentaCorrienteSubvista(subvista);
+    setVistaActiva("cuentasCorrientes");
+    setGrupoCuentaCorrienteAbierto(true);
+    setMenuAbierto(false);
+  }
+
+  function itemMenuVisible(id: ModuloVista) {
+    return itemsMenuVisibles.some((item) => item.id === id);
+  }
+
   function abrirMenu() {
     setMenuAbierto(true);
   }
@@ -1167,7 +1199,7 @@ function App() {
     );
   }
 
-  function renderModuloEnDesarrollo() {
+  function renderModuloEnDesarrollo(etiquetaPersonalizada?: string) {
     const itemActual = obtenerItemMenuActual();
 
     return (
@@ -1176,7 +1208,9 @@ function App() {
           {itemActual ? renderIcon(itemActual.icono) : <IconAutomation />}
         </div>
 
-        <p className="coming-soon-label">{itemActual?.etiqueta ?? "MÓDULO"}</p>
+        <p className="coming-soon-label">
+          {etiquetaPersonalizada ?? itemActual?.etiqueta ?? "MÓDULO"}
+        </p>
 
         <h2>Este módulo ya está en desarrollo.</h2>
 
@@ -1597,11 +1631,20 @@ function App() {
     if (vistaActiva === "inventario") {
       return renderInventario();
     }
-  if (vistaActiva === "movimientos") {
-    return <MovimientosModule usuario={usuarioSesion} />;
-  }
+    if (vistaActiva === "movimientos") {
+      return (
+        <MovimientosModule
+          usuario={usuarioSesion}
+          modoInicial={movimientoSubvista}
+        />
+      );
+    }
 
     if (vistaActiva === "cuentasCorrientes") {
+      if (cuentaCorrienteSubvista === "proveedores") {
+        return renderModuloEnDesarrollo("PROVEEDORES");
+      }
+
       return <CuentasCorrientesMock />;
     }
 
@@ -1652,22 +1695,132 @@ function App() {
             </button>
 
             <nav className="side-menu-nav" aria-label="Menú principal">
-              {itemsMenuVisibles.map((item) => (
+              {itemMenuVisible("inventario") && (
                 <button
-                  key={item.id}
                   className={`side-menu-item ${
-                    vistaActiva === item.id ? "side-menu-item-active" : ""
+                    vistaActiva === "inventario" ? "side-menu-item-active" : ""
                   }`}
                   type="button"
-                  onClick={() => cambiarVista(item.id)}
+                  onClick={() => cambiarVista("inventario")}
                 >
-                  <span className="side-menu-icon">
-                    {renderIcon(item.icono)}
-                  </span>
-
-                  <strong>{item.etiqueta}</strong>
+                  <span className="side-menu-icon">{renderIcon("inventario")}</span>
+                  <strong>INVENTARIO</strong>
                 </button>
-              ))}
+              )}
+
+              {itemMenuVisible("movimientos") && (
+                <div className="side-menu-group">
+                  <button
+                    className={`side-menu-item side-menu-parent ${
+                      vistaActiva === "movimientos" ? "side-menu-item-active" : ""
+                    }`}
+                    type="button"
+                    onClick={() =>
+                      setGrupoMovimientosAbierto((abierto) => !abierto)
+                    }
+                    aria-expanded={grupoMovimientosAbierto}
+                  >
+                    <span className="side-menu-icon">{renderIcon("movimientos")}</span>
+                    <strong>MOVIMIENTOS</strong>
+                    <span className="side-menu-chevron">
+                      {grupoMovimientosAbierto ? "⌃" : "⌄"}
+                    </span>
+                  </button>
+
+                  {grupoMovimientosAbierto && (
+                    <div className="side-menu-submenu">
+                      <button type="button" onClick={() => abrirMovimiento("recepcion")}>Recepción</button>
+                      <button type="button" onClick={() => abrirMovimiento("reposicion")}>Reposición</button>
+                      <button type="button" onClick={() => abrirMovimiento("stock")}>Stock</button>
+                      <button type="button" onClick={() => abrirMovimiento("individual")}>Ajuste</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {itemMenuVisible("cuentasCorrientes") && (
+                <div className="side-menu-group">
+                  <button
+                    className={`side-menu-item side-menu-parent ${
+                      vistaActiva === "cuentasCorrientes"
+                        ? "side-menu-item-active"
+                        : ""
+                    }`}
+                    type="button"
+                    onClick={() =>
+                      setGrupoCuentaCorrienteAbierto((abierto) => !abierto)
+                    }
+                    aria-expanded={grupoCuentaCorrienteAbierto}
+                  >
+                    <span className="side-menu-icon">
+                      {renderIcon("cuentasCorrientes")}
+                    </span>
+                    <strong>CUENTA CORRIENTE</strong>
+                    <span className="side-menu-chevron">
+                      {grupoCuentaCorrienteAbierto ? "⌃" : "⌄"}
+                    </span>
+                  </button>
+
+                  {grupoCuentaCorrienteAbierto && (
+                    <div className="side-menu-submenu">
+                      <button type="button" onClick={() => abrirCuentaCorriente("clientes")}>Clientes</button>
+                      <button type="button" onClick={() => abrirCuentaCorriente("proveedores")}>Proveedores</button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {itemMenuVisible("facturacion") && (
+                <button
+                  className={`side-menu-item ${
+                    vistaActiva === "facturacion" ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista("facturacion")}
+                >
+                  <span className="side-menu-icon">{renderIcon("facturacion")}</span>
+                  <strong>FACTURACIÓN</strong>
+                </button>
+              )}
+
+              {itemMenuVisible("reportes") && (
+                <button
+                  className={`side-menu-item ${
+                    vistaActiva === "reportes" ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista("reportes")}
+                >
+                  <span className="side-menu-icon">{renderIcon("reportes")}</span>
+                  <strong>REPORTES</strong>
+                </button>
+              )}
+
+              {itemMenuVisible("ajustes") && (
+                <button
+                  className={`side-menu-item ${
+                    vistaActiva === "ajustes" ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista("ajustes")}
+                >
+                  <span className="side-menu-icon">{renderIcon("ajustes")}</span>
+                  <strong>AJUSTES</strong>
+                </button>
+              )}
+
+              {itemMenuVisible("usuario") && (
+                <button
+                  className={`side-menu-item ${
+                    vistaActiva === "usuario" ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista("usuario")}
+                >
+                  <span className="side-menu-icon">{renderIcon("usuario")}</span>
+                  <strong>USUARIO</strong>
+                </button>
+              )}
             </nav>
           </aside>
         </div>

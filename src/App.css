@@ -1431,3 +1431,56 @@ button:disabled {
     height: 50px !important;
   }
 }
+
+/* MENÚ GENERAL CON SUBMENÚS */
+.side-menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.side-menu-parent {
+  grid-template-columns: 42px minmax(0, 1fr) 24px;
+}
+
+.side-menu-chevron {
+  display: grid;
+  place-items: center;
+  color: var(--optima-blue);
+  font-size: 17px;
+  font-weight: 950;
+}
+
+.side-menu-submenu {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 0 3px 52px;
+  padding-left: 12px;
+  border-left: 2px solid #dbeafe;
+}
+
+.side-menu-submenu button {
+  width: 100%;
+  border: none;
+  border-radius: 12px;
+  padding: 9px 11px;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 850;
+  text-align: left;
+  cursor: pointer;
+}
+
+.side-menu-submenu button:hover {
+  background: var(--optima-blue-soft);
+  color: var(--optima-blue);
+}
+
+@media (max-width: 640px) {
+  .side-menu-submenu {
+    margin-left: 50px;
+  }
+}
+

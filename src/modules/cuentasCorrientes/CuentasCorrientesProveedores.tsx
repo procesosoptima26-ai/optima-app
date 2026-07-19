@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { tienePermiso } from "../../config/permisos";
 import "./CuentasCorrientes.css";
 
 type RolUsuario = "USUARIO" | "ADMIN" | string;
@@ -255,7 +256,14 @@ function obtenerClaseEstado(estado: EstadoProveedor) {
 }
 
 export default function CuentasCorrientesProveedores({ usuario }: Props) {
-  const esAdmin = usuario.rol === "ADMIN";
+  const puedeEditarGuardado = tienePermiso(
+    usuario.rol,
+    "cuentasCorrientes.editarGuardado"
+  );
+  const puedeExportar = tienePermiso(
+    usuario.rol,
+    "cuentasCorrientes.exportar"
+  );
 
   const [vista, setVista] = useState<Vista>("lista");
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -394,7 +402,7 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
   }
 
   function editarMovimiento(movimiento: Movimiento) {
-    if (!esAdmin) return;
+    if (!puedeEditarGuardado) return;
 
     setMovimientoEditandoId(movimiento.id);
     setTipoFormulario(movimiento.tipoMovimiento);
@@ -553,7 +561,7 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
   }
 
   function exportarHistorial() {
-    if (!esAdmin || !proveedorSeleccionado) return;
+    if (!puedeExportar || !proveedorSeleccionado) return;
 
     try {
       const html = construirHtmlExportacion({
@@ -742,7 +750,7 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
                 Registrar pago
               </button>
 
-              {esAdmin && (
+              {puedeExportar && (
                 <button className="cc-soft-button" type="button" onClick={exportarHistorial}>
                   Exportar historial
                 </button>
@@ -778,7 +786,7 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
                         {formatearPesos(Math.abs(movimiento.importeFirmado))}
                       </strong>
 
-                      {esAdmin && (
+                      {puedeEditarGuardado && (
                         <button
                           className="cc-soft-button"
                           type="button"

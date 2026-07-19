@@ -2067,15 +2067,7 @@ const [, setCantidadesPorLote] = useState<
       <div className="mov-title-row">
         <div>
           <p className="module-label mov-module-label">MÓDULO</p>
-          <h2>
-            {modo === "recepcion"
-              ? "Recepción"
-              : modo === "reposicion"
-              ? "Reposición"
-              : modo === "stock"
-              ? "Stock"
-              : "Ajuste"}
-          </h2>
+          <h2>Movimientos</h2>
           <span>
             {usuario.sucursal} · {usuario.nombre}
           </span>
@@ -2100,6 +2092,56 @@ const [, setCantidadesPorLote] = useState<
             {cargandoHistorial ? "Actualizando..." : "Actualizar"}
           </button>
         </div>
+      </div>
+
+      <div className="mov-mode-grid">
+        <button
+          type="button"
+          className={
+            modo === "recepcion"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("recepcion")}
+        >
+          Recepción
+        </button>
+
+        <button
+          type="button"
+          className={
+            modo === "reposicion"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("reposicion")}
+        >
+          Reposición
+        </button>
+
+        <button
+          type="button"
+          className={
+            modo === "individual"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("individual")}
+        >
+          Ajustes
+        </button>
+
+        <button
+          type="button"
+          className={
+            modo === "stock"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("stock")}
+        >
+          Stock
+        </button>
       </div>
 
       {modo === "stock" ? (

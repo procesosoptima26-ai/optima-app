@@ -187,8 +187,15 @@ async function crearMovimiento(payload: MovimientoPayload) {
 
   const importeNumero = Number(payload.importe);
 
-  if (!importeNumero || importeNumero <= 0) {
-    throw new Error("El importe debe ser mayor a cero");
+  if (Number.isNaN(importeNumero) || importeNumero < 0) {
+    throw new Error("El importe debe ser cero o mayor");
+  }
+
+  if (
+    payload.tipoMovimiento === "PAGO RECIBIDO" &&
+    importeNumero <= 0
+  ) {
+    throw new Error("El pago debe tener un importe mayor a cero");
   }
 
   if (
@@ -282,8 +289,8 @@ async function actualizarMovimiento(payload: ActualizarMovimientoPayload) {
 
   const importeNumero = Number(payload.importe);
 
-  if (!importeNumero || importeNumero <= 0) {
-    throw new Error("El importe debe ser mayor a cero");
+  if (Number.isNaN(importeNumero) || importeNumero < 0) {
+    throw new Error("El importe debe ser cero o mayor");
   }
 
   const recordUrl = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
@@ -304,6 +311,10 @@ async function actualizarMovimiento(payload: ActualizarMovimientoPayload) {
   }
 
   const tipoMovimientoActual = normalizarTexto(actualData.fields.TIPO_MOVIMIENTO) as TipoMovimiento;
+
+  if (tipoMovimientoActual === "PAGO RECIBIDO" && importeNumero <= 0) {
+    throw new Error("El pago debe tener un importe mayor a cero");
+  }
 
   if (tipoMovimientoActual === "PAGO RECIBIDO" && !payload.medioPago?.trim()) {
     throw new Error("Falta el medio de pago");

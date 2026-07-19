@@ -469,12 +469,29 @@ export default function CuentasCorrientes({ usuario }: Props) {
   async function guardarMovimiento() {
     if (!clienteSeleccionadoId) return;
 
-    const importeNumerico = Number(formMovimiento.importe);
+    const importeTexto = formMovimiento.importe.trim();
+    const importeNumerico = Number(importeTexto);
 
-    if (!formMovimiento.fecha || !importeNumerico || importeNumerico <= 0) {
+    if (!formMovimiento.fecha) {
       setMensaje({
         tipo: "error",
-        texto: "Completá fecha e importe mayor a cero.",
+        texto: "Completá la fecha.",
+      });
+      return;
+    }
+
+    if (importeTexto === "" || Number.isNaN(importeNumerico) || importeNumerico < 0) {
+      setMensaje({
+        tipo: "error",
+        texto: "El importe debe ser cero o mayor.",
+      });
+      return;
+    }
+
+    if (tipoFormulario === "PAGO RECIBIDO" && importeNumerico <= 0) {
+      setMensaje({
+        tipo: "error",
+        texto: "El pago debe tener un importe mayor a cero.",
       });
       return;
     }
@@ -782,8 +799,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
 
                     <div>
                       <strong className={esPago ? "cc-amount-negative" : "cc-amount-positive"}>
-                        {movimiento.importeFirmado > 0 ? "+" : "-"}
-                        {formatearPesos(Math.abs(movimiento.importeFirmado))}
+                        {!esPago && movimiento.importe === 0
+                          ? "Importe pendiente"
+                          : `${movimiento.importeFirmado > 0 ? "+" : "-"}${formatearPesos(
+                              Math.abs(movimiento.importeFirmado)
+                            )}`}
                       </strong>
 
                       {puedeEditarGuardado && (

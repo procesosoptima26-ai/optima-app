@@ -3,6 +3,8 @@ import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import CuentasCorrientes from "./modules/cuentasCorrientes/CuentasCorrientes";
 import CuentasCorrientesProveedores from "./modules/cuentasCorrientes/CuentasCorrientesProveedores";
+import ImportesPendientes from "./modules/cuentasCorrientes/ImportesPendientes";
+import { tienePermiso } from "./config/permisos";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
@@ -95,7 +97,7 @@ type VistaActiva =
   | "usuario";
 
 type MovimientoSubvista = "recepcion" | "reposicion" | "stock" | "individual";
-type CuentaCorrienteSubvista = "clientes" | "proveedores";
+type CuentaCorrienteSubvista = "clientes" | "proveedores" | "pendientes";
 
 type MenuIconKey =
   | "login"
@@ -1648,6 +1650,10 @@ if (vistaActiva === "cuentasCorrientes") {
     );
   }
 
+  if (cuentaCorrienteSubvista === "pendientes") {
+    return <ImportesPendientes usuario={usuarioSesion} />;
+  }
+
   return <CuentasCorrientes usuario={usuarioSesion} />;
 }
 
@@ -1766,8 +1772,32 @@ if (vistaActiva === "cuentasCorrientes") {
 
                   {grupoCuentaCorrienteAbierto && (
                     <div className="side-menu-submenu">
-                      <button type="button" onClick={() => abrirCuentaCorriente("clientes")}>Clientes</button>
-                      <button type="button" onClick={() => abrirCuentaCorriente("proveedores")}>Proveedores</button>
+                      <button
+                        type="button"
+                        onClick={() => abrirCuentaCorriente("clientes")}
+                      >
+                        Clientes
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => abrirCuentaCorriente("proveedores")}
+                      >
+                        Proveedores
+                      </button>
+
+                      {usuarioSesion &&
+                        tienePermiso(
+                          usuarioSesion.rol,
+                          "cuentasCorrientes.editarGuardado"
+                        ) && (
+                          <button
+                            type="button"
+                            onClick={() => abrirCuentaCorriente("pendientes")}
+                          >
+                            Importes pendientes
+                          </button>
+                        )}
                     </div>
                   )}
                 </div>

@@ -170,6 +170,54 @@ async function listarMovimientos(clienteId: string) {
     .filter((movimiento) => movimiento.clienteIds.includes(clienteId));
 }
 
+
+async function listarImportesPendientes() {
+  const { token, baseId, movimientosTable } = getAirtableConfig();
+
+  const movimientosPendientes: ReturnType<typeof mapearMovimiento>[] = [];
+  let offset = "";
+
+  do {
+    const url = new URL(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+        movimientosTable
+      )}`
+    );
+
+    url.searchParams.set("pageSize", "100");
+    url.searchParams.set("sort[0][field]", "FECHA");
+    url.searchParams.set("sort[0][direction]", "desc");
+    url.searchParams.set(
+      "filterByFormula",
+      'AND({TIPO_MOVIMIENTO}="REMITO EMITIDO",{IMPORTE}=0)'
+    );
+
+    if (offset) {
+      url.searchParams.set("offset", offset);
+    }
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = (await response.json()) as AirtableResponse & {
+      offset?: string;
+    };
+
+    if (!response.ok) {
+      console.error("Error listando importes pendientes:", data);
+      throw new Error("No se pudieron obtener los importes pendientes");
+    }
+
+    movimientosPendientes.push(...(data.records || []).map(mapearMovimiento));
+    offset = data.offset || "";
+  } while (offset);
+
+  return movimientosPendientes;
+}
+
 async function crearMovimiento(payload: MovimientoPayload) {
   const { token, baseId, movimientosTable } = getAirtableConfig();
 
@@ -361,6 +409,19 @@ async function actualizarMovimiento(payload: ActualizarMovimientoPayload) {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "GET") {
+      const pendientes = String(req.query.pendientes || "")
+        .trim()
+        .toLowerCase();
+
+      if (pendientes === "true") {
+        const movimientos = await listarImportesPendientes();
+
+        return res.status(200).json({
+          ok: true,
+          movimientos,
+        });
+      }
+
       const clienteId = String(req.query.clienteId || "").trim();
 
       if (!clienteId) {

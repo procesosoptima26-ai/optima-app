@@ -15,6 +15,90 @@ type UsuarioSesion = {
   modulos: string[];
 };
 
+type EstadoCliente = "DEBE" | "AL DIA" | "A FAVOR" | string;
+type TipoMovimiento = "REMITO EMITIDO" | "PAGO RECIBIDO";
+type Vista = "lista" | "detalle" | "formulario" | "nuevoCliente";
+
+type Cliente = {
+  id: string;
+  cliente: string;
+  telefono: string;
+  cuit: string;
+  direccion: string;
+  observaciones: string;
+  saldoActual: number;
+  estado: EstadoCliente;
+};
+
+type Movimiento = {
+  id: string;
+  clienteIds: string[];
+  fecha: string;
+  tipoMovimiento: TipoMovimiento;
+  medioPago: MedioPago;
+  comprobante: string;
+  datosPago: string;
+  importe: number;
+  importeFirmado: number;
+  observacion: string;
+  responsable: string;
+};
+
+type ItemRemitoFormulario = {
+  idLocal: string;
+  descripcion: string;
+  cantidad: string;
+  unidad: string;
+  observaciones: string;
+};
+
+type RespuestaClientes = {
+  ok?: boolean;
+  clientes?: Cliente[];
+  cliente?: Cliente;
+  error?: string;
+};
+
+type RespuestaMovimientos = {
+  ok?: boolean;
+  movimientos?: Movimiento[];
+  movimiento?: Movimiento;
+  error?: string;
+};
+
+type RespuestaNumeroRemito = {
+  ok?: boolean;
+  siguienteNumero?: number;
+  comprobante?: string;
+  error?: string;
+};
+
+type RespuestaCrearRemito = {
+  ok?: boolean;
+  remito?: {
+    id: string;
+    numero: number;
+    comprobante: string;
+  };
+  error?: string;
+};
+
+type Props = {
+  usuario: UsuarioSesion;
+};
+
+const UNIDADES_REMITO = [
+  "UNIDAD",
+  "CAJÓN",
+  "MAPLE",
+  "CAJA",
+  "PACK",
+  "KILO",
+  "GRAMO",
+  "LITRO",
+  "OTRO",
+];
+
 function formatearPesos(valor: number) {
   return valor.toLocaleString("es-AR", {
     style: "currency",
@@ -37,6 +121,16 @@ function formatearFechaParaMostrar(fecha: string) {
   }
 
   return fecha;
+}
+
+function crearItemVacio(): ItemRemitoFormulario {
+  return {
+    idLocal: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    descripcion: "",
+    cantidad: "",
+    unidad: "UNIDAD",
+    observaciones: "",
+  };
 }
 
 function abrirVentanaImpresion(html: string) {
@@ -191,54 +285,6 @@ function construirHtmlExportacion(params: {
   `;
 }
 
-
-type EstadoCliente = "DEBE" | "AL DIA" | "A FAVOR" | string;
-type TipoMovimiento = "REMITO EMITIDO" | "PAGO RECIBIDO";
-type Vista = "lista" | "detalle" | "formulario" | "nuevoCliente";
-
-type Cliente = {
-  id: string;
-  cliente: string;
-  telefono: string;
-  cuit: string;
-  direccion: string;
-  observaciones: string;
-  saldoActual: number;
-  estado: EstadoCliente;
-};
-
-type Movimiento = {
-  id: string;
-  clienteIds: string[];
-  fecha: string;
-  tipoMovimiento: TipoMovimiento;
-  medioPago: MedioPago;
-  comprobante: string;
-  datosPago: string;
-  importe: number;
-  importeFirmado: number;
-  observacion: string;
-  responsable: string;
-};
-
-type RespuestaClientes = {
-  ok?: boolean;
-  clientes?: Cliente[];
-  cliente?: Cliente;
-  error?: string;
-};
-
-type RespuestaMovimientos = {
-  ok?: boolean;
-  movimientos?: Movimiento[];
-  movimiento?: Movimiento;
-  error?: string;
-};
-
-type Props = {
-  usuario: UsuarioSesion;
-};
-
 function obtenerEstadoDesdeSaldo(saldo: number): EstadoCliente {
   if (saldo > 0) return "DEBE";
   if (saldo < 0) return "A FAVOR";
@@ -273,9 +319,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
   const [busqueda, setBusqueda] = useState("");
   const [cargandoClientes, setCargandoClientes] = useState(false);
   const [cargandoMovimientos, setCargandoMovimientos] = useState(false);
+  const [cargandoNumeroRemito, setCargandoNumeroRemito] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<Mensaje>(null);
   const [tipoFormulario, setTipoFormulario] = useState<TipoMovimiento>("REMITO EMITIDO");
+  const [numeroRemitoAutomatico, setNumeroRemitoAutomatico] = useState("");
 
   const [nuevoCliente, setNuevoCliente] = useState({
     cliente: "",
@@ -294,6 +342,10 @@ export default function CuentasCorrientes({ usuario }: Props) {
     observacion: "",
     responsable: "",
   });
+
+  const [itemsRemito, setItemsRemito] = useState<ItemRemitoFormulario[]>([
+    crearItemVacio(),
+  ]);
 
   const clienteSeleccionado = clientes.find(
     (cliente) => cliente.id === clienteSeleccionadoId
@@ -369,6 +421,30 @@ export default function CuentasCorrientes({ usuario }: Props) {
     }
   }
 
+  async function cargarSiguienteNumeroRemito() {
+    try {
+      setCargandoNumeroRemito(true);
+      setNumeroRemitoAutomatico("");
+
+      const response = await fetch("/api/remitos-clientes");
+      const data = (await response.json()) as RespuestaNumeroRemito;
+
+      if (!response.ok || !data.ok || !data.comprobante) {
+        throw new Error(data.error || "No se pudo obtener el próximo número");
+      }
+
+      setNumeroRemitoAutomatico(data.comprobante);
+    } catch (error) {
+      console.error("Error obteniendo número de remito:", error);
+      setMensaje({
+        tipo: "error",
+        texto: "No se pudo obtener el número automático del remito.",
+      });
+    } finally {
+      setCargandoNumeroRemito(false);
+    }
+  }
+
   async function abrirDetalle(clienteId: string) {
     setClienteSeleccionadoId(clienteId);
     setMovimientoEditandoId(null);
@@ -385,7 +461,7 @@ export default function CuentasCorrientes({ usuario }: Props) {
     cargarClientes();
   }
 
-  function abrirFormulario(tipo: TipoMovimiento) {
+  async function abrirFormulario(tipo: TipoMovimiento) {
     setMovimientoEditandoId(null);
     setTipoFormulario(tipo);
     setFormMovimiento({
@@ -397,8 +473,14 @@ export default function CuentasCorrientes({ usuario }: Props) {
       observacion: "",
       responsable: "",
     });
+    setItemsRemito([crearItemVacio()]);
+    setNumeroRemitoAutomatico("");
     setMensaje(null);
     setVista("formulario");
+
+    if (tipo === "REMITO EMITIDO") {
+      await cargarSiguienteNumeroRemito();
+    }
   }
 
   function editarMovimiento(movimiento: Movimiento) {
@@ -407,7 +489,9 @@ export default function CuentasCorrientes({ usuario }: Props) {
     setMovimientoEditandoId(movimiento.id);
     setTipoFormulario(movimiento.tipoMovimiento);
     setFormMovimiento({
-      fecha: movimiento.fecha.includes("/") ? movimiento.fecha.split("/").reverse().join("-") : movimiento.fecha,
+      fecha: movimiento.fecha.includes("/")
+        ? movimiento.fecha.split("/").reverse().join("-")
+        : movimiento.fecha,
       comprobante: movimiento.comprobante,
       medioPago: movimiento.medioPago || "",
       datosPago: movimiento.datosPago,
@@ -415,11 +499,42 @@ export default function CuentasCorrientes({ usuario }: Props) {
       observacion: movimiento.observacion,
       responsable: movimiento.responsable,
     });
+    setNumeroRemitoAutomatico(movimiento.comprobante);
+    setItemsRemito([crearItemVacio()]);
     setMensaje({
       tipo: "info",
-      texto: "Editando movimiento guardado.",
+      texto:
+        movimiento.tipoMovimiento === "REMITO EMITIDO"
+          ? "Editando los datos generales del remito. Los ítems existentes no se modifican desde esta pantalla."
+          : "Editando movimiento guardado.",
     });
     setVista("formulario");
+  }
+
+  function agregarItemRemito() {
+    setItemsRemito((actuales) => [...actuales, crearItemVacio()]);
+  }
+
+  function quitarItemRemito(idLocal: string) {
+    setItemsRemito((actuales) => {
+      if (actuales.length === 1) {
+        return actuales;
+      }
+
+      return actuales.filter((item) => item.idLocal !== idLocal);
+    });
+  }
+
+  function actualizarItemRemito(
+    idLocal: string,
+    campo: keyof Omit<ItemRemitoFormulario, "idLocal">,
+    valor: string
+  ) {
+    setItemsRemito((actuales) =>
+      actuales.map((item) =>
+        item.idLocal === idLocal ? { ...item, [campo]: valor } : item
+      )
+    );
   }
 
   async function guardarNuevoCliente() {
@@ -466,6 +581,35 @@ export default function CuentasCorrientes({ usuario }: Props) {
     }
   }
 
+  function validarItemsRemito() {
+    if (itemsRemito.length === 0) {
+      return "Agregá al menos un ítem al remito.";
+    }
+
+    for (let index = 0; index < itemsRemito.length; index += 1) {
+      const item = itemsRemito[index];
+      const cantidad = Number(item.cantidad);
+
+      if (!item.descripcion.trim()) {
+        return `Completá la descripción del ítem ${index + 1}.`;
+      }
+
+      if (
+        item.cantidad.trim() === "" ||
+        Number.isNaN(cantidad) ||
+        cantidad <= 0
+      ) {
+        return `La cantidad del ítem ${index + 1} debe ser mayor a cero.`;
+      }
+
+      if (!item.unidad.trim()) {
+        return `Seleccioná la unidad del ítem ${index + 1}.`;
+      }
+    }
+
+    return "";
+  }
+
   async function guardarMovimiento() {
     if (!clienteSeleccionadoId) return;
 
@@ -480,7 +624,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
       return;
     }
 
-    if (importeTexto === "" || Number.isNaN(importeNumerico) || importeNumerico < 0) {
+    if (
+      importeTexto === "" ||
+      Number.isNaN(importeNumerico) ||
+      importeNumerico < 0
+    ) {
       setMensaje({
         tipo: "error",
         texto: "El importe debe ser cero o mayor.",
@@ -501,6 +649,18 @@ export default function CuentasCorrientes({ usuario }: Props) {
       return;
     }
 
+    if (
+      tipoFormulario === "REMITO EMITIDO" &&
+      !movimientoEditandoId
+    ) {
+      const errorItems = validarItemsRemito();
+
+      if (errorItems) {
+        setMensaje({ tipo: "error", texto: errorItems });
+        return;
+      }
+    }
+
     try {
       setGuardando(true);
       setMensaje({
@@ -508,42 +668,77 @@ export default function CuentasCorrientes({ usuario }: Props) {
         texto: movimientoEditandoId
           ? "Actualizando movimiento..."
           : tipoFormulario === "REMITO EMITIDO"
-          ? "Guardando remito..."
+          ? "Guardando remito e ítems..."
           : "Guardando pago...",
       });
 
-      const response = await fetch("/api/movimientos-cc", {
+      const esNuevoRemito =
+        tipoFormulario === "REMITO EMITIDO" && !movimientoEditandoId;
+
+      const endpoint = esNuevoRemito
+        ? "/api/remitos-clientes"
+        : "/api/movimientos-cc";
+
+      const body = esNuevoRemito
+        ? {
+            clienteId: clienteSeleccionadoId,
+            fecha: formMovimiento.fecha,
+            importe: importeNumerico,
+            observaciones: formMovimiento.observacion,
+            responsable: formMovimiento.responsable,
+            items: itemsRemito.map((item) => ({
+              descripcion: item.descripcion,
+              cantidad: Number(item.cantidad),
+              unidad: item.unidad,
+              observaciones: item.observaciones,
+            })),
+          }
+        : movimientoEditandoId
+        ? {
+            id: movimientoEditandoId,
+            fecha: formMovimiento.fecha,
+            comprobante: formMovimiento.comprobante,
+            medioPago:
+              tipoFormulario === "PAGO RECIBIDO"
+                ? formMovimiento.medioPago
+                : "",
+            datosPago:
+              tipoFormulario === "PAGO RECIBIDO"
+                ? formMovimiento.datosPago
+                : "",
+            importe: importeNumerico,
+            observacion: formMovimiento.observacion,
+            responsable: formMovimiento.responsable,
+          }
+        : {
+            clienteId: clienteSeleccionadoId,
+            fecha: formMovimiento.fecha,
+            tipoMovimiento: tipoFormulario,
+            comprobante: formMovimiento.comprobante,
+            medioPago:
+              tipoFormulario === "PAGO RECIBIDO"
+                ? formMovimiento.medioPago
+                : "",
+            datosPago:
+              tipoFormulario === "PAGO RECIBIDO"
+                ? formMovimiento.datosPago
+                : "",
+            importe: importeNumerico,
+            observacion: formMovimiento.observacion,
+            responsable: formMovimiento.responsable,
+          };
+
+      const response = await fetch(endpoint, {
         method: movimientoEditandoId ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(
-          movimientoEditandoId
-            ? {
-                id: movimientoEditandoId,
-                fecha: formMovimiento.fecha,
-                comprobante: formMovimiento.comprobante,
-                medioPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.medioPago : "",
-                datosPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.datosPago : "",
-                importe: importeNumerico,
-                observacion: formMovimiento.observacion,
-                responsable: formMovimiento.responsable,
-              }
-            : {
-                clienteId: clienteSeleccionadoId,
-                fecha: formMovimiento.fecha,
-                tipoMovimiento: tipoFormulario,
-                comprobante: formMovimiento.comprobante,
-                medioPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.medioPago : "",
-                datosPago: tipoFormulario === "PAGO RECIBIDO" ? formMovimiento.datosPago : "",
-                importe: importeNumerico,
-                observacion: formMovimiento.observacion,
-                responsable: formMovimiento.responsable,
-              }
-        ),
+        body: JSON.stringify(body),
       });
 
-      const data = (await response.json()) as RespuestaMovimientos;
+      const data = esNuevoRemito
+        ? ((await response.json()) as RespuestaCrearRemito)
+        : ((await response.json()) as RespuestaMovimientos);
 
       if (!response.ok || !data.ok) {
         throw new Error(data.error || "No se pudo guardar el movimiento");
@@ -559,18 +754,22 @@ export default function CuentasCorrientes({ usuario }: Props) {
         texto: movimientoEditandoId
           ? "Movimiento actualizado correctamente."
           : tipoFormulario === "REMITO EMITIDO"
-          ? "Remito guardado correctamente."
+          ? "Remito e ítems guardados correctamente."
           : "Pago guardado correctamente.",
       });
     } catch (error) {
       console.error("Error guardando movimiento:", error);
+
       setMensaje({
         tipo: "error",
-        texto: movimientoEditandoId
-          ? "No se pudo actualizar el movimiento."
-          : tipoFormulario === "REMITO EMITIDO"
-          ? "No se pudo guardar el remito."
-          : "No se pudo guardar el pago.",
+        texto:
+          error instanceof Error && error.message
+            ? error.message
+            : movimientoEditandoId
+            ? "No se pudo actualizar el movimiento."
+            : tipoFormulario === "REMITO EMITIDO"
+            ? "No se pudo guardar el remito."
+            : "No se pudo guardar el pago.",
       });
     } finally {
       setGuardando(false);
@@ -591,11 +790,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
           return {
             fecha: formatearFechaParaMostrar(movimiento.fecha),
             titulo:
-              movimiento.comprobante || (esPago ? "Pago recibido" : "Remito emitido"),
+              movimiento.comprobante ||
+              (esPago ? "Pago recibido" : "Remito emitido"),
             detalle: esPago
-              ? `Pago recibido${movimiento.medioPago ? ` · ${movimiento.medioPago}` : ""}${
-                  movimiento.datosPago ? ` · ${movimiento.datosPago}` : ""
-                }`
+              ? `Pago recibido${
+                  movimiento.medioPago ? ` · ${movimiento.medioPago}` : ""
+                }${movimiento.datosPago ? ` · ${movimiento.datosPago}` : ""}`
               : "Remito emitido",
             observacion: movimiento.observacion,
             responsable: movimiento.responsable,
@@ -629,7 +829,9 @@ export default function CuentasCorrientes({ usuario }: Props) {
         )}
       </div>
 
-      {mensaje && <div className={`message message-${mensaje.tipo}`}>{mensaje.texto}</div>}
+      {mensaje && (
+        <div className={`message message-${mensaje.tipo}`}>{mensaje.texto}</div>
+      )}
 
       {vista === "lista" && (
         <div className="cc-stack">
@@ -647,7 +849,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
               placeholder="Buscar cliente..."
             />
 
-            <button className="cc-primary-button" type="button" onClick={() => setVista("nuevoCliente")}>
+            <button
+              className="cc-primary-button"
+              type="button"
+              onClick={() => setVista("nuevoCliente")}
+            >
               + Nuevo cliente
             </button>
           </div>
@@ -659,7 +865,9 @@ export default function CuentasCorrientes({ usuario }: Props) {
           ) : (
             <div className="cc-client-list">
               {clientesFiltrados.map((cliente) => {
-                const estado = cliente.estado || obtenerEstadoDesdeSaldo(cliente.saldoActual);
+                const estado =
+                  cliente.estado ||
+                  obtenerEstadoDesdeSaldo(cliente.saldoActual);
 
                 return (
                   <button
@@ -673,7 +881,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
                       <p>{cliente.telefono || "Sin teléfono cargado"}</p>
                     </div>
 
-                    <strong className={`cc-status-pill cc-status-${obtenerClaseEstado(estado)}`}>
+                    <strong
+                      className={`cc-status-pill cc-status-${obtenerClaseEstado(
+                        estado
+                      )}`}
+                    >
                       {obtenerTextoSaldo(cliente.saldoActual)}
                     </strong>
                   </button>
@@ -693,7 +905,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
             Nombre del cliente *
             <input
               value={nuevoCliente.cliente}
-              onChange={(event) => setNuevoCliente({ ...nuevoCliente, cliente: event.target.value })}
+              onChange={(event) =>
+                setNuevoCliente({
+                  ...nuevoCliente,
+                  cliente: event.target.value,
+                })
+              }
               placeholder="Ej: Despensa Norte"
             />
           </label>
@@ -702,7 +919,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
             Teléfono
             <input
               value={nuevoCliente.telefono}
-              onChange={(event) => setNuevoCliente({ ...nuevoCliente, telefono: event.target.value })}
+              onChange={(event) =>
+                setNuevoCliente({
+                  ...nuevoCliente,
+                  telefono: event.target.value,
+                })
+              }
               placeholder="Ej: 3794 222 456"
             />
           </label>
@@ -711,7 +933,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
             CUIT
             <input
               value={nuevoCliente.cuit}
-              onChange={(event) => setNuevoCliente({ ...nuevoCliente, cuit: event.target.value })}
+              onChange={(event) =>
+                setNuevoCliente({
+                  ...nuevoCliente,
+                  cuit: event.target.value,
+                })
+              }
               placeholder="Opcional"
             />
           </label>
@@ -720,7 +947,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
             Dirección
             <input
               value={nuevoCliente.direccion}
-              onChange={(event) => setNuevoCliente({ ...nuevoCliente, direccion: event.target.value })}
+              onChange={(event) =>
+                setNuevoCliente({
+                  ...nuevoCliente,
+                  direccion: event.target.value,
+                })
+              }
               placeholder="Ej: Barrio Norte"
             />
           </label>
@@ -729,12 +961,22 @@ export default function CuentasCorrientes({ usuario }: Props) {
             Observaciones
             <textarea
               value={nuevoCliente.observaciones}
-              onChange={(event) => setNuevoCliente({ ...nuevoCliente, observaciones: event.target.value })}
+              onChange={(event) =>
+                setNuevoCliente({
+                  ...nuevoCliente,
+                  observaciones: event.target.value,
+                })
+              }
               placeholder="Opcional"
             />
           </label>
 
-          <button className="cc-primary-button cc-full-button" type="button" onClick={guardarNuevoCliente} disabled={guardando}>
+          <button
+            className="cc-primary-button cc-full-button"
+            type="button"
+            onClick={guardarNuevoCliente}
+            disabled={guardando}
+          >
             {guardando ? "Guardando..." : "Guardar cliente"}
           </button>
         </section>
@@ -748,27 +990,51 @@ export default function CuentasCorrientes({ usuario }: Props) {
 
             <div className="cc-balance-box">
               <span>Saldo actual</span>
-              <strong>{formatearPesos(clienteSeleccionado.saldoActual)}</strong>
+              <strong>
+                {formatearPesos(clienteSeleccionado.saldoActual)}
+              </strong>
               <p>{obtenerTextoSaldo(clienteSeleccionado.saldoActual)}</p>
             </div>
 
             <div className="cc-info-list">
-              <p><strong>Teléfono:</strong> {clienteSeleccionado.telefono || "Sin cargar"}</p>
-              <p><strong>Dirección:</strong> {clienteSeleccionado.direccion || "Sin cargar"}</p>
-              {clienteSeleccionado.cuit && <p><strong>CUIT:</strong> {clienteSeleccionado.cuit}</p>}
+              <p>
+                <strong>Teléfono:</strong>{" "}
+                {clienteSeleccionado.telefono || "Sin cargar"}
+              </p>
+              <p>
+                <strong>Dirección:</strong>{" "}
+                {clienteSeleccionado.direccion || "Sin cargar"}
+              </p>
+              {clienteSeleccionado.cuit && (
+                <p>
+                  <strong>CUIT:</strong> {clienteSeleccionado.cuit}
+                </p>
+              )}
             </div>
 
             <div className="cc-action-grid">
-              <button className="cc-primary-button" type="button" onClick={() => abrirFormulario("REMITO EMITIDO")}>
+              <button
+                className="cc-primary-button"
+                type="button"
+                onClick={() => abrirFormulario("REMITO EMITIDO")}
+              >
                 Registrar remito
               </button>
 
-              <button className="cc-green-button" type="button" onClick={() => abrirFormulario("PAGO RECIBIDO")}>
+              <button
+                className="cc-green-button"
+                type="button"
+                onClick={() => abrirFormulario("PAGO RECIBIDO")}
+              >
                 Registrar pago
               </button>
 
               {puedeExportar && (
-                <button className="cc-soft-button" type="button" onClick={exportarHistorial}>
+                <button
+                  className="cc-soft-button"
+                  type="button"
+                  onClick={exportarHistorial}
+                >
                   Exportar historial
                 </button>
               )}
@@ -781,28 +1047,69 @@ export default function CuentasCorrientes({ usuario }: Props) {
             {cargandoMovimientos ? (
               <div className="cc-empty-card">Cargando historial...</div>
             ) : movimientos.length === 0 ? (
-              <div className="cc-empty-card">Todavía no hay movimientos cargados.</div>
+              <div className="cc-empty-card">
+                Todavía no hay movimientos cargados.
+              </div>
             ) : (
               movimientos.map((movimiento) => {
-                const esPago = movimiento.tipoMovimiento === "PAGO RECIBIDO";
+                const esPago =
+                  movimiento.tipoMovimiento === "PAGO RECIBIDO";
 
                 return (
-                  <article key={movimiento.id} className="cc-movement-card">
+                  <article
+                    key={movimiento.id}
+                    className="cc-movement-card"
+                  >
                     <div>
-                      <span>{formatearFechaParaMostrar(movimiento.fecha)}</span>
-                      <h4>{movimiento.comprobante || (esPago ? "Pago recibido" : "Remito emitido")}</h4>
-                      <p>{esPago ? `Pago recibido${movimiento.medioPago ? ` · ${movimiento.medioPago}` : ""}` : "Remito emitido"}</p>
-                      {movimiento.datosPago && <p>{movimiento.datosPago}</p>}
-                      {movimiento.observacion && <p>{movimiento.observacion}</p>}
-                      {movimiento.responsable && <p>Responsable: {movimiento.responsable}</p>}
+                      <span>
+                        {formatearFechaParaMostrar(movimiento.fecha)}
+                      </span>
+                      <h4>
+                        {movimiento.comprobante ||
+                          (esPago
+                            ? "Pago recibido"
+                            : "Remito emitido")}
+                      </h4>
+                      <p>
+                        {esPago
+                          ? `Pago recibido${
+                              movimiento.medioPago
+                                ? ` · ${movimiento.medioPago}`
+                                : ""
+                            }`
+                          : "Remito emitido"}
+                      </p>
+                      {movimiento.datosPago && (
+                        <p>{movimiento.datosPago}</p>
+                      )}
+                      {movimiento.observacion && (
+                        <p>{movimiento.observacion}</p>
+                      )}
+                      {movimiento.responsable && (
+                        <p>
+                          Responsable: {movimiento.responsable}
+                        </p>
+                      )}
                     </div>
 
                     <div>
-                      <strong className={esPago ? "cc-amount-negative" : "cc-amount-positive"}>
+                      <strong
+                        className={
+                          esPago
+                            ? "cc-amount-negative"
+                            : "cc-amount-positive"
+                        }
+                      >
                         {!esPago && movimiento.importe === 0
                           ? "Importe pendiente"
-                          : `${movimiento.importeFirmado > 0 ? "+" : "-"}${formatearPesos(
-                              Math.abs(movimiento.importeFirmado)
+                          : `${
+                              movimiento.importeFirmado > 0
+                                ? "+"
+                                : "-"
+                            }${formatearPesos(
+                              Math.abs(
+                                movimiento.importeFirmado
+                              )
                             )}`}
                       </strong>
 
@@ -810,7 +1117,9 @@ export default function CuentasCorrientes({ usuario }: Props) {
                         <button
                           className="cc-soft-button"
                           type="button"
-                          onClick={() => editarMovimiento(movimiento)}
+                          onClick={() =>
+                            editarMovimiento(movimiento)
+                          }
                           style={{ marginTop: "10px" }}
                         >
                           Editar
@@ -836,12 +1145,33 @@ export default function CuentasCorrientes({ usuario }: Props) {
               : "Registrar pago"}
           </h3>
 
+          {tipoFormulario === "REMITO EMITIDO" &&
+            !movimientoEditandoId && (
+              <div className="cc-remito-number-card">
+                <span>Número automático</span>
+                <strong>
+                  {cargandoNumeroRemito
+                    ? "Consultando..."
+                    : numeroRemitoAutomatico ||
+                      "No disponible"}
+                </strong>
+                <p>
+                  El número definitivo se confirma al guardar.
+                </p>
+              </div>
+            )}
+
           <label>
             Fecha *
             <input
               type="date"
               value={formMovimiento.fecha}
-              onChange={(event) => setFormMovimiento({ ...formMovimiento, fecha: event.target.value })}
+              onChange={(event) =>
+                setFormMovimiento({
+                  ...formMovimiento,
+                  fecha: event.target.value,
+                })
+              }
             />
           </label>
 
@@ -850,31 +1180,50 @@ export default function CuentasCorrientes({ usuario }: Props) {
               Medio de pago *
               <select
                 value={formMovimiento.medioPago}
-                onChange={(event) => setFormMovimiento({ ...formMovimiento, medioPago: event.target.value as MedioPago })}
+                onChange={(event) =>
+                  setFormMovimiento({
+                    ...formMovimiento,
+                    medioPago: event.target.value as MedioPago,
+                  })
+                }
               >
                 <option value="">Seleccionar</option>
                 <option value="EFECTIVO">Efectivo</option>
-                <option value="TRANSFERENCIA">Transferencia</option>
+                <option value="TRANSFERENCIA">
+                  Transferencia
+                </option>
                 <option value="ECHEQ">Echeq</option>
               </select>
             </label>
           )}
 
-          <label>
-            Comprobante
-            <input
-              value={formMovimiento.comprobante}
-              onChange={(event) => setFormMovimiento({ ...formMovimiento, comprobante: event.target.value })}
-              placeholder={tipoFormulario === "REMITO EMITIDO" ? "Ej: Remito N° 0008" : "Ej: Recibo N° 001"}
-            />
-          </label>
+          {tipoFormulario === "PAGO RECIBIDO" && (
+            <label>
+              Comprobante
+              <input
+                value={formMovimiento.comprobante}
+                onChange={(event) =>
+                  setFormMovimiento({
+                    ...formMovimiento,
+                    comprobante: event.target.value,
+                  })
+                }
+                placeholder="Ej: Recibo N° 001"
+              />
+            </label>
+          )}
 
           {tipoFormulario === "PAGO RECIBIDO" && (
             <label>
               Datos del pago
               <textarea
                 value={formMovimiento.datosPago}
-                onChange={(event) => setFormMovimiento({ ...formMovimiento, datosPago: event.target.value })}
+                onChange={(event) =>
+                  setFormMovimiento({
+                    ...formMovimiento,
+                    datosPago: event.target.value,
+                  })
+                }
                 placeholder="Ej: Echeq N° 456 vence 20/07 o transferencia operación 123"
               />
             </label>
@@ -887,17 +1236,146 @@ export default function CuentasCorrientes({ usuario }: Props) {
               min="0"
               step="0.01"
               value={formMovimiento.importe}
-              onChange={(event) => setFormMovimiento({ ...formMovimiento, importe: event.target.value })}
-              placeholder="Ej: 125000"
+              onChange={(event) =>
+                setFormMovimiento({
+                  ...formMovimiento,
+                  importe: event.target.value,
+                })
+              }
+              placeholder="Puede ser 0"
             />
           </label>
 
+          {tipoFormulario === "REMITO EMITIDO" &&
+            !movimientoEditandoId && (
+              <section className="cc-items-section">
+                <div className="cc-items-title-row">
+                  <div>
+                    <span>Detalle del remito</span>
+                    <h4>Ítems</h4>
+                  </div>
+
+                  <button
+                    className="cc-add-item-button"
+                    type="button"
+                    onClick={agregarItemRemito}
+                  >
+                    + Agregar ítem
+                  </button>
+                </div>
+
+                <div className="cc-items-list">
+                  {itemsRemito.map((item, index) => (
+                    <article
+                      key={item.idLocal}
+                      className="cc-item-card"
+                    >
+                      <div className="cc-item-header">
+                        <strong>Ítem {index + 1}</strong>
+
+                        {itemsRemito.length > 1 && (
+                          <button
+                            type="button"
+                            className="cc-remove-item-button"
+                            onClick={() =>
+                              quitarItemRemito(item.idLocal)
+                            }
+                          >
+                            Quitar
+                          </button>
+                        )}
+                      </div>
+
+                      <label>
+                        Descripción *
+                        <input
+                          value={item.descripcion}
+                          onChange={(event) =>
+                            actualizarItemRemito(
+                              item.idLocal,
+                              "descripcion",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Ej: Cajones de huevo"
+                        />
+                      </label>
+
+                      <div className="cc-item-grid">
+                        <label>
+                          Cantidad *
+                          <input
+                            type="number"
+                            min="0.001"
+                            step="0.001"
+                            value={item.cantidad}
+                            onChange={(event) =>
+                              actualizarItemRemito(
+                                item.idLocal,
+                                "cantidad",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Ej: 30"
+                          />
+                        </label>
+
+                        <label>
+                          Unidad *
+                          <select
+                            value={item.unidad}
+                            onChange={(event) =>
+                              actualizarItemRemito(
+                                item.idLocal,
+                                "unidad",
+                                event.target.value
+                              )
+                            }
+                          >
+                            {UNIDADES_REMITO.map((unidad) => (
+                              <option key={unidad} value={unidad}>
+                                {unidad}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+
+                      <label>
+                        Observación del ítem
+                        <input
+                          value={item.observaciones}
+                          onChange={(event) =>
+                            actualizarItemRemito(
+                              item.idLocal,
+                              "observaciones",
+                              event.target.value
+                            )
+                          }
+                          placeholder="Opcional"
+                        />
+                      </label>
+                    </article>
+                  ))}
+                </div>
+              </section>
+            )}
+
           <label>
-            Observación
+            Observación general
             <textarea
               value={formMovimiento.observacion}
-              onChange={(event) => setFormMovimiento({ ...formMovimiento, observacion: event.target.value })}
-              placeholder={tipoFormulario === "REMITO EMITIDO" ? "Ej: Entrega semanal" : "Ej: Pago parcial"}
+              onChange={(event) =>
+                setFormMovimiento({
+                  ...formMovimiento,
+                  observacion: event.target.value,
+                })
+              }
+              placeholder={
+                tipoFormulario === "REMITO EMITIDO"
+                  ? "Ej: Entrega semanal"
+                  : "Ej: Pago parcial"
+              }
             />
           </label>
 
@@ -905,12 +1383,27 @@ export default function CuentasCorrientes({ usuario }: Props) {
             Responsable
             <input
               value={formMovimiento.responsable}
-              onChange={(event) => setFormMovimiento({ ...formMovimiento, responsable: event.target.value })}
+              onChange={(event) =>
+                setFormMovimiento({
+                  ...formMovimiento,
+                  responsable: event.target.value,
+                })
+              }
               placeholder="Ej: Juan"
             />
           </label>
 
-          <button className="cc-primary-button cc-full-button" type="button" onClick={guardarMovimiento} disabled={guardando}>
+          <button
+            className="cc-primary-button cc-full-button"
+            type="button"
+            onClick={guardarMovimiento}
+            disabled={
+              guardando ||
+              (tipoFormulario === "REMITO EMITIDO" &&
+                !movimientoEditandoId &&
+                cargandoNumeroRemito)
+            }
+          >
             {guardando
               ? movimientoEditandoId
                 ? "Actualizando..."

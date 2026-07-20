@@ -1,9 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-dotenv.config({
-  path: ".env.local",
-});
+dotenv.config({ path: ".env.local" });
 
 type AirtableRecord = {
   id: string;
@@ -25,11 +23,7 @@ type ClientePayload = {
 
 function getEnv(name: string) {
   const value = process.env[name];
-
-  if (!value) {
-    throw new Error(`Falta configurar la variable de entorno: ${name}`);
-  }
-
+  if (!value) throw new Error(`Falta configurar la variable de entorno: ${name}`);
   return value;
 }
 
@@ -38,7 +32,7 @@ function normalizarTexto(valor: unknown): string {
   if (typeof valor === "number") return String(valor);
 
   if (Array.isArray(valor)) {
-    return valor.map((item) => normalizarTexto(item)).filter(Boolean).join(", ");
+    return valor.map(normalizarTexto).filter(Boolean).join(", ");
   }
 
   return "";
@@ -46,12 +40,10 @@ function normalizarTexto(valor: unknown): string {
 
 function normalizarNumero(valor: unknown): number {
   if (typeof valor === "number") return valor;
-
   if (typeof valor === "string") {
     const numero = Number(valor);
     return Number.isNaN(numero) ? 0 : numero;
   }
-
   return 0;
 }
 
@@ -71,13 +63,14 @@ function getAirtableConfig() {
 
 function mapearCliente(record: AirtableRecord) {
   const saldo = normalizarNumero(record.fields.SALDO_ACTUAL);
-  const estado = normalizarTexto(record.fields.ESTADO) || obtenerEstadoDesdeSaldo(saldo);
+  const estado =
+    normalizarTexto(record.fields.ESTADO) || obtenerEstadoDesdeSaldo(saldo);
 
   return {
     id: record.id,
     cliente: normalizarTexto(record.fields.CLIENTE),
     telefono: normalizarTexto(record.fields["TELÉFONO"]),
-    cuit: normalizarTexto(record.fields.CUIT),
+    cuit: normalizarTexto(record.fields["NÚMERO_DOCUMENTO"]),
     direccion: normalizarTexto(record.fields["DIRECCIÓN"]),
     observaciones: normalizarTexto(record.fields.OBSERVACIONES),
     saldoActual: saldo,
@@ -97,9 +90,7 @@ async function listarClientes() {
   url.searchParams.set("sort[0][direction]", "asc");
 
   const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers: { Authorization: `Bearer ${token}` },
   });
 
   const data = (await response.json()) as AirtableResponse;
@@ -114,7 +105,6 @@ async function listarClientes() {
 
 async function crearCliente(payload: ClientePayload) {
   const { token, baseId, clientesTable } = getAirtableConfig();
-
   const nombreCliente = payload.cliente?.trim();
 
   if (!nombreCliente) {
@@ -125,9 +115,18 @@ async function crearCliente(payload: ClientePayload) {
     CLIENTE: nombreCliente,
   };
 
-  if (payload.telefono?.trim()) fields["TELÉFONO"] = payload.telefono.trim();
-  if (payload.cuit?.trim()) fields.CUIT = payload.cuit.trim();
-  if (payload.direccion?.trim()) fields["DIRECCIÓN"] = payload.direccion.trim();
+  if (payload.telefono?.trim()) {
+    fields["TELÉFONO"] = payload.telefono.trim();
+  }
+
+  if (payload.cuit?.trim()) {
+    fields["NÚMERO_DOCUMENTO"] = payload.cuit.trim();
+  }
+
+  if (payload.direccion?.trim()) {
+    fields["DIRECCIÓN"] = payload.direccion.trim();
+  }
+
   if (payload.observaciones?.trim()) {
     fields.OBSERVACIONES = payload.observaciones.trim();
   }
@@ -143,11 +142,7 @@ async function crearCliente(payload: ClientePayload) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      records: [
-        {
-          fields,
-        },
-      ],
+      records: [{ fields }],
       typecast: true,
     }),
   });
@@ -168,29 +163,22 @@ async function crearCliente(payload: ClientePayload) {
   return mapearCliente(record);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+) {
   try {
     if (req.method === "GET") {
       const clientes = await listarClientes();
-
-      return res.status(200).json({
-        ok: true,
-        clientes,
-      });
+      return res.status(200).json({ ok: true, clientes });
     }
 
     if (req.method === "POST") {
       const cliente = await crearCliente(req.body as ClientePayload);
-
-      return res.status(200).json({
-        ok: true,
-        cliente,
-      });
+      return res.status(200).json({ ok: true, cliente });
     }
 
-    return res.status(405).json({
-      error: "Método no permitido",
-    });
+    return res.status(405).json({ error: "Método no permitido" });
   } catch (error) {
     console.error(error);
 

@@ -426,7 +426,7 @@ export default function CuentasCorrientes({ usuario }: Props) {
       setCargandoNumeroRemito(true);
       setNumeroRemitoAutomatico("");
 
-      const response = await fetch("/api/remitos-clientes");
+      const response = await fetch("/api/movimientos-cc?accion=siguiente-remito");
       const data = (await response.json()) as RespuestaNumeroRemito;
 
       if (!response.ok || !data.ok || !data.comprobante) {
@@ -675,12 +675,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
       const esNuevoRemito =
         tipoFormulario === "REMITO EMITIDO" && !movimientoEditandoId;
 
-      const endpoint = esNuevoRemito
-        ? "/api/remitos-clientes"
-        : "/api/movimientos-cc";
+      const endpoint = "/api/movimientos-cc";
 
       const body = esNuevoRemito
         ? {
+            accion: "crear-remito",
             clienteId: clienteSeleccionadoId,
             fecha: formMovimiento.fecha,
             importe: importeNumerico,

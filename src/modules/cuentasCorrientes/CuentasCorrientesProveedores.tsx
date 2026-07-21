@@ -6,6 +6,7 @@ type RolUsuario = "USUARIO" | "ADMIN" | string;
 type MedioPago = "EFECTIVO" | "TRANSFERENCIA" | "ECHEQ" | "";
 type TipoMovimiento = "COMPRA RECIBIDA" | "PAGO REALIZADO";
 type Vista = "lista" | "detalle" | "formulario" | "nuevoProveedor";
+type FiltroHistorial = "ultimos30" | "mesActual" | "todo";
 type Mensaje = { tipo: "info" | "exito" | "error"; texto: string } | null;
 
 type UsuarioSesion = {
@@ -114,6 +115,38 @@ function formatearFecha(fecha: string) {
   return match ? `${match[3]}/${match[2]}/${match[1]}` : fecha;
 }
 
+function convertirFechaMovimiento(fecha: string) {
+  if (!fecha) return new Date(0);
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
+    const [anio, mes, dia] = fecha.split("-").map(Number);
+    return new Date(anio, mes - 1, dia);
+  }
+
+  const [dia, mes, anio] = fecha.split("/").map(Number);
+
+  if (!dia || !mes || !anio) return new Date(0);
+
+  return new Date(anio, mes - 1, dia);
+}
+
+function obtenerInicioFiltro(filtro: FiltroHistorial) {
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  if (filtro === "ultimos30") {
+    const inicio = new Date(hoy);
+    inicio.setDate(inicio.getDate() - 29);
+    return inicio;
+  }
+
+  if (filtro === "mesActual") {
+    return new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+  }
+
+  return null;
+}
+
 function escaparHtml(valor: string) {
   return valor
     .replaceAll("&", "&amp;")
@@ -186,6 +219,134 @@ function construirComprobantePago(params: {
   </html>`;
 }
 
+
+function construirResumenCuenta(params: {
+  empresa: string;
+  proveedor: Proveedor;
+  etiquetaPeriodo: string;
+  saldoInicial: number;
+  totalCompras: number;
+  totalPagos: number;
+  saldoFinal: number;
+  movimientos: Movimiento[];
+}) {
+  const filas = [...params.movimientos]
+    .sort(
+      (a, b) =>
+        convertirFechaMovimiento(a.fecha).getTime() -
+        convertirFechaMovimiento(b.fecha).getTime()
+    )
+    .map((movimiento) => {
+      const esPago =
+        movimiento.tipoMovimiento === "PAGO REALIZADO";
+
+      return `
+        <tr>
+          <td>${escaparHtml(formatearFecha(movimiento.fecha))}</td>
+          <td>${escaparHtml(
+            esPago ? "Pago realizado" : "Compra recibida"
+          )}</td>
+          <td>${escaparHtml(movimiento.comprobante || "-")}</td>
+          <td style="text-align:right;">${
+            esPago ? "-" : formatearPesos(movimiento.importe)
+          }</td>
+          <td style="text-align:right;">${
+            esPago ? formatearPesos(movimiento.importe) : "-"
+          }</td>
+          <td>${escaparHtml(
+            esPago
+              ? [movimiento.medioPago, movimiento.datosPago]
+                  .filter(Boolean)
+                  .join(" · ")
+              : movimiento.observacion || "-"
+          )}</td>
+        </tr>
+      `;
+    })
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>Resumen de cuenta</title>
+        <style>
+          body { margin:0; padding:32px; font-family:Arial,sans-serif; color:#0f172a; }
+          .sheet { max-width:960px; margin:0 auto; }
+          .header { display:flex; justify-content:space-between; gap:24px; padding-bottom:18px; border-bottom:2px solid #083f88; }
+          .brand { color:#083f88; font-size:28px; font-weight:800; }
+          .meta { margin-top:6px; color:#475569; }
+          .period { text-align:right; color:#475569; }
+          .provider { margin-top:20px; padding:16px; border-radius:14px; background:#f8fafc; }
+          .provider h2 { margin:0 0 8px; color:#083f88; }
+          .provider p { margin:5px 0; }
+          .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; }
+          .box { padding:14px; border:1px solid #cbd5e1; border-radius:12px; }
+          .box span { display:block; color:#64748b; font-size:12px; }
+          .box strong { display:block; margin-top:6px; color:#083f88; font-size:19px; }
+          table { width:100%; border-collapse:collapse; }
+          th,td { border:1px solid #cbd5e1; padding:9px; font-size:12px; vertical-align:top; }
+          th { background:#eff6ff; color:#083f88; text-align:left; }
+          .final { margin-top:18px; padding:18px; border-radius:14px; background:#083f88; color:#fff; text-align:right; }
+          .final span { display:block; opacity:.85; }
+          .final strong { display:block; margin-top:4px; font-size:30px; }
+          @media print { body { padding:0; } }
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <header class="header">
+            <div>
+              <div class="brand">OPTIMA</div>
+              <div class="meta">${escaparHtml(params.empresa || "Empresa")}</div>
+            </div>
+            <div class="period">
+              <strong>RESUMEN DE CUENTA</strong><br />
+              ${escaparHtml(params.etiquetaPeriodo)}
+            </div>
+          </header>
+
+          <section class="provider">
+            <h2>${escaparHtml(params.proveedor.proveedor)}</h2>
+            ${params.proveedor.cuit ? `<p><strong>CUIT:</strong> ${escaparHtml(params.proveedor.cuit)}</p>` : ""}
+            ${params.proveedor.direccion ? `<p><strong>Dirección:</strong> ${escaparHtml(params.proveedor.direccion)}</p>` : ""}
+            ${params.proveedor.telefono ? `<p><strong>Teléfono:</strong> ${escaparHtml(params.proveedor.telefono)}</p>` : ""}
+          </section>
+
+          <section class="summary">
+            <div class="box"><span>Saldo inicial</span><strong>${formatearPesos(params.saldoInicial)}</strong></div>
+            <div class="box"><span>Compras</span><strong>${formatearPesos(params.totalCompras)}</strong></div>
+            <div class="box"><span>Pagos</span><strong>${formatearPesos(params.totalPagos)}</strong></div>
+            <div class="box"><span>Saldo final</span><strong>${formatearPesos(params.saldoFinal)}</strong></div>
+          </section>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Movimiento</th>
+                <th>Comprobante</th>
+                <th>Compra</th>
+                <th>Pago</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filas || '<tr><td colspan="6">Sin movimientos en el período seleccionado.</td></tr>'}
+            </tbody>
+          </table>
+
+          <section class="final">
+            <span>Saldo pendiente</span>
+            <strong>${formatearPesos(params.saldoFinal)}</strong>
+          </section>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
 export default function CuentasCorrientesProveedores({ usuario }: Props) {
   const puedeEditar = tienePermiso(usuario.rol, "cuentasCorrientes.editarGuardado");
   const puedeExportar = tienePermiso(usuario.rol, "cuentasCorrientes.exportar");
@@ -201,6 +362,8 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
   const [guardando, setGuardando] = useState(false);
   const [mensaje, setMensaje] = useState<Mensaje>(null);
   const [ultimoPagoId, setUltimoPagoId] = useState<string | null>(null);
+  const [filtroHistorial, setFiltroHistorial] =
+    useState<FiltroHistorial>("ultimos30");
 
   const [nuevoProveedor, setNuevoProveedor] = useState({
     proveedor: "",
@@ -239,6 +402,71 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
     () => items.reduce((total, item) => total + (Number(item.cantidad) || 0) * (Number(item.precioUnitario) || 0), 0),
     [items]
   );
+
+  const resumenHistorial = useMemo(() => {
+    const inicio = obtenerInicioFiltro(filtroHistorial);
+
+    const cronologicos = [...movimientos].sort(
+      (a, b) =>
+        convertirFechaMovimiento(a.fecha).getTime() -
+        convertirFechaMovimiento(b.fecha).getTime()
+    );
+
+    const anteriores = inicio
+      ? cronologicos.filter(
+          (movimiento) =>
+            convertirFechaMovimiento(movimiento.fecha) < inicio
+        )
+      : [];
+
+    const filtrados = inicio
+      ? cronologicos.filter(
+          (movimiento) =>
+            convertirFechaMovimiento(movimiento.fecha) >= inicio
+        )
+      : cronologicos;
+
+    const saldoInicial = anteriores.reduce(
+      (total, movimiento) =>
+        total + movimiento.importeFirmado,
+      0
+    );
+
+    const totalCompras = filtrados
+      .filter(
+        (movimiento) =>
+          movimiento.tipoMovimiento === "COMPRA RECIBIDA"
+      )
+      .reduce(
+        (total, movimiento) => total + movimiento.importe,
+        0
+      );
+
+    const totalPagos = filtrados
+      .filter(
+        (movimiento) =>
+          movimiento.tipoMovimiento === "PAGO REALIZADO"
+      )
+      .reduce(
+        (total, movimiento) => total + movimiento.importe,
+        0
+      );
+
+    return {
+      movimientos: [...filtrados].reverse(),
+      saldoInicial,
+      totalCompras,
+      totalPagos,
+      saldoFinal: saldoInicial + totalCompras - totalPagos,
+    };
+  }, [movimientos, filtroHistorial]);
+
+  const etiquetaPeriodo =
+    filtroHistorial === "ultimos30"
+      ? "Últimos 30 días"
+      : filtroHistorial === "mesActual"
+      ? "Mes actual"
+      : "Todo el historial";
 
   useEffect(() => {
     cargarProveedores();
@@ -534,6 +762,33 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
     );
   }
 
+  function descargarResumenCuenta() {
+    if (!proveedor) return;
+
+    try {
+      abrirVentanaImpresion(
+        construirResumenCuenta({
+          empresa: usuario.empresa || usuario.nombre,
+          proveedor,
+          etiquetaPeriodo,
+          saldoInicial: resumenHistorial.saldoInicial,
+          totalCompras: resumenHistorial.totalCompras,
+          totalPagos: resumenHistorial.totalPagos,
+          saldoFinal: resumenHistorial.saldoFinal,
+          movimientos: resumenHistorial.movimientos,
+        })
+      );
+    } catch (error) {
+      setMensaje({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo descargar el resumen.",
+      });
+    }
+  }
+
   return (
     <section className="cc-module">
       <div className="cc-module-title-row">
@@ -625,13 +880,87 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
           )}
 
           <section className="cc-history-section">
-            <h3>Historial</h3>
+            <div className="cc-history-header">
+              <div>
+                <h3>Historial</h3>
+                <p>{etiquetaPeriodo}</p>
+              </div>
+
+              <button
+                className="cc-primary-button"
+                type="button"
+                onClick={descargarResumenCuenta}
+                disabled={resumenHistorial.movimientos.length === 0}
+              >
+                Descargar resumen
+              </button>
+            </div>
+
+            <div className="cc-history-filters">
+              <button
+                type="button"
+                className={
+                  filtroHistorial === "ultimos30"
+                    ? "cc-history-filter active"
+                    : "cc-history-filter"
+                }
+                onClick={() => setFiltroHistorial("ultimos30")}
+              >
+                Últimos 30 días
+              </button>
+
+              <button
+                type="button"
+                className={
+                  filtroHistorial === "mesActual"
+                    ? "cc-history-filter active"
+                    : "cc-history-filter"
+                }
+                onClick={() => setFiltroHistorial("mesActual")}
+              >
+                Mes actual
+              </button>
+
+              <button
+                type="button"
+                className={
+                  filtroHistorial === "todo"
+                    ? "cc-history-filter active"
+                    : "cc-history-filter"
+                }
+                onClick={() => setFiltroHistorial("todo")}
+              >
+                Todo
+              </button>
+            </div>
+
+            <div className="cc-history-summary">
+              <div>
+                <span>Saldo inicial</span>
+                <strong>{formatearPesos(resumenHistorial.saldoInicial)}</strong>
+              </div>
+              <div>
+                <span>Compras</span>
+                <strong>{formatearPesos(resumenHistorial.totalCompras)}</strong>
+              </div>
+              <div>
+                <span>Pagos</span>
+                <strong>{formatearPesos(resumenHistorial.totalPagos)}</strong>
+              </div>
+              <div>
+                <span>Saldo final</span>
+                <strong>{formatearPesos(resumenHistorial.saldoFinal)}</strong>
+              </div>
+            </div>
+
             {cargando ? (
               <div className="cc-empty-card">Cargando...</div>
-            ) : movimientos.length === 0 ? (
-              <div className="cc-empty-card">Todavía no hay movimientos.</div>
+            ) : resumenHistorial.movimientos.length === 0 ? (
+              <div className="cc-empty-card">
+                No hay movimientos en el período seleccionado.
+              </div>
             ) : (
-              movimientos.map((movimiento) => {
+              resumenHistorial.movimientos.map((movimiento) => {
                 const esPago = movimiento.tipoMovimiento === "PAGO REALIZADO";
                 return (
                   <article key={movimiento.id} className="cc-movement-card">

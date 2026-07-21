@@ -49,6 +49,7 @@ type ItemRemitoFormulario = {
   descripcion: string;
   cantidad: string;
   unidad: string;
+  costoUnitario: string;
   observaciones: string;
 };
 
@@ -129,6 +130,7 @@ function crearItemVacio(): ItemRemitoFormulario {
     descripcion: "",
     cantidad: "",
     unidad: "UNIDAD",
+    costoUnitario: "",
     observaciones: "",
   };
 }
@@ -366,6 +368,19 @@ export default function CuentasCorrientes({ usuario }: Props) {
       return cliente.saldoActual > 0 ? total + cliente.saldoActual : total;
     }, 0);
   }, [clientes]);
+
+  const totalRemito = useMemo(() => {
+    return itemsRemito.reduce((total, item) => {
+      const cantidad = Number(item.cantidad);
+      const costoUnitario = Number(item.costoUnitario);
+
+      if (Number.isNaN(cantidad) || Number.isNaN(costoUnitario)) {
+        return total;
+      }
+
+      return total + cantidad * costoUnitario;
+    }, 0);
+  }, [itemsRemito]);
 
   useEffect(() => {
     cargarClientes();
@@ -605,6 +620,16 @@ export default function CuentasCorrientes({ usuario }: Props) {
       if (!item.unidad.trim()) {
         return `Seleccioná la unidad del ítem ${index + 1}.`;
       }
+
+      const costoUnitario = Number(item.costoUnitario);
+
+      if (
+        item.costoUnitario.trim() === "" ||
+        Number.isNaN(costoUnitario) ||
+        costoUnitario < 0
+      ) {
+        return `El costo unitario del ítem ${index + 1} debe ser cero o mayor.`;
+      }
     }
 
     return "";
@@ -613,7 +638,11 @@ export default function CuentasCorrientes({ usuario }: Props) {
   async function guardarMovimiento() {
     if (!clienteSeleccionadoId) return;
 
-    const importeTexto = formMovimiento.importe.trim();
+    const esNuevoRemito =
+      tipoFormulario === "REMITO EMITIDO" && !movimientoEditandoId;
+    const importeTexto = esNuevoRemito
+      ? String(totalRemito)
+      : formMovimiento.importe.trim();
     const importeNumerico = Number(importeTexto);
 
     if (!formMovimiento.fecha) {
@@ -672,9 +701,6 @@ export default function CuentasCorrientes({ usuario }: Props) {
           : "Guardando pago...",
       });
 
-      const esNuevoRemito =
-        tipoFormulario === "REMITO EMITIDO" && !movimientoEditandoId;
-
       const endpoint = "/api/movimientos-cc";
 
       const body = esNuevoRemito
@@ -682,13 +708,13 @@ export default function CuentasCorrientes({ usuario }: Props) {
             accion: "crear-remito",
             clienteId: clienteSeleccionadoId,
             fecha: formMovimiento.fecha,
-            importe: importeNumerico,
             observaciones: formMovimiento.observacion,
             responsable: formMovimiento.responsable,
             items: itemsRemito.map((item) => ({
               descripcion: item.descripcion,
               cantidad: Number(item.cantidad),
               unidad: item.unidad,
+              costoUnitario: Number(item.costoUnitario),
               observaciones: item.observaciones,
             })),
           }
@@ -1228,22 +1254,24 @@ export default function CuentasCorrientes({ usuario }: Props) {
             </label>
           )}
 
-          <label>
-            Importe *
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={formMovimiento.importe}
-              onChange={(event) =>
-                setFormMovimiento({
-                  ...formMovimiento,
-                  importe: event.target.value,
-                })
-              }
-              placeholder="Puede ser 0"
-            />
-          </label>
+          {tipoFormulario !== "REMITO EMITIDO" || movimientoEditandoId ? (
+            <label>
+              Importe *
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formMovimiento.importe}
+                onChange={(event) =>
+                  setFormMovimiento({
+                    ...formMovimiento,
+                    importe: event.target.value,
+                  })
+                }
+                placeholder="Puede ser 0"
+              />
+            </label>
+          ) : null}
 
           {tipoFormulario === "REMITO EMITIDO" &&
             !movimientoEditandoId && (
@@ -1340,6 +1368,36 @@ export default function CuentasCorrientes({ usuario }: Props) {
                         </label>
                       </div>
 
+                      <div className="cc-item-price-grid">
+                        <label>
+                          Costo unitario *
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.costoUnitario}
+                            onChange={(event) =>
+                              actualizarItemRemito(
+                                item.idLocal,
+                                "costoUnitario",
+                                event.target.value
+                              )
+                            }
+                            placeholder="Puede ser 0"
+                          />
+                        </label>
+
+                        <div className="cc-item-total-box">
+                          <span>Total del ítem</span>
+                          <strong>
+                            {formatearPesos(
+                              (Number(item.cantidad) || 0) *
+                                (Number(item.costoUnitario) || 0)
+                            )}
+                          </strong>
+                        </div>
+                      </div>
+
                       <label>
                         Observación del ítem
                         <input
@@ -1356,6 +1414,12 @@ export default function CuentasCorrientes({ usuario }: Props) {
                       </label>
                     </article>
                   ))}
+                </div>
+
+                <div className="cc-remito-total-box">
+                  <span>Total general del remito</span>
+                  <strong>{formatearPesos(totalRemito)}</strong>
+                  <p>Se calcula automáticamente con todos los ítems.</p>
                 </div>
               </section>
             )}

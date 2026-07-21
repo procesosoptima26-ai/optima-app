@@ -51,13 +51,13 @@ type ItemRemitoPayload = {
   descripcion: string;
   cantidad: number | string;
   unidad: string;
+  costoUnitario: number | string;
   observaciones?: string;
 };
 
 type CrearRemitoPayload = {
   clienteId: string;
   fecha: string;
-  importe: number | string;
   observaciones?: string;
   responsable?: string;
   items: ItemRemitoPayload[];
@@ -78,6 +78,8 @@ type RemitoCreado = {
     descripcion: string;
     cantidad: number;
     unidad: string;
+    costoUnitario: number;
+    totalItem: number;
     orden: number;
     observaciones: string;
   }>;
@@ -590,7 +592,6 @@ async function eliminarRegistro(
 function validarPayload(payload: CrearRemitoPayload) {
   const clienteId = normalizarTexto(payload?.clienteId);
   const fecha = normalizarTexto(payload?.fecha);
-  const importe = normalizarNumero(payload?.importe);
   const items = Array.isArray(payload?.items) ? payload.items : [];
 
   if (!clienteId || !clienteId.startsWith("rec")) {
@@ -603,13 +604,6 @@ function validarPayload(payload: CrearRemitoPayload) {
 
   convertirFechaParaAirtable(fecha);
 
-  if (
-    !Number.isFinite(Number(payload?.importe)) ||
-    importe < 0
-  ) {
-    throw new Error("El importe debe ser cero o mayor.");
-  }
-
   if (items.length === 0) {
     throw new Error("El remito debe tener al menos un ítem.");
   }
@@ -618,6 +612,7 @@ function validarPayload(payload: CrearRemitoPayload) {
     const descripcion = normalizarTexto(item.descripcion);
     const cantidad = normalizarNumero(item.cantidad);
     const unidad = normalizarTexto(item.unidad).toUpperCase();
+    const costoUnitario = normalizarNumero(item.costoUnitario);
     const observaciones = normalizarTexto(item.observaciones);
 
     if (!descripcion) {
@@ -639,14 +634,35 @@ function validarPayload(payload: CrearRemitoPayload) {
       throw new Error(`Ítem ${index + 1}: falta la unidad.`);
     }
 
+    if (
+      !Number.isFinite(Number(item.costoUnitario)) ||
+      costoUnitario < 0
+    ) {
+      throw new Error(
+        `Ítem ${index + 1}: el costo unitario debe ser cero o mayor.`
+      );
+    }
+
+    const totalItem = Math.round(cantidad * costoUnitario * 100) / 100;
+
     return {
       descripcion,
       cantidad,
       unidad,
+      costoUnitario,
+      totalItem,
       observaciones,
       orden: index + 1,
     };
   });
+
+  const importe =
+    Math.round(
+      itemsNormalizados.reduce(
+        (total, item) => total + item.totalItem,
+        0
+      ) * 100
+    ) / 100;
 
   return {
     clienteId,
@@ -695,6 +711,7 @@ async function crearRemito(
         "DESCRIPCIÓN": item.descripcion,
         "CANTIDAD": item.cantidad,
         "UNIDAD": item.unidad,
+        "COSTO_UNITARIO": item.costoUnitario,
         "ORDEN": item.orden,
         "OBSERVACIONES": item.observaciones || null,
       });
@@ -706,6 +723,8 @@ async function crearRemito(
         descripcion: item.descripcion,
         cantidad: item.cantidad,
         unidad: item.unidad,
+        costoUnitario: item.costoUnitario,
+        totalItem: item.totalItem,
         orden: item.orden,
         observaciones: item.observaciones,
       });

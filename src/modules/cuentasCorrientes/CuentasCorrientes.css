@@ -896,3 +896,120 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Detalle y PDF de compras de proveedores */
+.cc-purchase-detail-card {
+  border-color: rgba(8, 63, 136, 0.2);
+}
+
+.cc-purchase-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.cc-purchase-detail-header span {
+  display: block;
+  color: var(--optima-green-dark);
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.cc-purchase-detail-header h3 {
+  margin: 4px 0 0;
+  color: var(--optima-blue);
+  font-size: 24px;
+}
+
+.cc-purchase-detail-header p {
+  margin: 6px 0 0;
+  color: var(--optima-muted);
+  font-weight: 750;
+}
+
+.cc-purchase-detail-items {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.cc-purchase-detail-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px;
+  border: 1px solid #dbe4ee;
+  border-radius: 16px;
+  background: #f8fafc;
+}
+
+.cc-purchase-detail-item > div:last-child {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.cc-purchase-detail-item strong {
+  color: var(--optima-blue);
+}
+
+.cc-purchase-detail-item p,
+.cc-purchase-detail-item span {
+  margin: 5px 0 0;
+  color: var(--optima-muted);
+  font-size: 14px;
+}
+
+.cc-purchase-detail-item > div:last-child strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--optima-green-dark);
+  font-size: 18px;
+}
+
+.cc-purchase-detail-total {
+  margin-top: 14px;
+  padding: 17px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, var(--optima-blue), var(--optima-blue-dark));
+  color: #ffffff;
+}
+
+.cc-purchase-detail-total span {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  opacity: 0.86;
+}
+
+.cc-purchase-detail-total strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 30px;
+}
+
+.cc-purchase-detail-note {
+  margin: 13px 0 0;
+  color: var(--optima-muted);
+}
+
+@media (max-width: 640px) {
+  .cc-purchase-detail-header,
+  .cc-purchase-detail-item {
+    flex-direction: column;
+  }
+
+  .cc-purchase-detail-header .cc-soft-button,
+  .cc-purchase-detail-item > div:last-child {
+    width: 100%;
+  }
+
+  .cc-purchase-detail-item > div:last-child {
+    text-align: left;
+  }
+}
+

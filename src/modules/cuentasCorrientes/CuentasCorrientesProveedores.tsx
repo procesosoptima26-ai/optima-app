@@ -220,6 +220,91 @@ function construirComprobantePago(params: {
 }
 
 
+
+function construirHtmlCompra(params: {
+  empresa: string;
+  proveedor: Proveedor;
+  detalle: DetalleCompra;
+}) {
+  const filas = params.detalle.items
+    .map(
+      (item) => `
+        <tr>
+          <td>${escaparHtml(item.descripcion)}</td>
+          <td style="text-align:right;">${item.cantidad}</td>
+          <td>${escaparHtml(item.unidad)}</td>
+          <td style="text-align:right;">${formatearPesos(item.precioUnitario)}</td>
+          <td style="text-align:right;">${formatearPesos(item.totalItem)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <title>${escaparHtml(params.detalle.comprobante || "Compra recibida")}</title>
+        <style>
+          *{box-sizing:border-box}body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#0f172a;background:#fff}.sheet{max-width:900px;margin:0 auto;border:1px solid #cbd5e1;border-radius:18px;padding:26px}.header{display:flex;justify-content:space-between;gap:24px;padding-bottom:18px;border-bottom:2px solid #083f88}.brand{color:#083f88;font-size:28px;font-weight:800}.company{margin-top:6px;color:#475569}.document{text-align:right}.document strong{display:block;color:#083f88;font-size:21px}.document span{display:block;margin-top:6px;color:#475569}.provider{margin:20px 0;padding:16px;border-radius:14px;background:#f8fafc}.provider h2{margin:0 0 10px;color:#083f88;font-size:20px}.provider p{margin:5px 0;color:#334155}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #cbd5e1;padding:10px;font-size:13px;vertical-align:top}th{background:#eff6ff;color:#083f88;text-align:left}.total{display:flex;justify-content:flex-end;margin-top:18px}.total-box{min-width:280px;padding:16px;border-radius:14px;background:#083f88;color:#fff;text-align:right}.total-box span{display:block;font-size:13px;opacity:.85}.total-box strong{display:block;margin-top:4px;font-size:26px}.notes{margin-top:20px;color:#475569;font-size:14px}.signature{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:70px}.signature div{padding-top:8px;border-top:1px solid #64748b;text-align:center;color:#475569;font-size:13px}@media print{body{padding:0}.sheet{max-width:none;border:none;border-radius:0}}
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <header class="header">
+            <div>
+              <div class="brand">OPTIMA</div>
+              <div class="company">${escaparHtml(params.empresa || "Empresa")}</div>
+            </div>
+            <div class="document">
+              <strong>COMPRA RECIBIDA</strong>
+              <span>${escaparHtml(params.detalle.comprobante || "Sin comprobante")}</span>
+              <span>Fecha: ${escaparHtml(formatearFecha(params.detalle.fecha))}</span>
+            </div>
+          </header>
+
+          <section class="provider">
+            <h2>Proveedor</h2>
+            <p><strong>${escaparHtml(params.proveedor.proveedor)}</strong></p>
+            ${params.proveedor.cuit ? `<p>CUIT: ${escaparHtml(params.proveedor.cuit)}</p>` : ""}
+            ${params.proveedor.direccion ? `<p>Dirección: ${escaparHtml(params.proveedor.direccion)}</p>` : ""}
+            ${params.proveedor.telefono ? `<p>Teléfono: ${escaparHtml(params.proveedor.telefono)}</p>` : ""}
+          </section>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th style="text-align:right;">Cantidad</th>
+                <th>Unidad</th>
+                <th style="text-align:right;">Precio unitario</th>
+                <th style="text-align:right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>${filas}</tbody>
+          </table>
+
+          <div class="total">
+            <div class="total-box">
+              <span>Total de la compra</span>
+              <strong>${formatearPesos(params.detalle.importe)}</strong>
+            </div>
+          </div>
+
+          ${params.detalle.observaciones ? `<div class="notes"><strong>Observaciones:</strong> ${escaparHtml(params.detalle.observaciones)}</div>` : ""}
+          ${params.detalle.responsable ? `<div class="notes"><strong>Responsable:</strong> ${escaparHtml(params.detalle.responsable)}</div>` : ""}
+
+          <div class="signature">
+            <div>Firma del responsable</div>
+            <div>Control / conformidad</div>
+          </div>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
 function construirResumenCuenta(params: {
   empresa: string;
   proveedor: Proveedor;
@@ -364,6 +449,8 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
   const [ultimoPagoId, setUltimoPagoId] = useState<string | null>(null);
   const [filtroHistorial, setFiltroHistorial] =
     useState<FiltroHistorial>("ultimos30");
+  const [detalleCompraVisible, setDetalleCompraVisible] = useState<DetalleCompra | null>(null);
+  const [cargandoDetalleCompraId, setCargandoDetalleCompraId] = useState<string | null>(null);
 
   const [nuevoProveedor, setNuevoProveedor] = useState({
     proveedor: "",
@@ -762,6 +849,77 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
     );
   }
 
+  async function obtenerDetalleCompra(movimientoId: string) {
+    const response = await fetch(
+      `/api/movimientos-proveedores?accion=detalle-compra&movimientoId=${encodeURIComponent(movimientoId)}`
+    );
+    const data = (await response.json()) as RespuestaMovimientos;
+
+    if (!response.ok || !data.ok || !data.detalle) {
+      throw new Error(data.error || "No se pudo cargar el detalle de la compra.");
+    }
+
+    return data.detalle;
+  }
+
+  async function verDetalleCompra(movimientoId: string) {
+    try {
+      setCargandoDetalleCompraId(movimientoId);
+      setMensaje(null);
+      setDetalleCompraVisible(await obtenerDetalleCompra(movimientoId));
+    } catch (error) {
+      setMensaje({
+        tipo: "error",
+        texto: error instanceof Error ? error.message : "No se pudo cargar el detalle de la compra.",
+      });
+    } finally {
+      setCargandoDetalleCompraId(null);
+    }
+  }
+
+  async function descargarCompra(movimientoId: string) {
+    if (!proveedor) return;
+
+    const ventana = window.open("", "_blank", "width=900,height=700");
+
+    if (!ventana) {
+      setMensaje({ tipo: "error", texto: "El navegador bloqueó la ventana de la compra." });
+      return;
+    }
+
+    ventana.document.open();
+    ventana.document.write('<p style="font-family:Arial,sans-serif;padding:30px;">Preparando compra...</p>');
+    ventana.document.close();
+
+    try {
+      setCargandoDetalleCompraId(movimientoId);
+      const detalle =
+        detalleCompraVisible?.movimientoId === movimientoId
+          ? detalleCompraVisible
+          : await obtenerDetalleCompra(movimientoId);
+
+      ventana.document.open();
+      ventana.document.write(
+        construirHtmlCompra({
+          empresa: usuario.empresa || usuario.nombre,
+          proveedor,
+          detalle,
+        })
+      );
+      ventana.document.close();
+      ventana.focus();
+      window.setTimeout(() => ventana.print(), 350);
+    } catch (error) {
+      ventana.close();
+      setMensaje({
+        tipo: "error",
+        texto: error instanceof Error ? error.message : "No se pudo descargar la compra.",
+      });
+    } finally {
+      setCargandoDetalleCompraId(null);
+    }
+  }
+
   function descargarResumenCuenta() {
     if (!proveedor) return;
 
@@ -879,6 +1037,67 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
             </section>
           )}
 
+          {detalleCompraVisible && (
+            <section className="cc-card cc-purchase-detail-card">
+              <div className="cc-purchase-detail-header">
+                <div>
+                  <span>Detalle de compra</span>
+                  <h3>{detalleCompraVisible.comprobante || "Compra recibida"}</h3>
+                  <p>{formatearFecha(detalleCompraVisible.fecha)}</p>
+                </div>
+                <button className="cc-soft-button" type="button" onClick={() => setDetalleCompraVisible(null)}>
+                  Cerrar
+                </button>
+              </div>
+
+              <div className="cc-purchase-detail-items">
+                {detalleCompraVisible.items.map((item) => (
+                  <article className="cc-purchase-detail-item" key={item.id}>
+                    <div>
+                      <strong>{item.descripcion}</strong>
+                      <p>
+                        {item.cantidad} {item.unidad}
+                        {item.observaciones ? ` · ${item.observaciones}` : ""}
+                      </p>
+                    </div>
+                    <div>
+                      <span>{formatearPesos(item.precioUnitario)} c/u</span>
+                      <strong>{formatearPesos(item.totalItem)}</strong>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <div className="cc-purchase-detail-total">
+                <span>Total de la compra</span>
+                <strong>{formatearPesos(detalleCompraVisible.importe)}</strong>
+              </div>
+
+              {detalleCompraVisible.observaciones && (
+                <p className="cc-purchase-detail-note">
+                  <strong>Observaciones:</strong> {detalleCompraVisible.observaciones}
+                </p>
+              )}
+
+              {detalleCompraVisible.responsable && (
+                <p className="cc-purchase-detail-note">
+                  <strong>Responsable:</strong> {detalleCompraVisible.responsable}
+                </p>
+              )}
+
+              <button
+                className="cc-primary-button cc-full-button"
+                type="button"
+                onClick={() => descargarCompra(detalleCompraVisible.movimientoId)}
+                disabled={cargandoDetalleCompraId === detalleCompraVisible.movimientoId}
+              >
+                {cargandoDetalleCompraId === detalleCompraVisible.movimientoId
+                  ? "Preparando PDF..."
+                  : "Descargar compra en PDF"}
+              </button>
+            </section>
+          )}
+
           <section className="cc-history-section">
             <div className="cc-history-header">
               <div>
@@ -979,6 +1198,28 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
                       {esPago && puedeExportar && (
                         <button className="cc-primary-button" type="button" onClick={() => descargarComprobantePago(movimiento)}>Comprobante</button>
                       )}
+
+                      {!esPago && (
+                        <>
+                          <button
+                            className="cc-primary-button"
+                            type="button"
+                            onClick={() => verDetalleCompra(movimiento.id)}
+                            disabled={cargandoDetalleCompraId === movimiento.id}
+                          >
+                            {cargandoDetalleCompraId === movimiento.id ? "Cargando..." : "Ver detalle"}
+                          </button>
+                          <button
+                            className="cc-soft-button"
+                            type="button"
+                            onClick={() => descargarCompra(movimiento.id)}
+                            disabled={cargandoDetalleCompraId === movimiento.id}
+                          >
+                            Descargar PDF
+                          </button>
+                        </>
+                      )}
+
                       {puedeEditar && (
                         <button className="cc-soft-button" type="button" onClick={() => editarMovimiento(movimiento)}>{esPago ? "Editar pago" : "Editar compra"}</button>
                       )}

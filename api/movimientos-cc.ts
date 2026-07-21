@@ -63,6 +63,38 @@ type CrearRemitoPayload = {
   items: ItemRemitoPayload[];
 };
 
+
+type CompletarImporteItemPayload = {
+  id: string;
+  costoUnitario: number | string;
+};
+
+type CompletarImporteRemitoPayload = {
+  accion: "completar-remito-pendiente";
+  movimientoId: string;
+  items: CompletarImporteItemPayload[];
+};
+
+type ItemRemitoPendiente = {
+  id: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  costoUnitario: number;
+  totalItem: number;
+  orden: number;
+  observaciones: string;
+};
+
+type DetalleRemitoPendiente = {
+  remitoId: string;
+  movimientoId: string;
+  numero: number;
+  comprobante: string;
+  importe: number;
+  items: ItemRemitoPendiente[];
+};
+
 type RemitoCreado = {
   id: string;
   numero: number;
@@ -778,12 +810,236 @@ async function crearRemito(
 }
 
 
+
+function obtenerIdsVinculados(valor: unknown): string[] {
+  if (!Array.isArray(valor)) return [];
+
+  return valor.filter(
+    (item): item is string => typeof item === "string"
+  );
+}
+
+async function listarTodosLosRegistros(tableName: string) {
+  const { baseId } = getAirtableConfig();
+  const registros: AirtableRecord[] = [];
+  let offset = "";
+
+  do {
+    const url = new URL(
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+        tableName
+      )}`
+    );
+
+    url.searchParams.set("pageSize", "100");
+
+    if (offset) {
+      url.searchParams.set("offset", offset);
+    }
+
+    const data = (await airtableFetch(
+      url.toString()
+    )) as AirtableListResponse;
+
+    registros.push(...(data.records || []));
+    offset = data.offset || "";
+  } while (offset);
+
+  return registros;
+}
+
+async function obtenerDetalleRemitoPendiente(
+  movimientoId: string
+): Promise<DetalleRemitoPendiente> {
+  const { remitosTable, itemsTable } = getAirtableConfig();
+
+  if (!movimientoId?.trim()) {
+    throw new Error("Falta el movimiento del remito.");
+  }
+
+  const remitos = await listarTodosLosRegistros(remitosTable);
+
+  const remito = remitos.find((record) =>
+    obtenerIdsVinculados(record.fields["MOVIMIENTO_CC"]).includes(
+      movimientoId
+    )
+  );
+
+  if (!remito) {
+    throw new Error(
+      "No se encontró el remito relacionado con este movimiento."
+    );
+  }
+
+  const registrosItems = await listarTodosLosRegistros(itemsTable);
+
+  const items = registrosItems
+    .filter((record) =>
+      obtenerIdsVinculados(record.fields["REMITO"]).includes(
+        remito.id
+      )
+    )
+    .map((record) => {
+      const cantidad = normalizarNumero(record.fields["CANTIDAD"]);
+      const costoUnitario = normalizarNumero(
+        record.fields["COSTO_UNITARIO"]
+      );
+      const totalFormula = normalizarNumero(
+        record.fields["TOTAL_ITEM"]
+      );
+
+      return {
+        id: record.id,
+        descripcion: normalizarTexto(
+          record.fields["DESCRIPCIÓN"]
+        ),
+        cantidad,
+        unidad: normalizarTexto(record.fields["UNIDAD"]),
+        costoUnitario,
+        totalItem:
+          totalFormula ||
+          Math.round(cantidad * costoUnitario * 100) / 100,
+        orden: normalizarNumero(record.fields["ORDEN"]),
+        observaciones: normalizarTexto(
+          record.fields["OBSERVACIONES"]
+        ),
+      };
+    })
+    .sort((a, b) => a.orden - b.orden);
+
+  if (items.length === 0) {
+    throw new Error("El remito no tiene ítems relacionados.");
+  }
+
+  const numero = normalizarNumero(remito.fields["NÚMERO"]);
+
+  return {
+    remitoId: remito.id,
+    movimientoId,
+    numero,
+    comprobante: `REMITO ${formatearNumeroRemito(numero)}`,
+    importe: normalizarNumero(remito.fields["IMPORTE"]),
+    items,
+  };
+}
+
+async function completarImporteRemitoPendiente(
+  payload: CompletarImporteRemitoPayload
+) {
+  const {
+    remitosTable,
+    itemsTable,
+    movimientosTable,
+  } = getAirtableConfig();
+
+  const detalle = await obtenerDetalleRemitoPendiente(
+    normalizarTexto(payload.movimientoId)
+  );
+
+  const costosRecibidos = Array.isArray(payload.items)
+    ? payload.items
+    : [];
+
+  if (costosRecibidos.length !== detalle.items.length) {
+    throw new Error(
+      "Deben completarse los costos de todos los ítems."
+    );
+  }
+
+  const costosPorId = new Map(
+    costosRecibidos.map((item) => [
+      normalizarTexto(item.id),
+      normalizarNumero(item.costoUnitario),
+    ])
+  );
+
+  const itemsActualizados = detalle.items.map((item, index) => {
+    if (!costosPorId.has(item.id)) {
+      throw new Error(
+        `Falta el costo unitario del ítem ${index + 1}.`
+      );
+    }
+
+    const costoUnitario = costosPorId.get(item.id) || 0;
+
+    if (
+      !Number.isFinite(costoUnitario) ||
+      costoUnitario <= 0
+    ) {
+      throw new Error(
+        `El costo unitario del ítem ${index + 1} debe ser mayor a cero.`
+      );
+    }
+
+    return {
+      ...item,
+      costoUnitario,
+      totalItem:
+        Math.round(item.cantidad * costoUnitario * 100) / 100,
+    };
+  });
+
+  const importe =
+    Math.round(
+      itemsActualizados.reduce(
+        (total, item) => total + item.totalItem,
+        0
+      ) * 100
+    ) / 100;
+
+  if (importe <= 0) {
+    throw new Error(
+      "El importe total del remito debe ser mayor a cero."
+    );
+  }
+
+  for (const item of itemsActualizados) {
+    await actualizarRegistro(itemsTable, item.id, {
+      "COSTO_UNITARIO": item.costoUnitario,
+    });
+  }
+
+  await actualizarRegistro(remitosTable, detalle.remitoId, {
+    "IMPORTE": importe,
+  });
+
+  await actualizarRegistro(
+    movimientosTable,
+    detalle.movimientoId,
+    {
+      "IMPORTE": importe,
+    }
+  );
+
+  return {
+    ...detalle,
+    importe,
+    items: itemsActualizados,
+  };
+}
+
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (req.method === "GET") {
       const accion = String(req.query.accion || "")
         .trim()
         .toLowerCase();
+
+      if (accion === "detalle-remito-pendiente") {
+        const movimientoId = String(
+          req.query.movimientoId || ""
+        ).trim();
+
+        const detalle = await obtenerDetalleRemitoPendiente(
+          movimientoId
+        );
+
+        return res.status(200).json({
+          ok: true,
+          detalle,
+        });
+      }
 
       if (accion === "siguiente-remito") {
         const siguienteNumero = await obtenerSiguienteNumero();
@@ -848,6 +1104,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (req.method === "PATCH") {
+      const accion = String(req.body?.accion || "")
+        .trim()
+        .toLowerCase();
+
+      if (accion === "completar-remito-pendiente") {
+        const detalle = await completarImporteRemitoPendiente(
+          req.body as CompletarImporteRemitoPayload
+        );
+
+        return res.status(200).json({
+          ok: true,
+          detalle,
+        });
+      }
+
       const movimiento = await actualizarMovimiento(
         req.body as ActualizarMovimientoPayload
       );

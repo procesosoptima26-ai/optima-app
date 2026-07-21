@@ -74,13 +74,44 @@ type RespuestaNumeroRemito = {
   error?: string;
 };
 
+type ItemRemitoGuardado = {
+  id: string;
+  descripcion: string;
+  cantidad: number;
+  unidad: string;
+  costoUnitario: number;
+  totalItem: number;
+  orden: number;
+  observaciones: string;
+};
+
+type DetalleRemito = {
+  remitoId: string;
+  movimientoId: string;
+  numero: number;
+  comprobante: string;
+  fecha: string;
+  clienteIds: string[];
+  importe: number;
+  observaciones: string;
+  responsable: string;
+  items: ItemRemitoGuardado[];
+};
+
 type RespuestaCrearRemito = {
   ok?: boolean;
   remito?: {
     id: string;
     numero: number;
     comprobante: string;
+    movimientoCcId: string;
   };
+  error?: string;
+};
+
+type RespuestaDetalleRemito = {
+  ok?: boolean;
+  detalle?: DetalleRemito;
   error?: string;
 };
 
@@ -287,6 +318,240 @@ function construirHtmlExportacion(params: {
   `;
 }
 
+
+function escaparHtml(valor: string) {
+  return valor
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function construirHtmlRemito(params: {
+  emisor: string;
+  cliente: Cliente;
+  detalle: DetalleRemito;
+}) {
+  const filas = params.detalle.items
+    .map(
+      (item) => `
+        <tr>
+          <td>${escaparHtml(item.descripcion)}</td>
+          <td style="text-align:right;">${item.cantidad}</td>
+          <td>${escaparHtml(item.unidad)}</td>
+          <td style="text-align:right;">${formatearPesos(item.costoUnitario)}</td>
+          <td style="text-align:right;">${formatearPesos(item.totalItem)}</td>
+        </tr>
+      `
+    )
+    .join("");
+
+  return `
+    <!DOCTYPE html>
+    <html lang="es">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>${escaparHtml(params.detalle.comprobante)}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body {
+            margin: 0;
+            padding: 32px;
+            font-family: Arial, sans-serif;
+            color: #0f172a;
+            background: #ffffff;
+          }
+          .sheet {
+            max-width: 900px;
+            margin: 0 auto;
+            border: 1px solid #cbd5e1;
+            border-radius: 18px;
+            padding: 26px;
+          }
+          .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 24px;
+            padding-bottom: 18px;
+            border-bottom: 2px solid #083f88;
+          }
+          .brand {
+            color: #083f88;
+            font-size: 28px;
+            font-weight: 800;
+          }
+          .emisor {
+            margin-top: 6px;
+            color: #475569;
+            font-size: 14px;
+          }
+          .number {
+            text-align: right;
+          }
+          .number strong {
+            display: block;
+            color: #083f88;
+            font-size: 22px;
+          }
+          .number span {
+            display: block;
+            margin-top: 6px;
+            color: #475569;
+          }
+          .client {
+            margin: 20px 0;
+            padding: 16px;
+            border-radius: 14px;
+            background: #f8fafc;
+          }
+          .client h2 {
+            margin: 0 0 10px;
+            color: #083f88;
+            font-size: 20px;
+          }
+          .client p {
+            margin: 5px 0;
+            color: #334155;
+          }
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+          }
+          th, td {
+            border: 1px solid #cbd5e1;
+            padding: 10px;
+            font-size: 13px;
+            vertical-align: top;
+          }
+          th {
+            background: #eff6ff;
+            color: #083f88;
+            text-align: left;
+          }
+          .total {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 18px;
+          }
+          .total-box {
+            min-width: 280px;
+            padding: 16px;
+            border-radius: 14px;
+            background: #083f88;
+            color: #ffffff;
+            text-align: right;
+          }
+          .total-box span {
+            display: block;
+            font-size: 13px;
+            opacity: 0.85;
+          }
+          .total-box strong {
+            display: block;
+            margin-top: 4px;
+            font-size: 26px;
+          }
+          .notes {
+            margin-top: 20px;
+            color: #475569;
+            font-size: 14px;
+          }
+          .signature {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 36px;
+            margin-top: 70px;
+          }
+          .signature div {
+            padding-top: 8px;
+            border-top: 1px solid #64748b;
+            text-align: center;
+            color: #475569;
+            font-size: 13px;
+          }
+          @media print {
+            body { padding: 0; }
+            .sheet {
+              max-width: none;
+              border: none;
+              border-radius: 0;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <main class="sheet">
+          <header class="header">
+            <div>
+              <div class="brand">OPTIMA</div>
+              <div class="emisor">${escaparHtml(params.emisor || "Emisor")}</div>
+            </div>
+
+            <div class="number">
+              <strong>${escaparHtml(params.detalle.comprobante)}</strong>
+              <span>Fecha: ${escaparHtml(formatearFechaParaMostrar(params.detalle.fecha))}</span>
+            </div>
+          </header>
+
+          <section class="client">
+            <h2>Cliente</h2>
+            <p><strong>${escaparHtml(params.cliente.cliente)}</strong></p>
+            ${params.cliente.cuit ? `<p>CUIT: ${escaparHtml(params.cliente.cuit)}</p>` : ""}
+            ${params.cliente.direccion ? `<p>Dirección: ${escaparHtml(params.cliente.direccion)}</p>` : ""}
+            ${params.cliente.telefono ? `<p>Teléfono: ${escaparHtml(params.cliente.telefono)}</p>` : ""}
+          </section>
+
+          <table>
+            <thead>
+              <tr>
+                <th>Descripción</th>
+                <th style="text-align:right;">Cantidad</th>
+                <th>Unidad</th>
+                <th style="text-align:right;">Costo unitario</th>
+                <th style="text-align:right;">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filas}
+            </tbody>
+          </table>
+
+          <div class="total">
+            <div class="total-box">
+              <span>Total del remito</span>
+              <strong>${formatearPesos(params.detalle.importe)}</strong>
+            </div>
+          </div>
+
+          ${
+            params.detalle.observaciones
+              ? `<div class="notes"><strong>Observaciones:</strong> ${escaparHtml(
+                  params.detalle.observaciones
+                )}</div>`
+              : ""
+          }
+
+          ${
+            params.detalle.responsable
+              ? `<div class="notes"><strong>Responsable:</strong> ${escaparHtml(
+                  params.detalle.responsable
+                )}</div>`
+              : ""
+          }
+
+          <div class="signature">
+            <div>Firma del emisor</div>
+            <div>Firma y aclaración del receptor</div>
+          </div>
+        </main>
+      </body>
+    </html>
+  `;
+}
+
 function obtenerEstadoDesdeSaldo(saldo: number): EstadoCliente {
   if (saldo > 0) return "DEBE";
   if (saldo < 0) return "A FAVOR";
@@ -326,6 +591,9 @@ export default function CuentasCorrientes({ usuario }: Props) {
   const [mensaje, setMensaje] = useState<Mensaje>(null);
   const [tipoFormulario, setTipoFormulario] = useState<TipoMovimiento>("REMITO EMITIDO");
   const [numeroRemitoAutomatico, setNumeroRemitoAutomatico] = useState("");
+  const [descargandoRemitoId, setDescargandoRemitoId] = useState<string | null>(null);
+  const [ultimoRemitoMovimientoId, setUltimoRemitoMovimientoId] = useState<string | null>(null);
+  const [ultimoRemitoComprobante, setUltimoRemitoComprobante] = useState("");
 
   const [nuevoCliente, setNuevoCliente] = useState({
     cliente: "",
@@ -472,6 +740,8 @@ export default function CuentasCorrientes({ usuario }: Props) {
     setClienteSeleccionadoId(null);
     setMovimientoEditandoId(null);
     setMovimientos([]);
+    setUltimoRemitoMovimientoId(null);
+    setUltimoRemitoComprobante("");
     setMensaje(null);
     cargarClientes();
   }
@@ -771,6 +1041,20 @@ export default function CuentasCorrientes({ usuario }: Props) {
 
       await cargarMovimientos(clienteSeleccionadoId);
       await cargarClientes();
+
+      if (
+        esNuevoRemito &&
+        "remito" in data &&
+        data.remito?.movimientoCcId
+      ) {
+        setUltimoRemitoMovimientoId(
+          data.remito.movimientoCcId
+        );
+        setUltimoRemitoComprobante(
+          data.remito.comprobante
+        );
+      }
+
       setMovimientoEditandoId(null);
       setVista("detalle");
 
@@ -798,6 +1082,90 @@ export default function CuentasCorrientes({ usuario }: Props) {
       });
     } finally {
       setGuardando(false);
+    }
+  }
+
+  async function descargarRemito(
+    movimientoId: string,
+    comprobante: string
+  ) {
+    if (!clienteSeleccionado) return;
+
+    const ventana = window.open(
+      "",
+      "_blank",
+      "width=900,height=700"
+    );
+
+    if (!ventana) {
+      setMensaje({
+        tipo: "error",
+        texto: "El navegador bloqueó la ventana del remito.",
+      });
+      return;
+    }
+
+    ventana.document.open();
+    ventana.document.write(`
+      <!DOCTYPE html>
+      <html lang="es">
+        <head>
+          <meta charset="UTF-8" />
+          <title>Cargando remito</title>
+        </head>
+        <body style="font-family:Arial,sans-serif;padding:32px;">
+          Cargando ${escaparHtml(comprobante || "remito")}...
+        </body>
+      </html>
+    `);
+    ventana.document.close();
+
+    try {
+      setDescargandoRemitoId(movimientoId);
+      setMensaje(null);
+
+      const response = await fetch(
+        `/api/movimientos-cc?accion=detalle-remito&movimientoId=${encodeURIComponent(
+          movimientoId
+        )}`
+      );
+
+      const data =
+        (await response.json()) as RespuestaDetalleRemito;
+
+      if (!response.ok || !data.ok || !data.detalle) {
+        throw new Error(
+          data.error || "No se pudo obtener el remito."
+        );
+      }
+
+      const html = construirHtmlRemito({
+        emisor: usuario.empresa || usuario.nombre,
+        cliente: clienteSeleccionado,
+        detalle: data.detalle,
+      });
+
+      ventana.document.open();
+      ventana.document.write(html);
+      ventana.document.close();
+      ventana.focus();
+
+      window.setTimeout(() => {
+        ventana.print();
+      }, 350);
+    } catch (error) {
+      console.error("Error descargando remito:", error);
+      ventana.close();
+
+      setMensaje({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo descargar el remito.",
+      });
+    } finally {
+      setDescargandoRemitoId(null);
     }
   }
 
@@ -1066,6 +1434,36 @@ export default function CuentasCorrientes({ usuario }: Props) {
             </div>
           </section>
 
+          {ultimoRemitoMovimientoId && (
+            <section className="cc-card">
+              <h3 style={{ margin: 0, color: "var(--optima-blue)" }}>
+                Remito guardado
+              </h3>
+              <p style={{ margin: "8px 0 14px", color: "var(--optima-muted)" }}>
+                {ultimoRemitoComprobante}
+              </p>
+              <button
+                className="cc-primary-button"
+                type="button"
+                onClick={() =>
+                  descargarRemito(
+                    ultimoRemitoMovimientoId,
+                    ultimoRemitoComprobante
+                  )
+                }
+                disabled={
+                  descargandoRemitoId ===
+                  ultimoRemitoMovimientoId
+                }
+              >
+                {descargandoRemitoId ===
+                ultimoRemitoMovimientoId
+                  ? "Preparando PDF..."
+                  : "Descargar PDF"}
+              </button>
+            </section>
+          )}
+
           <section className="cc-history-section">
             <h3>Historial</h3>
 
@@ -1138,6 +1536,27 @@ export default function CuentasCorrientes({ usuario }: Props) {
                             )}`}
                       </strong>
 
+                      {!esPago && (
+                        <button
+                          className="cc-primary-button"
+                          type="button"
+                          onClick={() =>
+                            descargarRemito(
+                              movimiento.id,
+                              movimiento.comprobante
+                            )
+                          }
+                          disabled={
+                            descargandoRemitoId === movimiento.id
+                          }
+                          style={{ marginTop: "10px", width: "100%" }}
+                        >
+                          {descargandoRemitoId === movimiento.id
+                            ? "Preparando PDF..."
+                            : "Descargar PDF"}
+                        </button>
+                      )}
+
                       {puedeEditarGuardado && (
                         <button
                           className="cc-soft-button"
@@ -1145,7 +1564,7 @@ export default function CuentasCorrientes({ usuario }: Props) {
                           onClick={() =>
                             editarMovimiento(movimiento)
                           }
-                          style={{ marginTop: "10px" }}
+                          style={{ marginTop: "10px", width: "100%" }}
                         >
                           Editar
                         </button>

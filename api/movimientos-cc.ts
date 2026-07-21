@@ -91,7 +91,11 @@ type DetalleRemitoPendiente = {
   movimientoId: string;
   numero: number;
   comprobante: string;
+  fecha: string;
+  clienteIds: string[];
   importe: number;
+  observaciones: string;
+  responsable: string;
   items: ItemRemitoPendiente[];
 };
 
@@ -918,7 +922,11 @@ async function obtenerDetalleRemitoPendiente(
     movimientoId,
     numero,
     comprobante: `REMITO ${formatearNumeroRemito(numero)}`,
+    fecha: convertirFechaParaMostrar(remito.fields["FECHA"]),
+    clienteIds: obtenerClienteIds(remito.fields["CLIENTE"]),
     importe: normalizarNumero(remito.fields["IMPORTE"]),
+    observaciones: normalizarTexto(remito.fields["OBSERVACIONES"]),
+    responsable: normalizarTexto(remito.fields["RESPONSABLE"]),
     items,
   };
 }
@@ -1026,7 +1034,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .trim()
         .toLowerCase();
 
-      if (accion === "detalle-remito-pendiente") {
+      if (
+        accion === "detalle-remito-pendiente" ||
+        accion === "detalle-remito"
+      ) {
         const movimientoId = String(
           req.query.movimientoId || ""
         ).trim();
@@ -1145,3 +1156,4 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 }
+

@@ -761,3 +761,47 @@
     width: 100%;
   }
 }
+
+/* Proveedores: compras editables y comprobantes de pago */
+.cc-movement-actions {
+  min-width: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 9px;
+}
+
+.cc-movement-actions .cc-primary-button,
+.cc-movement-actions .cc-soft-button {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.cc-payment-success-card {
+  border-color: rgba(20, 184, 166, 0.32);
+  background: linear-gradient(
+    135deg,
+    rgba(240, 253, 250, 0.98),
+    rgba(255, 255, 255, 0.98)
+  );
+}
+
+.cc-payment-success-card h3 {
+  margin: 0;
+  color: var(--optima-green-dark);
+}
+
+.cc-payment-success-card p {
+  margin: 7px 0 14px;
+  color: var(--optima-muted);
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .cc-movement-actions {
+    width: 100%;
+    min-width: 0;
+  }
+}

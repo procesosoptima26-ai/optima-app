@@ -12,6 +12,7 @@
   "dependencies": {
     "dotenv": "^17.4.2",
     "html5-qrcode": "^2.3.8",
+    "jspdf": "^4.2.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7"
   },

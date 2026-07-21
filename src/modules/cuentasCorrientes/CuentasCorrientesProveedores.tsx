@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
 import { tienePermiso } from "../../config/permisos";
 import "./CuentasCorrientes.css";
 
@@ -147,15 +148,6 @@ function obtenerInicioFiltro(filtro: FiltroHistorial) {
   return null;
 }
 
-function escaparHtml(valor: string) {
-  return valor
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 function crearItemVacio(): ItemCompraFormulario {
   return {
     idLocal: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -167,145 +159,321 @@ function crearItemVacio(): ItemCompraFormulario {
   };
 }
 
-function abrirVentanaImpresion(html: string) {
-  const ventana = window.open("", "_blank", "width=900,height=700");
-  if (!ventana) throw new Error("El navegador bloqueó la ventana del comprobante.");
-  ventana.document.open();
-  ventana.document.write(html);
-  ventana.document.close();
-  ventana.focus();
-  window.setTimeout(() => ventana.print(), 350);
+function normalizarNombreArchivo(valor: string) {
+  return valor
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-function construirComprobantePago(params: {
+async function compartirArchivoPdf(
+  blob: Blob,
+  nombreArchivo: string,
+  titulo: string
+) {
+  const archivo = new File([blob], nombreArchivo, {
+    type: "application/pdf",
+  });
+
+  const navegador = navigator as Navigator & {
+    canShare?: (data?: ShareData) => boolean;
+  };
+
+  if (
+    navigator.share &&
+    navegador.canShare?.({ files: [archivo] })
+  ) {
+    await navigator.share({
+      title: titulo,
+      text: titulo,
+      files: [archivo],
+    });
+    return true;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(url);
+
+  return false;
+}
+
+function crearPdfComprobantePago(params: {
   empresa: string;
   proveedor: Proveedor;
   movimiento: Movimiento;
   saldoAnterior: number;
   saldoPosterior: number;
 }) {
-  return `<!DOCTYPE html>
-  <html lang="es">
-    <head>
-      <meta charset="UTF-8" />
-      <title>Comprobante de pago</title>
-      <style>
-        body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#0f172a}.sheet{max-width:780px;margin:0 auto;border:1px solid #cbd5e1;border-radius:18px;padding:28px}.header{display:flex;justify-content:space-between;gap:20px;border-bottom:2px solid #083f88;padding-bottom:18px}h1{margin:0;color:#083f88;font-size:28px}h2{margin:6px 0 0;color:#334155;font-size:18px}.number{text-align:right;color:#475569}.box{margin-top:18px;padding:16px;border-radius:14px;background:#f8fafc}.box p{margin:7px 0}.amount{margin-top:18px;padding:18px;border-radius:14px;background:#083f88;color:white;text-align:center}.amount span{display:block;opacity:.85}.amount strong{display:block;margin-top:5px;font-size:34px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.summary div{border:1px solid #cbd5e1;border-radius:12px;padding:14px}.summary strong{display:block;margin-top:5px;color:#083f88;font-size:20px}.signature{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:70px}.signature div{border-top:1px solid #64748b;padding-top:8px;text-align:center;color:#475569;font-size:13px}@media print{body{padding:0}.sheet{border:none}}
-      </style>
-    </head>
-    <body>
-      <main class="sheet">
-        <header class="header">
-          <div><h1>OPTIMA</h1><h2>${escaparHtml(params.empresa || "Empresa")}</h2></div>
-          <div class="number"><strong>COMPROBANTE DE PAGO</strong><br />${escaparHtml(params.movimiento.comprobante || "Sin número")}</div>
-        </header>
-        <section class="box">
-          <p><strong>Proveedor:</strong> ${escaparHtml(params.proveedor.proveedor)}</p>
-          ${params.proveedor.cuit ? `<p><strong>CUIT:</strong> ${escaparHtml(params.proveedor.cuit)}</p>` : ""}
-          <p><strong>Fecha:</strong> ${escaparHtml(formatearFecha(params.movimiento.fecha))}</p>
-          <p><strong>Medio de pago:</strong> ${escaparHtml(params.movimiento.medioPago)}</p>
-          ${params.movimiento.datosPago ? `<p><strong>Datos:</strong> ${escaparHtml(params.movimiento.datosPago)}</p>` : ""}
-        </section>
-        <section class="amount"><span>Importe pagado</span><strong>${formatearPesos(params.movimiento.importe)}</strong></section>
-        <section class="summary">
-          <div><span>Saldo anterior</span><strong>${formatearPesos(params.saldoAnterior)}</strong></div>
-          <div><span>Saldo restante</span><strong>${formatearPesos(params.saldoPosterior)}</strong></div>
-        </section>
-        ${params.movimiento.observacion ? `<section class="box"><strong>Observaciones:</strong> ${escaparHtml(params.movimiento.observacion)}</section>` : ""}
-        ${params.movimiento.responsable ? `<section class="box"><strong>Responsable:</strong> ${escaparHtml(params.movimiento.responsable)}</section>` : ""}
-        <div class="signature"><div>Firma del pagador</div><div>Firma y aclaración del proveedor</div></div>
-      </main>
-    </body>
-  </html>`;
+  const pdf = new jsPDF();
+  const margen = 16;
+  let y = 18;
+
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(20);
+  pdf.text("OPTIMA", margen, y);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(10);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(params.empresa || "Empresa", margen, y + 6);
+
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.text("COMPROBANTE DE PAGO", 194, y, {
+    align: "right",
+  });
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(
+    params.movimiento.comprobante || "Sin numero",
+    194,
+    y + 6,
+    { align: "right" }
+  );
+
+  y += 15;
+  pdf.setDrawColor(8, 63, 136);
+  pdf.line(margen, y, 194, y);
+  y += 10;
+
+  pdf.setFillColor(248, 250, 252);
+  pdf.roundedRect(margen, y, 178, 42, 3, 3, "F");
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFontSize(10);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(`Proveedor: ${params.proveedor.proveedor}`, margen + 4, y + 8);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.text(
+    `Fecha: ${formatearFecha(params.movimiento.fecha)}`,
+    margen + 4,
+    y + 16
+  );
+  pdf.text(
+    `Medio de pago: ${params.movimiento.medioPago}`,
+    margen + 4,
+    y + 24
+  );
+
+  if (params.movimiento.datosPago) {
+    pdf.text(
+      `Datos: ${params.movimiento.datosPago}`,
+      margen + 4,
+      y + 32,
+      { maxWidth: 168 }
+    );
+  }
+
+  y += 52;
+  pdf.setFillColor(8, 63, 136);
+  pdf.roundedRect(margen, y, 178, 24, 3, 3, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(10);
+  pdf.text("Importe pagado", 105, y + 8, {
+    align: "center",
+  });
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(18);
+  pdf.text(
+    formatearPesos(params.movimiento.importe),
+    105,
+    y + 18,
+    { align: "center" }
+  );
+
+  y += 34;
+  pdf.setTextColor(71, 85, 105);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.text("Saldo anterior", margen, y);
+  pdf.text("Saldo restante", 110, y);
+
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.text(formatearPesos(params.saldoAnterior), margen, y + 8);
+  pdf.text(formatearPesos(params.saldoPosterior), 110, y + 8);
+
+  y += 22;
+  pdf.setTextColor(71, 85, 105);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+
+  if (params.movimiento.observacion) {
+    pdf.text(
+      `Observaciones: ${params.movimiento.observacion}`,
+      margen,
+      y,
+      { maxWidth: 178 }
+    );
+    y += 9;
+  }
+
+  if (params.movimiento.responsable) {
+    pdf.text(
+      `Responsable: ${params.movimiento.responsable}`,
+      margen,
+      y
+    );
+  }
+
+  return pdf;
 }
 
-
-
-function construirHtmlCompra(params: {
+function crearPdfCompra(params: {
   empresa: string;
   proveedor: Proveedor;
   detalle: DetalleCompra;
 }) {
-  const filas = params.detalle.items
-    .map(
-      (item) => `
-        <tr>
-          <td>${escaparHtml(item.descripcion)}</td>
-          <td style="text-align:right;">${item.cantidad}</td>
-          <td>${escaparHtml(item.unidad)}</td>
-          <td style="text-align:right;">${formatearPesos(item.precioUnitario)}</td>
-          <td style="text-align:right;">${formatearPesos(item.totalItem)}</td>
-        </tr>
-      `
-    )
-    .join("");
+  const pdf = new jsPDF();
+  const margen = 15;
+  let y = 18;
 
-  return `
-    <!DOCTYPE html>
-    <html lang="es">
-      <head>
-        <meta charset="UTF-8" />
-        <title>${escaparHtml(params.detalle.comprobante || "Compra recibida")}</title>
-        <style>
-          *{box-sizing:border-box}body{margin:0;padding:32px;font-family:Arial,sans-serif;color:#0f172a;background:#fff}.sheet{max-width:900px;margin:0 auto;border:1px solid #cbd5e1;border-radius:18px;padding:26px}.header{display:flex;justify-content:space-between;gap:24px;padding-bottom:18px;border-bottom:2px solid #083f88}.brand{color:#083f88;font-size:28px;font-weight:800}.company{margin-top:6px;color:#475569}.document{text-align:right}.document strong{display:block;color:#083f88;font-size:21px}.document span{display:block;margin-top:6px;color:#475569}.provider{margin:20px 0;padding:16px;border-radius:14px;background:#f8fafc}.provider h2{margin:0 0 10px;color:#083f88;font-size:20px}.provider p{margin:5px 0;color:#334155}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{border:1px solid #cbd5e1;padding:10px;font-size:13px;vertical-align:top}th{background:#eff6ff;color:#083f88;text-align:left}.total{display:flex;justify-content:flex-end;margin-top:18px}.total-box{min-width:280px;padding:16px;border-radius:14px;background:#083f88;color:#fff;text-align:right}.total-box span{display:block;font-size:13px;opacity:.85}.total-box strong{display:block;margin-top:4px;font-size:26px}.notes{margin-top:20px;color:#475569;font-size:14px}.signature{display:grid;grid-template-columns:1fr 1fr;gap:36px;margin-top:70px}.signature div{padding-top:8px;border-top:1px solid #64748b;text-align:center;color:#475569;font-size:13px}@media print{body{padding:0}.sheet{max-width:none;border:none;border-radius:0}}
-        </style>
-      </head>
-      <body>
-        <main class="sheet">
-          <header class="header">
-            <div>
-              <div class="brand">OPTIMA</div>
-              <div class="company">${escaparHtml(params.empresa || "Empresa")}</div>
-            </div>
-            <div class="document">
-              <strong>COMPRA RECIBIDA</strong>
-              <span>${escaparHtml(params.detalle.comprobante || "Sin comprobante")}</span>
-              <span>Fecha: ${escaparHtml(formatearFecha(params.detalle.fecha))}</span>
-            </div>
-          </header>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(20);
+  pdf.text("OPTIMA", margen, y);
 
-          <section class="provider">
-            <h2>Proveedor</h2>
-            <p><strong>${escaparHtml(params.proveedor.proveedor)}</strong></p>
-            ${params.proveedor.cuit ? `<p>CUIT: ${escaparHtml(params.proveedor.cuit)}</p>` : ""}
-            ${params.proveedor.direccion ? `<p>Dirección: ${escaparHtml(params.proveedor.direccion)}</p>` : ""}
-            ${params.proveedor.telefono ? `<p>Teléfono: ${escaparHtml(params.proveedor.telefono)}</p>` : ""}
-          </section>
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(10);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(params.empresa || "Empresa", margen, y + 6);
 
-          <table>
-            <thead>
-              <tr>
-                <th>Descripción</th>
-                <th style="text-align:right;">Cantidad</th>
-                <th>Unidad</th>
-                <th style="text-align:right;">Precio unitario</th>
-                <th style="text-align:right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>${filas}</tbody>
-          </table>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.text("COMPRA RECIBIDA", 195, y, { align: "right" });
 
-          <div class="total">
-            <div class="total-box">
-              <span>Total de la compra</span>
-              <strong>${formatearPesos(params.detalle.importe)}</strong>
-            </div>
-          </div>
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(
+    params.detalle.comprobante || "Sin comprobante",
+    195,
+    y + 6,
+    { align: "right" }
+  );
 
-          ${params.detalle.observaciones ? `<div class="notes"><strong>Observaciones:</strong> ${escaparHtml(params.detalle.observaciones)}</div>` : ""}
-          ${params.detalle.responsable ? `<div class="notes"><strong>Responsable:</strong> ${escaparHtml(params.detalle.responsable)}</div>` : ""}
+  y += 15;
+  pdf.setDrawColor(8, 63, 136);
+  pdf.line(margen, y, 195, y);
+  y += 10;
 
-          <div class="signature">
-            <div>Firma del responsable</div>
-            <div>Control / conformidad</div>
-          </div>
-        </main>
-      </body>
-    </html>
-  `;
+  pdf.setFillColor(248, 250, 252);
+  pdf.roundedRect(margen, y, 180, 28, 3, 3, "F");
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  pdf.text("Proveedor", margen + 4, y + 7);
+
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFontSize(10);
+  pdf.text(params.proveedor.proveedor, margen + 4, y + 14);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.text(
+    `Fecha: ${formatearFecha(params.detalle.fecha)}`,
+    margen + 4,
+    y + 21
+  );
+
+  y += 37;
+
+  const columnas = {
+    descripcion: margen,
+    cantidad: 112,
+    unidad: 132,
+    unitario: 158,
+    total: 195,
+  };
+
+  pdf.setFillColor(239, 246, 255);
+  pdf.rect(margen, y, 180, 9, "F");
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  pdf.text("Descripcion", columnas.descripcion + 2, y + 6);
+  pdf.text("Cant.", columnas.cantidad, y + 6, { align: "right" });
+  pdf.text("Unidad", columnas.unidad, y + 6, { align: "right" });
+  pdf.text("Precio", columnas.unitario, y + 6, { align: "right" });
+  pdf.text("Total", columnas.total, y + 6, { align: "right" });
+  y += 10;
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(15, 23, 42);
+
+  for (const item of params.detalle.items) {
+    if (y > 255) {
+      pdf.addPage();
+      y = 18;
+    }
+
+    const lineas = pdf.splitTextToSize(
+      item.descripcion,
+      80
+    ) as string[];
+    const alto = Math.max(8, lineas.length * 4 + 3);
+
+    pdf.setDrawColor(203, 213, 225);
+    pdf.rect(margen, y, 180, alto);
+    pdf.setFontSize(8);
+    pdf.text(lineas, columnas.descripcion + 2, y + 5);
+    pdf.text(String(item.cantidad), columnas.cantidad, y + 5, {
+      align: "right",
+    });
+    pdf.text(item.unidad, columnas.unidad, y + 5, {
+      align: "right",
+    });
+    pdf.text(
+      formatearPesos(item.precioUnitario),
+      columnas.unitario,
+      y + 5,
+      { align: "right" }
+    );
+    pdf.text(
+      formatearPesos(item.totalItem),
+      columnas.total,
+      y + 5,
+      { align: "right" }
+    );
+
+    y += alto;
+  }
+
+  y += 8;
+  pdf.setFillColor(8, 63, 136);
+  pdf.roundedRect(115, y, 80, 18, 3, 3, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(9);
+  pdf.text("Total de la compra", 190, y + 6, {
+    align: "right",
+  });
+  pdf.setFontSize(15);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(
+    formatearPesos(params.detalle.importe),
+    190,
+    y + 14,
+    { align: "right" }
+  );
+
+  return pdf;
 }
 
-function construirResumenCuenta(params: {
+function crearPdfResumenCuenta(params: {
   empresa: string;
   proveedor: Proveedor;
   etiquetaPeriodo: string;
@@ -315,121 +483,169 @@ function construirResumenCuenta(params: {
   saldoFinal: number;
   movimientos: Movimiento[];
 }) {
-  const filas = [...params.movimientos]
-    .sort(
-      (a, b) =>
-        convertirFechaMovimiento(a.fecha).getTime() -
-        convertirFechaMovimiento(b.fecha).getTime()
-    )
-    .map((movimiento) => {
-      const esPago =
-        movimiento.tipoMovimiento === "PAGO REALIZADO";
+  const pdf = new jsPDF({
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
+  });
 
-      return `
-        <tr>
-          <td>${escaparHtml(formatearFecha(movimiento.fecha))}</td>
-          <td>${escaparHtml(
-            esPago ? "Pago realizado" : "Compra recibida"
-          )}</td>
-          <td>${escaparHtml(movimiento.comprobante || "-")}</td>
-          <td style="text-align:right;">${
-            esPago ? "-" : formatearPesos(movimiento.importe)
-          }</td>
-          <td style="text-align:right;">${
-            esPago ? formatearPesos(movimiento.importe) : "-"
-          }</td>
-          <td>${escaparHtml(
-            esPago
-              ? [movimiento.medioPago, movimiento.datosPago]
-                  .filter(Boolean)
-                  .join(" · ")
-              : movimiento.observacion || "-"
-          )}</td>
-        </tr>
-      `;
-    })
-    .join("");
+  const margen = 14;
+  let y = 16;
 
-  return `
-    <!DOCTYPE html>
-    <html lang="es">
-      <head>
-        <meta charset="UTF-8" />
-        <title>Resumen de cuenta</title>
-        <style>
-          body { margin:0; padding:32px; font-family:Arial,sans-serif; color:#0f172a; }
-          .sheet { max-width:960px; margin:0 auto; }
-          .header { display:flex; justify-content:space-between; gap:24px; padding-bottom:18px; border-bottom:2px solid #083f88; }
-          .brand { color:#083f88; font-size:28px; font-weight:800; }
-          .meta { margin-top:6px; color:#475569; }
-          .period { text-align:right; color:#475569; }
-          .provider { margin-top:20px; padding:16px; border-radius:14px; background:#f8fafc; }
-          .provider h2 { margin:0 0 8px; color:#083f88; }
-          .provider p { margin:5px 0; }
-          .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:20px 0; }
-          .box { padding:14px; border:1px solid #cbd5e1; border-radius:12px; }
-          .box span { display:block; color:#64748b; font-size:12px; }
-          .box strong { display:block; margin-top:6px; color:#083f88; font-size:19px; }
-          table { width:100%; border-collapse:collapse; }
-          th,td { border:1px solid #cbd5e1; padding:9px; font-size:12px; vertical-align:top; }
-          th { background:#eff6ff; color:#083f88; text-align:left; }
-          .final { margin-top:18px; padding:18px; border-radius:14px; background:#083f88; color:#fff; text-align:right; }
-          .final span { display:block; opacity:.85; }
-          .final strong { display:block; margin-top:4px; font-size:30px; }
-          @media print { body { padding:0; } }
-        </style>
-      </head>
-      <body>
-        <main class="sheet">
-          <header class="header">
-            <div>
-              <div class="brand">OPTIMA</div>
-              <div class="meta">${escaparHtml(params.empresa || "Empresa")}</div>
-            </div>
-            <div class="period">
-              <strong>RESUMEN DE CUENTA</strong><br />
-              ${escaparHtml(params.etiquetaPeriodo)}
-            </div>
-          </header>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(19);
+  pdf.text("OPTIMA", margen, y);
 
-          <section class="provider">
-            <h2>${escaparHtml(params.proveedor.proveedor)}</h2>
-            ${params.proveedor.cuit ? `<p><strong>CUIT:</strong> ${escaparHtml(params.proveedor.cuit)}</p>` : ""}
-            ${params.proveedor.direccion ? `<p><strong>Dirección:</strong> ${escaparHtml(params.proveedor.direccion)}</p>` : ""}
-            ${params.proveedor.telefono ? `<p><strong>Teléfono:</strong> ${escaparHtml(params.proveedor.telefono)}</p>` : ""}
-          </section>
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(params.empresa || "Empresa", margen, y + 6);
 
-          <section class="summary">
-            <div class="box"><span>Saldo inicial</span><strong>${formatearPesos(params.saldoInicial)}</strong></div>
-            <div class="box"><span>Compras</span><strong>${formatearPesos(params.totalCompras)}</strong></div>
-            <div class="box"><span>Pagos</span><strong>${formatearPesos(params.totalPagos)}</strong></div>
-            <div class="box"><span>Saldo final</span><strong>${formatearPesos(params.saldoFinal)}</strong></div>
-          </section>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.text("RESUMEN DE CUENTA", 283, y, {
+    align: "right",
+  });
 
-          <table>
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Movimiento</th>
-                <th>Comprobante</th>
-                <th>Compra</th>
-                <th>Pago</th>
-                <th>Detalle</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filas || '<tr><td colspan="6">Sin movimientos en el período seleccionado.</td></tr>'}
-            </tbody>
-          </table>
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(params.etiquetaPeriodo, 283, y + 6, {
+    align: "right",
+  });
 
-          <section class="final">
-            <span>Saldo pendiente</span>
-            <strong>${formatearPesos(params.saldoFinal)}</strong>
-          </section>
-        </main>
-      </body>
-    </html>
-  `;
+  y += 14;
+  pdf.setDrawColor(8, 63, 136);
+  pdf.line(margen, y, 283, y);
+  y += 9;
+
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(12);
+  pdf.text(params.proveedor.proveedor, margen, y);
+
+  y += 10;
+  const cajas = [
+    ["Saldo inicial", params.saldoInicial],
+    ["Compras", params.totalCompras],
+    ["Pagos", params.totalPagos],
+    ["Saldo final", params.saldoFinal],
+  ] as const;
+
+  cajas.forEach(([titulo, valor], index) => {
+    const x = margen + index * 67;
+    pdf.setFillColor(248, 250, 252);
+    pdf.roundedRect(x, y, 61, 20, 2, 2, "F");
+    pdf.setTextColor(100, 116, 139);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.text(titulo, x + 3, y + 6);
+    pdf.setTextColor(8, 63, 136);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(12);
+    pdf.text(formatearPesos(valor), x + 3, y + 15);
+  });
+
+  y += 28;
+  const columnas = {
+    fecha: margen,
+    movimiento: 42,
+    comprobante: 92,
+    compra: 185,
+    pago: 225,
+    detalle: 236,
+  };
+
+  pdf.setFillColor(239, 246, 255);
+  pdf.rect(margen, y, 269, 9, "F");
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  pdf.text("Fecha", columnas.fecha + 2, y + 6);
+  pdf.text("Movimiento", columnas.movimiento, y + 6);
+  pdf.text("Comprobante", columnas.comprobante, y + 6);
+  pdf.text("Compra", columnas.compra, y + 6, { align: "right" });
+  pdf.text("Pago", columnas.pago, y + 6, { align: "right" });
+  pdf.text("Detalle", columnas.detalle, y + 6);
+  y += 10;
+
+  const cronologicos = [...params.movimientos].sort(
+    (a, b) =>
+      convertirFechaMovimiento(a.fecha).getTime() -
+      convertirFechaMovimiento(b.fecha).getTime()
+  );
+
+  for (const movimiento of cronologicos) {
+    if (y > 185) {
+      pdf.addPage();
+      y = 16;
+    }
+
+    const esPago =
+      movimiento.tipoMovimiento === "PAGO REALIZADO";
+    const detalle = esPago
+      ? [movimiento.medioPago, movimiento.datosPago]
+          .filter(Boolean)
+          .join(" - ")
+      : movimiento.observacion || "-";
+
+    const lineasDetalle = pdf.splitTextToSize(
+      detalle,
+      45
+    ) as string[];
+    const alto = Math.max(8, lineasDetalle.length * 4 + 3);
+
+    pdf.setDrawColor(203, 213, 225);
+    pdf.rect(margen, y, 269, alto);
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8);
+    pdf.text(formatearFecha(movimiento.fecha), columnas.fecha + 2, y + 5);
+    pdf.text(
+      esPago ? "Pago realizado" : "Compra recibida",
+      columnas.movimiento,
+      y + 5
+    );
+    pdf.text(
+      movimiento.comprobante || "-",
+      columnas.comprobante,
+      y + 5,
+      { maxWidth: 75 }
+    );
+    pdf.text(
+      esPago ? "-" : formatearPesos(movimiento.importe),
+      columnas.compra,
+      y + 5,
+      { align: "right" }
+    );
+    pdf.text(
+      esPago ? formatearPesos(movimiento.importe) : "-",
+      columnas.pago,
+      y + 5,
+      { align: "right" }
+    );
+    pdf.text(lineasDetalle, columnas.detalle, y + 5);
+
+    y += alto;
+  }
+
+  y += 7;
+  pdf.setFillColor(8, 63, 136);
+  pdf.roundedRect(203, y, 80, 18, 3, 3, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(9);
+  pdf.text("Saldo pendiente", 278, y + 6, {
+    align: "right",
+  });
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(14);
+  pdf.text(formatearPesos(params.saldoFinal), 278, y + 14, {
+    align: "right",
+  });
+
+  return pdf;
 }
 
 export default function CuentasCorrientesProveedores({ usuario }: Props) {
@@ -835,18 +1051,61 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
     return { anterior: 0, posterior: 0 };
   }
 
-  function descargarComprobantePago(movimiento: Movimiento) {
+  async function procesarComprobantePago(
+    movimiento: Movimiento,
+    accion: "compartir" | "descargar"
+  ) {
     if (!proveedor) return;
-    const saldos = calcularSaldosPago(movimiento.id);
-    abrirVentanaImpresion(
-      construirComprobantePago({
+
+    try {
+      const saldos = calcularSaldosPago(movimiento.id);
+      const pdf = crearPdfComprobantePago({
         empresa: usuario.empresa || usuario.nombre,
         proveedor,
         movimiento,
         saldoAnterior: saldos.anterior,
         saldoPosterior: saldos.posterior,
-      })
-    );
+      });
+
+      const nombreBase = normalizarNombreArchivo(
+        movimiento.comprobante ||
+          `Pago_${proveedor.proveedor}_${movimiento.fecha}`
+      );
+      const nombreArchivo = `${nombreBase || "Comprobante_pago"}.pdf`;
+
+      if (accion === "compartir") {
+        const compartido = await compartirArchivoPdf(
+          pdf.output("blob"),
+          nombreArchivo,
+          "Comprobante de pago"
+        );
+
+        if (!compartido) {
+          setMensaje({
+            tipo: "info",
+            texto:
+              "Este dispositivo no permite compartir archivos directamente. El PDF se descargó.",
+          });
+        }
+      } else {
+        pdf.save(nombreArchivo);
+      }
+    } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+      setMensaje({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo generar el comprobante.",
+      });
+    }
   }
 
   async function obtenerDetalleCompra(movimientoId: string) {
@@ -877,72 +1136,122 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
     }
   }
 
-  async function descargarCompra(movimientoId: string) {
+  async function procesarCompra(
+    movimientoId: string,
+    accion: "compartir" | "descargar"
+  ) {
     if (!proveedor) return;
-
-    const ventana = window.open("", "_blank", "width=900,height=700");
-
-    if (!ventana) {
-      setMensaje({ tipo: "error", texto: "El navegador bloqueó la ventana de la compra." });
-      return;
-    }
-
-    ventana.document.open();
-    ventana.document.write('<p style="font-family:Arial,sans-serif;padding:30px;">Preparando compra...</p>');
-    ventana.document.close();
 
     try {
       setCargandoDetalleCompraId(movimientoId);
+
       const detalle =
         detalleCompraVisible?.movimientoId === movimientoId
           ? detalleCompraVisible
           : await obtenerDetalleCompra(movimientoId);
 
-      ventana.document.open();
-      ventana.document.write(
-        construirHtmlCompra({
-          empresa: usuario.empresa || usuario.nombre,
-          proveedor,
-          detalle,
-        })
+      const pdf = crearPdfCompra({
+        empresa: usuario.empresa || usuario.nombre,
+        proveedor,
+        detalle,
+      });
+
+      const nombreBase = normalizarNombreArchivo(
+        detalle.comprobante ||
+          `Compra_${proveedor.proveedor}_${detalle.fecha}`
       );
-      ventana.document.close();
-      ventana.focus();
-      window.setTimeout(() => ventana.print(), 350);
+      const nombreArchivo = `${nombreBase || "Compra"}.pdf`;
+
+      if (accion === "compartir") {
+        const compartido = await compartirArchivoPdf(
+          pdf.output("blob"),
+          nombreArchivo,
+          detalle.comprobante || "Compra recibida"
+        );
+
+        if (!compartido) {
+          setMensaje({
+            tipo: "info",
+            texto:
+              "Este dispositivo no permite compartir archivos directamente. El PDF se descargó.",
+          });
+        }
+      } else {
+        pdf.save(nombreArchivo);
+      }
     } catch (error) {
-      ventana.close();
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
       setMensaje({
         tipo: "error",
-        texto: error instanceof Error ? error.message : "No se pudo descargar la compra.",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudo generar la compra.",
       });
     } finally {
       setCargandoDetalleCompraId(null);
     }
   }
 
-  function descargarResumenCuenta() {
+  async function procesarResumenCuenta(
+    accion: "compartir" | "descargar"
+  ) {
     if (!proveedor) return;
 
     try {
-      abrirVentanaImpresion(
-        construirResumenCuenta({
-          empresa: usuario.empresa || usuario.nombre,
-          proveedor,
-          etiquetaPeriodo,
-          saldoInicial: resumenHistorial.saldoInicial,
-          totalCompras: resumenHistorial.totalCompras,
-          totalPagos: resumenHistorial.totalPagos,
-          saldoFinal: resumenHistorial.saldoFinal,
-          movimientos: resumenHistorial.movimientos,
-        })
+      const pdf = crearPdfResumenCuenta({
+        empresa: usuario.empresa || usuario.nombre,
+        proveedor,
+        etiquetaPeriodo,
+        saldoInicial: resumenHistorial.saldoInicial,
+        totalCompras: resumenHistorial.totalCompras,
+        totalPagos: resumenHistorial.totalPagos,
+        saldoFinal: resumenHistorial.saldoFinal,
+        movimientos: resumenHistorial.movimientos,
+      });
+
+      const nombreBase = normalizarNombreArchivo(
+        `Resumen_${proveedor.proveedor}_${etiquetaPeriodo}`
       );
+      const nombreArchivo = `${nombreBase || "Resumen_cuenta"}.pdf`;
+
+      if (accion === "compartir") {
+        const compartido = await compartirArchivoPdf(
+          pdf.output("blob"),
+          nombreArchivo,
+          `Resumen de cuenta - ${proveedor.proveedor}`
+        );
+
+        if (!compartido) {
+          setMensaje({
+            tipo: "info",
+            texto:
+              "Este dispositivo no permite compartir archivos directamente. El PDF se descargó.",
+          });
+        }
+      } else {
+        pdf.save(nombreArchivo);
+      }
     } catch (error) {
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
       setMensaje({
         tipo: "error",
         texto:
           error instanceof Error
             ? error.message
-            : "No se pudo descargar el resumen.",
+            : "No se pudo generar el resumen.",
       });
     }
   }
@@ -1032,8 +1341,23 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
               <p>El comprobante ya está listo.</p>
               <button className="cc-primary-button" type="button" onClick={() => {
                 const pago = movimientos.find((item) => item.id === ultimoPagoId);
-                if (pago) descargarComprobantePago(pago);
-              }}>Descargar comprobante</button>
+                if (pago) procesarComprobantePago(pago, "compartir");
+              }}>Compartir comprobante</button>
+
+              <button
+                className="cc-soft-button cc-full-button"
+                type="button"
+                onClick={() => {
+                  const pago = movimientos.find(
+                    (item) => item.id === ultimoPagoId
+                  );
+                  if (pago) {
+                    procesarComprobantePago(pago, "descargar");
+                  }
+                }}
+              >
+                Descargar PDF
+              </button>
             </section>
           )}
 
@@ -1088,12 +1412,29 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
               <button
                 className="cc-primary-button cc-full-button"
                 type="button"
-                onClick={() => descargarCompra(detalleCompraVisible.movimientoId)}
+                onClick={() => procesarCompra(detalleCompraVisible.movimientoId, "compartir")}
                 disabled={cargandoDetalleCompraId === detalleCompraVisible.movimientoId}
               >
                 {cargandoDetalleCompraId === detalleCompraVisible.movimientoId
                   ? "Preparando PDF..."
-                  : "Descargar compra en PDF"}
+                  : "Compartir compra"}
+              </button>
+
+              <button
+                className="cc-soft-button cc-full-button"
+                type="button"
+                onClick={() =>
+                  procesarCompra(
+                    detalleCompraVisible.movimientoId,
+                    "descargar"
+                  )
+                }
+                disabled={
+                  cargandoDetalleCompraId ===
+                  detalleCompraVisible.movimientoId
+                }
+              >
+                Descargar PDF
               </button>
             </section>
           )}
@@ -1108,10 +1449,23 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
               <button
                 className="cc-primary-button"
                 type="button"
-                onClick={descargarResumenCuenta}
+                onClick={() => procesarResumenCuenta("compartir")}
                 disabled={resumenHistorial.movimientos.length === 0}
               >
                 Descargar resumen
+              </button>
+
+              <button
+                className="cc-soft-button"
+                type="button"
+                onClick={() =>
+                  procesarResumenCuenta("descargar")
+                }
+                disabled={
+                  resumenHistorial.movimientos.length === 0
+                }
+              >
+                Descargar PDF
               </button>
             </div>
 
@@ -1196,7 +1550,48 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
                         {movimiento.importeFirmado > 0 ? "+" : "-"}{formatearPesos(Math.abs(movimiento.importeFirmado))}
                       </strong>
                       {esPago && puedeExportar && (
-                        <button className="cc-primary-button" type="button" onClick={() => descargarComprobantePago(movimiento)}>Comprobante</button>
+                        <>
+                          <button
+                            className="cc-primary-button"
+                            type="button"
+                            onClick={() =>
+                              procesarComprobantePago(
+                                movimiento,
+                                "compartir"
+                              )
+                            }
+                          >
+                            Compartir
+                          </button>
+                          <button
+                            className="cc-soft-button"
+                            type="button"
+                            onClick={() =>
+                              procesarComprobantePago(
+                                movimiento,
+                                "descargar"
+                              )
+                            }
+                          >
+                            Compartir PDF
+                          </button>
+
+                          <button
+                            className="cc-soft-button"
+                            type="button"
+                            onClick={() =>
+                              procesarCompra(
+                                movimiento.id,
+                                "descargar"
+                              )
+                            }
+                            disabled={
+                              cargandoDetalleCompraId === movimiento.id
+                            }
+                          >
+                            Descargar PDF
+                          </button>
+                        </>
                       )}
 
                       {!esPago && (
@@ -1212,7 +1607,7 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
                           <button
                             className="cc-soft-button"
                             type="button"
-                            onClick={() => descargarCompra(movimiento.id)}
+                            onClick={() => procesarCompra(movimiento.id, "compartir")}
                             disabled={cargandoDetalleCompraId === movimiento.id}
                           >
                             Descargar PDF

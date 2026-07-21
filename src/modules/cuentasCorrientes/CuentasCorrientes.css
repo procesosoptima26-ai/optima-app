@@ -1013,3 +1013,34 @@
   }
 }
 
+/* Acciones de documentos PDF */
+.cc-document-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 10px;
+}
+
+.cc-document-actions .cc-primary-button,
+.cc-document-actions .cc-soft-button {
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.cc-history-header {
+  flex-wrap: wrap;
+}
+
+.cc-history-header > .cc-primary-button,
+.cc-history-header > .cc-soft-button {
+  min-height: 44px;
+}
+
+@media (max-width: 640px) {
+  .cc-history-header > .cc-primary-button,
+  .cc-history-header > .cc-soft-button {
+    width: 100%;
+  }
+}

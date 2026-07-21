@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { jsPDF } from "jspdf";
 import { tienePermiso } from "../../config/permisos";
 import "./CuentasCorrientes.css";
 
@@ -319,237 +320,244 @@ function construirHtmlExportacion(params: {
 }
 
 
-function escaparHtml(valor: string) {
+function normalizarNombreArchivo(valor: string) {
   return valor
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 }
 
-function construirHtmlRemito(params: {
+async function compartirArchivoPdf(
+  blob: Blob,
+  nombreArchivo: string,
+  titulo: string
+) {
+  const archivo = new File([blob], nombreArchivo, {
+    type: "application/pdf",
+  });
+
+  const navegador = navigator as Navigator & {
+    canShare?: (data?: ShareData) => boolean;
+  };
+
+  if (
+    navigator.share &&
+    navegador.canShare?.({ files: [archivo] })
+  ) {
+    await navigator.share({
+      title: titulo,
+      text: titulo,
+      files: [archivo],
+    });
+    return true;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  URL.revokeObjectURL(url);
+
+  return false;
+}
+
+function crearPdfRemito(params: {
   emisor: string;
   cliente: Cliente;
   detalle: DetalleRemito;
 }) {
-  const filas = params.detalle.items
-    .map(
-      (item) => `
-        <tr>
-          <td>${escaparHtml(item.descripcion)}</td>
-          <td style="text-align:right;">${item.cantidad}</td>
-          <td>${escaparHtml(item.unidad)}</td>
-          <td style="text-align:right;">${formatearPesos(item.costoUnitario)}</td>
-          <td style="text-align:right;">${formatearPesos(item.totalItem)}</td>
-        </tr>
-      `
-    )
-    .join("");
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
 
-  return `
-    <!DOCTYPE html>
-    <html lang="es">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>${escaparHtml(params.detalle.comprobante)}</title>
-        <style>
-          * { box-sizing: border-box; }
-          body {
-            margin: 0;
-            padding: 32px;
-            font-family: Arial, sans-serif;
-            color: #0f172a;
-            background: #ffffff;
-          }
-          .sheet {
-            max-width: 900px;
-            margin: 0 auto;
-            border: 1px solid #cbd5e1;
-            border-radius: 18px;
-            padding: 26px;
-          }
-          .header {
-            display: flex;
-            justify-content: space-between;
-            gap: 24px;
-            padding-bottom: 18px;
-            border-bottom: 2px solid #083f88;
-          }
-          .brand {
-            color: #083f88;
-            font-size: 28px;
-            font-weight: 800;
-          }
-          .emisor {
-            margin-top: 6px;
-            color: #475569;
-            font-size: 14px;
-          }
-          .number {
-            text-align: right;
-          }
-          .number strong {
-            display: block;
-            color: #083f88;
-            font-size: 22px;
-          }
-          .number span {
-            display: block;
-            margin-top: 6px;
-            color: #475569;
-          }
-          .client {
-            margin: 20px 0;
-            padding: 16px;
-            border-radius: 14px;
-            background: #f8fafc;
-          }
-          .client h2 {
-            margin: 0 0 10px;
-            color: #083f88;
-            font-size: 20px;
-          }
-          .client p {
-            margin: 5px 0;
-            color: #334155;
-          }
-          table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 16px;
-          }
-          th, td {
-            border: 1px solid #cbd5e1;
-            padding: 10px;
-            font-size: 13px;
-            vertical-align: top;
-          }
-          th {
-            background: #eff6ff;
-            color: #083f88;
-            text-align: left;
-          }
-          .total {
-            display: flex;
-            justify-content: flex-end;
-            margin-top: 18px;
-          }
-          .total-box {
-            min-width: 280px;
-            padding: 16px;
-            border-radius: 14px;
-            background: #083f88;
-            color: #ffffff;
-            text-align: right;
-          }
-          .total-box span {
-            display: block;
-            font-size: 13px;
-            opacity: 0.85;
-          }
-          .total-box strong {
-            display: block;
-            margin-top: 4px;
-            font-size: 26px;
-          }
-          .notes {
-            margin-top: 20px;
-            color: #475569;
-            font-size: 14px;
-          }
-          .signature {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 36px;
-            margin-top: 70px;
-          }
-          .signature div {
-            padding-top: 8px;
-            border-top: 1px solid #64748b;
-            text-align: center;
-            color: #475569;
-            font-size: 13px;
-          }
-          @media print {
-            body { padding: 0; }
-            .sheet {
-              max-width: none;
-              border: none;
-              border-radius: 0;
-            }
-          }
-        </style>
-      </head>
-      <body>
-        <main class="sheet">
-          <header class="header">
-            <div>
-              <div class="brand">OPTIMA</div>
-              <div class="emisor">${escaparHtml(params.emisor || "Emisor")}</div>
-            </div>
+  const margen = 15;
+  let y = 18;
 
-            <div class="number">
-              <strong>${escaparHtml(params.detalle.comprobante)}</strong>
-              <span>Fecha: ${escaparHtml(formatearFechaParaMostrar(params.detalle.fecha))}</span>
-            </div>
-          </header>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFontSize(20);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("OPTIMA", margen, y);
 
-          <section class="client">
-            <h2>Cliente</h2>
-            <p><strong>${escaparHtml(params.cliente.cliente)}</strong></p>
-            ${params.cliente.cuit ? `<p>CUIT: ${escaparHtml(params.cliente.cuit)}</p>` : ""}
-            ${params.cliente.direccion ? `<p>Dirección: ${escaparHtml(params.cliente.direccion)}</p>` : ""}
-            ${params.cliente.telefono ? `<p>Teléfono: ${escaparHtml(params.cliente.telefono)}</p>` : ""}
-          </section>
+  pdf.setFontSize(10);
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(params.emisor || "Emisor", margen, y + 6);
 
-          <table>
-            <thead>
-              <tr>
-                <th>Descripción</th>
-                <th style="text-align:right;">Cantidad</th>
-                <th>Unidad</th>
-                <th style="text-align:right;">Costo unitario</th>
-                <th style="text-align:right;">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${filas}
-            </tbody>
-          </table>
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFontSize(13);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(params.detalle.comprobante, 195, y, {
+    align: "right",
+  });
 
-          <div class="total">
-            <div class="total-box">
-              <span>Total del remito</span>
-              <strong>${formatearPesos(params.detalle.importe)}</strong>
-            </div>
-          </div>
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(71, 85, 105);
+  pdf.text(
+    `Fecha: ${formatearFechaParaMostrar(
+      params.detalle.fecha
+    )}`,
+    195,
+    y + 6,
+    { align: "right" }
+  );
 
-          ${
-            params.detalle.observaciones
-              ? `<div class="notes"><strong>Observaciones:</strong> ${escaparHtml(
-                  params.detalle.observaciones
-                )}</div>`
-              : ""
-          }
+  y += 15;
+  pdf.setDrawColor(8, 63, 136);
+  pdf.line(margen, y, 195, y);
+  y += 10;
 
-          ${
-            params.detalle.responsable
-              ? `<div class="notes"><strong>Responsable:</strong> ${escaparHtml(
-                  params.detalle.responsable
-                )}</div>`
-              : ""
-          }
+  pdf.setFillColor(248, 250, 252);
+  pdf.roundedRect(margen, y, 180, 27, 3, 3, "F");
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFontSize(12);
+  pdf.setFont("helvetica", "bold");
+  pdf.text("Cliente", margen + 4, y + 7);
 
-          <div class="signature">
-            <div>Firma del emisor</div>
-            <div>Firma y aclaración del receptor</div>
-          </div>
-        </main>
-      </body>
-    </html>
-  `;
+  pdf.setTextColor(15, 23, 42);
+  pdf.setFontSize(10);
+  pdf.text(params.cliente.cliente, margen + 4, y + 14);
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(9);
+  const datosCliente = [
+    params.cliente.cuit
+      ? `CUIT: ${params.cliente.cuit}`
+      : "",
+    params.cliente.direccion
+      ? `Direccion: ${params.cliente.direccion}`
+      : "",
+    params.cliente.telefono
+      ? `Telefono: ${params.cliente.telefono}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join(" | ");
+
+  if (datosCliente) {
+    pdf.text(datosCliente, margen + 4, y + 21, {
+      maxWidth: 172,
+    });
+  }
+
+  y += 36;
+
+  const columnas = {
+    descripcion: margen,
+    cantidad: 112,
+    unidad: 132,
+    unitario: 154,
+    total: 195,
+  };
+
+  pdf.setFillColor(239, 246, 255);
+  pdf.rect(margen, y, 180, 9, "F");
+  pdf.setTextColor(8, 63, 136);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(8);
+  pdf.text("Descripcion", columnas.descripcion + 2, y + 6);
+  pdf.text("Cant.", columnas.cantidad, y + 6, {
+    align: "right",
+  });
+  pdf.text("Unidad", columnas.unidad, y + 6, {
+    align: "right",
+  });
+  pdf.text("C. unitario", columnas.unitario, y + 6, {
+    align: "right",
+  });
+  pdf.text("Total", columnas.total, y + 6, {
+    align: "right",
+  });
+  y += 10;
+
+  pdf.setFont("helvetica", "normal");
+  pdf.setTextColor(15, 23, 42);
+
+  for (const item of params.detalle.items) {
+    if (y > 255) {
+      pdf.addPage();
+      y = 18;
+    }
+
+    const lineas = pdf.splitTextToSize(
+      item.descripcion,
+      80
+    ) as string[];
+    const alto = Math.max(8, lineas.length * 4 + 3);
+
+    pdf.setDrawColor(203, 213, 225);
+    pdf.rect(margen, y, 180, alto);
+    pdf.setFontSize(8);
+    pdf.text(lineas, columnas.descripcion + 2, y + 5);
+    pdf.text(String(item.cantidad), columnas.cantidad, y + 5, {
+      align: "right",
+    });
+    pdf.text(item.unidad, columnas.unidad, y + 5, {
+      align: "right",
+    });
+    pdf.text(
+      formatearPesos(item.costoUnitario),
+      columnas.unitario,
+      y + 5,
+      { align: "right" }
+    );
+    pdf.text(
+      formatearPesos(item.totalItem),
+      columnas.total,
+      y + 5,
+      { align: "right" }
+    );
+
+    y += alto;
+  }
+
+  y += 8;
+  pdf.setFillColor(8, 63, 136);
+  pdf.roundedRect(115, y, 80, 18, 3, 3, "F");
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(9);
+  pdf.text("Total del remito", 190, y + 6, {
+    align: "right",
+  });
+  pdf.setFontSize(15);
+  pdf.setFont("helvetica", "bold");
+  pdf.text(
+    formatearPesos(params.detalle.importe),
+    190,
+    y + 14,
+    { align: "right" }
+  );
+
+  y += 27;
+  pdf.setTextColor(71, 85, 105);
+  pdf.setFontSize(9);
+  pdf.setFont("helvetica", "normal");
+
+  if (params.detalle.observaciones) {
+    pdf.text(
+      `Observaciones: ${params.detalle.observaciones}`,
+      margen,
+      y,
+      { maxWidth: 180 }
+    );
+    y += 8;
+  }
+
+  if (params.detalle.responsable) {
+    pdf.text(
+      `Responsable: ${params.detalle.responsable}`,
+      margen,
+      y
+    );
+  }
+
+  return pdf;
 }
 
 function obtenerEstadoDesdeSaldo(saldo: number): EstadoCliente {
@@ -1085,84 +1093,81 @@ export default function CuentasCorrientes({ usuario }: Props) {
     }
   }
 
-  async function descargarRemito(
-    movimientoId: string,
-    comprobante: string
+  async function obtenerDetalleRemito(
+    movimientoId: string
   ) {
-    if (!clienteSeleccionado) return;
-
-    const ventana = window.open(
-      "",
-      "_blank",
-      "width=900,height=700"
+    const response = await fetch(
+      `/api/movimientos-cc?accion=detalle-remito&movimientoId=${encodeURIComponent(
+        movimientoId
+      )}`
     );
+    const data =
+      (await response.json()) as RespuestaDetalleRemito;
 
-    if (!ventana) {
-      setMensaje({
-        tipo: "error",
-        texto: "El navegador bloqueó la ventana del remito.",
-      });
-      return;
+    if (!response.ok || !data.ok || !data.detalle) {
+      throw new Error(
+        data.error || "No se pudo obtener el remito."
+      );
     }
 
-    ventana.document.open();
-    ventana.document.write(`
-      <!DOCTYPE html>
-      <html lang="es">
-        <head>
-          <meta charset="UTF-8" />
-          <title>Cargando remito</title>
-        </head>
-        <body style="font-family:Arial,sans-serif;padding:32px;">
-          Cargando ${escaparHtml(comprobante || "remito")}...
-        </body>
-      </html>
-    `);
-    ventana.document.close();
+    return data.detalle;
+  }
+
+  async function procesarPdfRemito(
+    movimientoId: string,
+    comprobante: string,
+    accion: "compartir" | "descargar"
+  ) {
+    if (!clienteSeleccionado) return;
 
     try {
       setDescargandoRemitoId(movimientoId);
       setMensaje(null);
 
-      const response = await fetch(
-        `/api/movimientos-cc?accion=detalle-remito&movimientoId=${encodeURIComponent(
-          movimientoId
-        )}`
-      );
-
-      const data =
-        (await response.json()) as RespuestaDetalleRemito;
-
-      if (!response.ok || !data.ok || !data.detalle) {
-        throw new Error(
-          data.error || "No se pudo obtener el remito."
-        );
-      }
-
-      const html = construirHtmlRemito({
+      const detalle = await obtenerDetalleRemito(movimientoId);
+      const pdf = crearPdfRemito({
         emisor: usuario.empresa || usuario.nombre,
         cliente: clienteSeleccionado,
-        detalle: data.detalle,
+        detalle,
       });
 
-      ventana.document.open();
-      ventana.document.write(html);
-      ventana.document.close();
-      ventana.focus();
+      const nombreBase = normalizarNombreArchivo(
+        comprobante || detalle.comprobante || "Remito"
+      );
+      const nombreArchivo = `${nombreBase || "Remito"}.pdf`;
 
-      window.setTimeout(() => {
-        ventana.print();
-      }, 350);
+      if (accion === "compartir") {
+        const compartido = await compartirArchivoPdf(
+          pdf.output("blob"),
+          nombreArchivo,
+          detalle.comprobante || "Remito"
+        );
+
+        if (!compartido) {
+          setMensaje({
+            tipo: "info",
+            texto:
+              "Este dispositivo no permite compartir archivos directamente. El PDF se descargó.",
+          });
+        }
+      } else {
+        pdf.save(nombreArchivo);
+      }
     } catch (error) {
-      console.error("Error descargando remito:", error);
-      ventana.close();
+      if (
+        error instanceof DOMException &&
+        error.name === "AbortError"
+      ) {
+        return;
+      }
 
+      console.error("Error procesando remito:", error);
       setMensaje({
         tipo: "error",
         texto:
           error instanceof Error
             ? error.message
-            : "No se pudo descargar el remito.",
+            : "No se pudo generar el remito.",
       });
     } finally {
       setDescargandoRemitoId(null);
@@ -1446,9 +1451,10 @@ export default function CuentasCorrientes({ usuario }: Props) {
                 className="cc-primary-button"
                 type="button"
                 onClick={() =>
-                  descargarRemito(
+                  procesarPdfRemito(
                     ultimoRemitoMovimientoId,
-                    ultimoRemitoComprobante
+                    ultimoRemitoComprobante,
+                    "compartir"
                   )
                 }
                 disabled={
@@ -1459,7 +1465,25 @@ export default function CuentasCorrientes({ usuario }: Props) {
                 {descargandoRemitoId ===
                 ultimoRemitoMovimientoId
                   ? "Preparando PDF..."
-                  : "Descargar PDF"}
+                  : "Compartir PDF"}
+              </button>
+
+              <button
+                className="cc-soft-button cc-full-button"
+                type="button"
+                onClick={() =>
+                  procesarPdfRemito(
+                    ultimoRemitoMovimientoId,
+                    ultimoRemitoComprobante,
+                    "descargar"
+                  )
+                }
+                disabled={
+                  descargandoRemitoId ===
+                  ultimoRemitoMovimientoId
+                }
+              >
+                Descargar PDF
               </button>
             </section>
           )}
@@ -1537,24 +1561,43 @@ export default function CuentasCorrientes({ usuario }: Props) {
                       </strong>
 
                       {!esPago && (
-                        <button
-                          className="cc-primary-button"
-                          type="button"
-                          onClick={() =>
-                            descargarRemito(
-                              movimiento.id,
-                              movimiento.comprobante
-                            )
-                          }
-                          disabled={
-                            descargandoRemitoId === movimiento.id
-                          }
-                          style={{ marginTop: "10px", width: "100%" }}
-                        >
-                          {descargandoRemitoId === movimiento.id
-                            ? "Preparando PDF..."
-                            : "Descargar PDF"}
-                        </button>
+                        <div className="cc-document-actions">
+                          <button
+                            className="cc-primary-button"
+                            type="button"
+                            onClick={() =>
+                              procesarPdfRemito(
+                                movimiento.id,
+                                movimiento.comprobante,
+                                "compartir"
+                              )
+                            }
+                            disabled={
+                              descargandoRemitoId === movimiento.id
+                            }
+                          >
+                            {descargandoRemitoId === movimiento.id
+                              ? "Preparando PDF..."
+                              : "Compartir PDF"}
+                          </button>
+
+                          <button
+                            className="cc-soft-button"
+                            type="button"
+                            onClick={() =>
+                              procesarPdfRemito(
+                                movimiento.id,
+                                movimiento.comprobante,
+                                "descargar"
+                              )
+                            }
+                            disabled={
+                              descargandoRemitoId === movimiento.id
+                            }
+                          >
+                            Descargar PDF
+                          </button>
+                        </div>
                       )}
 
                       {puedeEditarGuardado && (

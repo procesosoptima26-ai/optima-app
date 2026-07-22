@@ -37,6 +37,7 @@ type MovimientoPayload = {
 
 type GuardarMovimientosPayload = {
   sucursal: string;
+  idCarga: string;
   movimientos: MovimientoPayload[];
 };
 
@@ -336,9 +337,11 @@ function validarMovimiento(
 }
 
 function armarCamposMovimiento(
-  movimiento: MovimientoPayload
+  movimiento: MovimientoPayload,
+  idCarga: string
 ): Record<string, unknown> {
   const fields: Record<string, unknown> = {
+    ID_CARGA: idCarga,
     PRODUCTO: [
       normalizarTexto(movimiento.productoId),
     ],
@@ -398,8 +401,52 @@ function armarCamposMovimiento(
   return fields;
 }
 
+function escaparFormulaAirtable(valor: string) {
+  return valor.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function leerMovimientosPorIdCarga(
+  idCarga: string
+): Promise<AirtableRecord[]> {
+  const token = getEnv("AIRTABLE_TOKEN");
+  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv(
+    "AIRTABLE_MOVIMIENTOS_TABLE_NAME"
+  );
+
+  const url = new URL(
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+      tableName
+    )}`
+  );
+
+  url.searchParams.set("pageSize", "100");
+  url.searchParams.set(
+    "filterByFormula",
+    `{ID_CARGA}='${escaparFormulaAirtable(idCarga)}'`
+  );
+
+  const response = await fetch(url.toString(), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = (await response.json()) as AirtableResponse;
+
+  if (!response.ok) {
+    console.error("Error consultando ID_CARGA:", data);
+    throw new Error(
+      "No se pudo verificar si la carga ya había sido guardada."
+    );
+  }
+
+  return data.records || [];
+}
+
 async function crearMovimientos(
-  movimientos: MovimientoPayload[]
+  movimientos: MovimientoPayload[],
+  idCarga: string
 ) {
   const token = getEnv("AIRTABLE_TOKEN");
   const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
@@ -410,7 +457,7 @@ async function crearMovimientos(
   const registrosCreados: AirtableRecord[] = [];
 
   const records = movimientos.map((movimiento) => ({
-    fields: armarCamposMovimiento(movimiento),
+    fields: armarCamposMovimiento(movimiento, idCarga),
   }));
 
   const grupos = partirEnGrupos(records, 10);
@@ -604,6 +651,8 @@ export default async function handler(
         payload?.sucursal
       );
 
+      const idCarga = normalizarTexto(payload?.idCarga);
+
       const movimientos = Array.isArray(payload?.movimientos)
         ? payload.movimientos
         : [];
@@ -612,6 +661,17 @@ export default async function handler(
         return res.status(400).json({
           ok: false,
           error: "Falta la sucursal del usuario.",
+        });
+      }
+
+      if (
+        !idCarga ||
+        idCarga.length < 12 ||
+        idCarga.length > 120
+      ) {
+        return res.status(400).json({
+          ok: false,
+          error: "El identificador de carga es inválido.",
         });
       }
 
@@ -627,6 +687,28 @@ export default async function handler(
           ok: false,
           error:
             "No se pueden guardar más de 100 movimientos juntos.",
+        });
+      }
+
+      const existentes = await leerMovimientosPorIdCarga(
+        idCarga
+      );
+
+      if (existentes.length > 0) {
+        if (existentes.length !== movimientos.length) {
+          return res.status(409).json({
+            ok: false,
+            error:
+              "La carga ya existe parcialmente en Airtable. No se crearon movimientos nuevos para evitar duplicados.",
+            ids: existentes.map((record) => record.id),
+          });
+        }
+
+        return res.status(200).json({
+          ok: true,
+          cantidad: existentes.length,
+          ids: existentes.map((record) => record.id),
+          duplicadoEvitado: true,
         });
       }
 
@@ -673,7 +755,10 @@ export default async function handler(
         }
       }
 
-      const creados = await crearMovimientos(movimientos);
+      const creados = await crearMovimientos(
+        movimientos,
+        idCarga
+      );
 
       return res.status(200).json({
         ok: true,

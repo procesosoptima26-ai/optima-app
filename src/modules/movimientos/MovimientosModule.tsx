@@ -321,11 +321,22 @@ function esperar(milisegundos: number) {
   });
 }
 
+function generarIdCarga() {
+  const aleatorio =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2);
+
+  return `carga_${Date.now()}_${aleatorio}`;
+}
+
 export default function Movimientos({
   usuario,
   modoInicial = "recepcion",
 }: Props) {
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
+  const guardadoEnCursoRef = useRef(false);
+  const idCargaActualRef = useRef<string | null>(null);
 
   const [modo, setModo] = useState<ModoMovimiento>(modoInicial);
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);
@@ -1662,6 +1673,8 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function agregarALista() {
+    idCargaActualRef.current = null;
+
     const resultadoActual = await construirMovimientosActuales();
 
     if (resultadoActual.error) {
@@ -1796,57 +1809,76 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function concluirYGuardar() {
-    let movimientosFinales = [...lista];
-
-    const hayProductoActual = Boolean(producto);
-
-    if (hayProductoActual) {
-      const resultadoActual = await construirMovimientosActuales();
-
-      if (resultadoActual.error) {
-        setAviso({
-          tipo: "error",
-          texto: resultadoActual.error,
-        });
-        return;
-      }
-
-      if (modo === "recepcion" && grupoRecepcionEditando !== null) {
-        const movimientosEditados = resultadoActual.movimientos.map(
-          (movimiento, index) => ({
-            ...movimiento,
-            idLocal:
-              grupoRecepcionEditando +
-              index +
-              Math.floor(Math.random() * 1000),
-            grupoRecepcionId: grupoRecepcionEditando,
-          })
-        );
-
-        movimientosFinales = [
-          ...movimientosFinales.filter(
-            (movimiento) =>
-              movimiento.grupoRecepcionId !== grupoRecepcionEditando
-          ),
-          ...movimientosEditados,
-        ];
-      } else {
-        movimientosFinales = [
-          ...movimientosFinales,
-          ...resultadoActual.movimientos,
-        ];
-      }
-    }
-
-    if (movimientosFinales.length === 0) {
+    if (guardadoEnCursoRef.current) {
       setAviso({
-        tipo: "error",
-        texto: "No hay movimientos para guardar.",
+        tipo: "info",
+        texto: "La carga ya se está guardando. Esperá un momento.",
       });
       return;
     }
 
-    await guardarMovimientos(movimientosFinales);
+    guardadoEnCursoRef.current = true;
+
+    try {
+      let movimientosFinales = [...lista];
+
+      const hayProductoActual = Boolean(producto);
+
+      if (hayProductoActual) {
+        const resultadoActual = await construirMovimientosActuales();
+
+        if (resultadoActual.error) {
+          setAviso({
+            tipo: "error",
+            texto: resultadoActual.error,
+          });
+          return;
+        }
+
+        if (modo === "recepcion" && grupoRecepcionEditando !== null) {
+          const movimientosEditados = resultadoActual.movimientos.map(
+            (movimiento, index) => ({
+              ...movimiento,
+              idLocal:
+                grupoRecepcionEditando +
+                index +
+                Math.floor(Math.random() * 1000),
+              grupoRecepcionId: grupoRecepcionEditando,
+            })
+          );
+
+          movimientosFinales = [
+            ...movimientosFinales.filter(
+              (movimiento) =>
+                movimiento.grupoRecepcionId !== grupoRecepcionEditando
+            ),
+            ...movimientosEditados,
+          ];
+        } else {
+          movimientosFinales = [
+            ...movimientosFinales,
+            ...resultadoActual.movimientos,
+          ];
+        }
+      }
+
+      if (movimientosFinales.length === 0) {
+        setAviso({
+          tipo: "error",
+          texto: "No hay movimientos para guardar.",
+        });
+        return;
+      }
+
+      const idCarga =
+        idCargaActualRef.current || generarIdCarga();
+
+      idCargaActualRef.current = idCarga;
+
+      await guardarMovimientos(movimientosFinales, idCarga);
+    } finally {
+      guardadoEnCursoRef.current = false;
+    }
   }
 
   function limpiarFormularioActual(enfocarCodigo: boolean) {
@@ -1902,12 +1934,15 @@ const [, setCantidadesPorLote] = useState<
 
     if (!confirmar) return;
 
+    idCargaActualRef.current = null;
     setLista([]);
     setResultado([]);
     limpiarFormularioActual(true);
   }
 
   function eliminarGrupoDeLista(movimientos: MovimientoPendiente[]) {
+    idCargaActualRef.current = null;
+
     const ids = new Set(
       movimientos.map((movimiento) => movimiento.idLocal)
     );
@@ -1957,7 +1992,8 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function guardarMovimientos(
-    movimientosAGuardar: MovimientoPendiente[]
+    movimientosAGuardar: MovimientoPendiente[],
+    idCarga: string
   ) {
     try {
       setGuardando(true);
@@ -1975,6 +2011,7 @@ const [, setCantidadesPorLote] = useState<
         },
         body: JSON.stringify({
           sucursal: usuario.sucursal,
+          idCarga,
           movimientos: movimientosAGuardar.map((movimiento) => ({
             productoId: movimiento.productoId,
             tipoMovimiento: movimiento.tipoMovimiento,
@@ -2042,6 +2079,7 @@ const [, setCantidadesPorLote] = useState<
           texto: `${procesados} movimientos procesados correctamente.`,
         });
 
+        idCargaActualRef.current = null;
         setLista([]);
         limpiarFormularioActual(false);
       }
@@ -3087,7 +3125,10 @@ const [, setCantidadesPorLote] = useState<
             <button
               type="button"
               className="mov-clear-list-button"
-              onClick={() => setLista([])}
+              onClick={() => {
+                idCargaActualRef.current = null;
+                setLista([]);
+              }}
               disabled={guardando}
             >
               Vaciar

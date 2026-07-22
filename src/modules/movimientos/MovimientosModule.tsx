@@ -321,22 +321,12 @@ function esperar(milisegundos: number) {
   });
 }
 
-function generarIdCarga() {
-  const aleatorio =
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : Math.random().toString(36).slice(2);
-
-  return `carga_${Date.now()}_${aleatorio}`;
-}
-
 export default function Movimientos({
   usuario,
   modoInicial = "recepcion",
 }: Props) {
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const guardadoEnCursoRef = useRef(false);
-  const idCargaActualRef = useRef<string | null>(null);
 
   const [modo, setModo] = useState<ModoMovimiento>(modoInicial);
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);
@@ -1673,7 +1663,6 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function agregarALista() {
-    idCargaActualRef.current = null;
 
     const resultadoActual = await construirMovimientosActuales();
 
@@ -1870,12 +1859,7 @@ const [, setCantidadesPorLote] = useState<
         return;
       }
 
-      const idCarga =
-        idCargaActualRef.current || generarIdCarga();
-
-      idCargaActualRef.current = idCarga;
-
-      await guardarMovimientos(movimientosFinales, idCarga);
+      await guardarMovimientos(movimientosFinales);
     } finally {
       guardadoEnCursoRef.current = false;
     }
@@ -1933,15 +1917,12 @@ const [, setCantidadesPorLote] = useState<
     );
 
     if (!confirmar) return;
-
-    idCargaActualRef.current = null;
     setLista([]);
     setResultado([]);
     limpiarFormularioActual(true);
   }
 
   function eliminarGrupoDeLista(movimientos: MovimientoPendiente[]) {
-    idCargaActualRef.current = null;
 
     const ids = new Set(
       movimientos.map((movimiento) => movimiento.idLocal)
@@ -1992,8 +1973,7 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function guardarMovimientos(
-    movimientosAGuardar: MovimientoPendiente[],
-    idCarga: string
+    movimientosAGuardar: MovimientoPendiente[]
   ) {
     try {
       setGuardando(true);
@@ -2011,7 +1991,6 @@ const [, setCantidadesPorLote] = useState<
         },
         body: JSON.stringify({
           sucursal: usuario.sucursal,
-          idCarga,
           movimientos: movimientosAGuardar.map((movimiento) => ({
             productoId: movimiento.productoId,
             tipoMovimiento: movimiento.tipoMovimiento,
@@ -2078,8 +2057,6 @@ const [, setCantidadesPorLote] = useState<
           tipo: "exito",
           texto: `${procesados} movimientos procesados correctamente.`,
         });
-
-        idCargaActualRef.current = null;
         setLista([]);
         limpiarFormularioActual(false);
       }
@@ -3126,7 +3103,6 @@ const [, setCantidadesPorLote] = useState<
               type="button"
               className="mov-clear-list-button"
               onClick={() => {
-                idCargaActualRef.current = null;
                 setLista([]);
               }}
               disabled={guardando}

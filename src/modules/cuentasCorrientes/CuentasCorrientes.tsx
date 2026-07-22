@@ -384,11 +384,6 @@ function crearPdfRemito(params: {
   pdf.setFont("helvetica", "bold");
   pdf.text(params.emisor || "Empresa", margen, y);
 
-  pdf.setFontSize(9);
-  pdf.setFont("helvetica", "normal");
-  pdf.setTextColor(71, 85, 105);
-  pdf.text("Generado por OPTIMA", margen, y + 6);
-
   pdf.setTextColor(8, 63, 136);
   pdf.setFontSize(13);
   pdf.setFont("helvetica", "bold");
@@ -555,6 +550,18 @@ function crearPdfRemito(params: {
       margen,
       y
     );
+  }
+
+  const cantidadPaginas = pdf.getNumberOfPages();
+
+  for (let pagina = 1; pagina <= cantidadPaginas; pagina += 1) {
+    pdf.setPage(pagina);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(148, 163, 184);
+    pdf.text("By OPTIMA", 105, 289, {
+      align: "center",
+    });
   }
 
   return pdf;

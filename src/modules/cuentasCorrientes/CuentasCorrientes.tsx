@@ -387,7 +387,7 @@ function crearPdfRemito(params: {
   pdf.setFontSize(9);
   pdf.setFont("helvetica", "normal");
   pdf.setTextColor(71, 85, 105);
-  pdf.text("Generado con OPTIMA", margen, y + 6);
+  pdf.text("Generado por OPTIMA", margen, y + 6);
 
   pdf.setTextColor(8, 63, 136);
   pdf.setFontSize(13);

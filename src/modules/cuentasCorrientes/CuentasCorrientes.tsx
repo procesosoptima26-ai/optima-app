@@ -61,6 +61,37 @@ type RespuestaClientes = {
   error?: string;
 };
 
+
+type TerceroApi = {
+  id: string;
+  tercero: string;
+  codigoTercero: string;
+  roles: string[];
+  tipoPersona: string;
+  nombre: string;
+  apellido: string;
+  razonSocial: string;
+  nombreComercial: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  cuitCuil: string;
+  condicionIva: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  localidad: string;
+  provincia: string;
+  observaciones: string;
+  activo: boolean;
+};
+
+type RespuestaTerceros = {
+  ok?: boolean;
+  rol?: string | null;
+  terceros?: TerceroApi[];
+  error?: string;
+};
+
 type RespuestaMovimientos = {
   ok?: boolean;
   movimientos?: Movimiento[];
@@ -674,19 +705,39 @@ export default function CuentasCorrientes({ usuario }: Props) {
       setCargandoClientes(true);
       setMensaje(null);
 
-      const response = await fetch("/api/clientes");
-      const data = (await response.json()) as RespuestaClientes;
+      const response = await fetch(
+        "/api/administracion/terceros?rol=CLIENTE"
+      );
+      const data = (await response.json()) as RespuestaTerceros;
 
-      if (!response.ok || !data.ok || !data.clientes) {
-        throw new Error(data.error || "No se pudieron cargar los clientes");
+      if (!response.ok || !data.ok || !data.terceros) {
+        throw new Error(
+          data.error || "No se pudieron cargar los clientes"
+        );
       }
 
-      setClientes(data.clientes);
+      const clientesAdaptados: Cliente[] = data.terceros.map(
+        (tercero) => ({
+          id: tercero.id,
+          cliente: tercero.tercero,
+          telefono: tercero.telefono,
+          cuit: tercero.cuitCuil || tercero.numeroDocumento,
+          direccion: tercero.direccion,
+          observaciones: tercero.observaciones,
+          saldoActual: 0,
+          estado: "AL DIA",
+        })
+      );
+
+      setClientes(clientesAdaptados);
     } catch (error) {
       console.error("Error cargando clientes:", error);
       setMensaje({
         tipo: "error",
-        texto: "No se pudieron cargar los clientes.",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron cargar los clientes.",
       });
     } finally {
       setCargandoClientes(false);

@@ -82,6 +82,37 @@ type RespuestaProveedores = {
   error?: string;
 };
 
+
+type TerceroApi = {
+  id: string;
+  tercero: string;
+  codigoTercero: string;
+  roles: string[];
+  tipoPersona: string;
+  nombre: string;
+  apellido: string;
+  razonSocial: string;
+  nombreComercial: string;
+  tipoDocumento: string;
+  numeroDocumento: string;
+  cuitCuil: string;
+  condicionIva: string;
+  telefono: string;
+  email: string;
+  direccion: string;
+  localidad: string;
+  provincia: string;
+  observaciones: string;
+  activo: boolean;
+};
+
+type RespuestaTerceros = {
+  ok?: boolean;
+  rol?: string | null;
+  terceros?: TerceroApi[];
+  error?: string;
+};
+
 type RespuestaMovimientos = {
   ok?: boolean;
   movimientos?: Movimiento[];
@@ -778,12 +809,42 @@ export default function CuentasCorrientesProveedores({ usuario }: Props) {
   async function cargarProveedores() {
     try {
       setCargando(true);
-      const response = await fetch("/api/proveedores");
-      const data = (await response.json()) as RespuestaProveedores;
-      if (!response.ok || !data.ok || !data.proveedores) throw new Error(data.error || "No se pudieron cargar los proveedores.");
-      setProveedores(data.proveedores);
+      setMensaje(null);
+
+      const response = await fetch(
+        "/api/administracion/terceros?rol=PROVEEDOR"
+      );
+      const data = (await response.json()) as RespuestaTerceros;
+
+      if (!response.ok || !data.ok || !data.terceros) {
+        throw new Error(
+          data.error || "No se pudieron cargar los proveedores."
+        );
+      }
+
+      const proveedoresAdaptados: Proveedor[] = data.terceros.map(
+        (tercero) => ({
+          id: tercero.id,
+          proveedor: tercero.tercero,
+          telefono: tercero.telefono,
+          cuit: tercero.cuitCuil || tercero.numeroDocumento,
+          direccion: tercero.direccion,
+          observaciones: tercero.observaciones,
+          saldoActual: 0,
+          estado: "AL DIA",
+        })
+      );
+
+      setProveedores(proveedoresAdaptados);
     } catch (error) {
-      setMensaje({ tipo: "error", texto: error instanceof Error ? error.message : "No se pudieron cargar los proveedores." });
+      console.error("Error cargando proveedores:", error);
+      setMensaje({
+        tipo: "error",
+        texto:
+          error instanceof Error
+            ? error.message
+            : "No se pudieron cargar los proveedores.",
+      });
     } finally {
       setCargando(false);
     }

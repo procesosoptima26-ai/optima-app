@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
-import CuentasCorrientes from "./modules/cuentasCorrientes/CuentasCorrientes";
-import CuentasCorrientesProveedores from "./modules/cuentasCorrientes/CuentasCorrientesProveedores";
-import ImportesPendientes from "./modules/cuentasCorrientes/ImportesPendientes";
-import Administracion from "./modules/administracion/Administracion";
-import { tienePermiso } from "./config/permisos";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
+import Administracion from "./modules/administracion/Administracion";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -91,7 +87,6 @@ type VistaActiva =
   | "login"
   | "inventario"
   | "movimientos"
-  | "cuentasCorrientes"
   | "administracion"
   | "facturacion"
   | "reportes"
@@ -99,13 +94,11 @@ type VistaActiva =
   | "usuario";
 
 type MovimientoSubvista = "recepcion" | "reposicion" | "stock" | "individual";
-type CuentaCorrienteSubvista = "clientes" | "proveedores" | "pendientes";
 
 type MenuIconKey =
   | "login"
   | "inventario"
   | "movimientos"
-  | "cuentasCorrientes"
   | "administracion"
   | "facturacion"
   | "reportes"
@@ -142,11 +135,6 @@ const itemsMenu: ItemMenu[] = [
     icono: "movimientos",
   },
   {
-    id: "cuentasCorrientes",
-    etiqueta: "CUENTAS CORRIENTES",
-    icono: "cuentasCorrientes",
-  },
-  {
     id: "administracion",
     etiqueta: "ADMINISTRACIÓN",
     icono: "administracion",
@@ -177,7 +165,6 @@ const moduloPorVista: Record<ModuloVista, string> = {
   login: "LOGIN",
   inventario: "INVENTARIO",
   movimientos: "MOVIMIENTOS",
-  cuentasCorrientes: "CUENTAS_CORRIENTES",
   administracion: "ADMINISTRACION",
   facturacion: "FACTURACION",
   reportes: "REPORTES",
@@ -306,7 +293,7 @@ function IconMovements() {
   );
 }
 
-function IconAccounts() {
+function IconAdministration() {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -317,19 +304,6 @@ function IconAccounts() {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      <path d="M4 6.5h16" />
-      <path d="M4 12h16" />
-      <path d="M4 17.5h10" />
-      <circle cx="18" cy="17.5" r="2" />
-      <path d="M18 15.5v4" />
-      <path d="M16 17.5h4" />
-    </svg>
-  );
-}
-
-function IconAdministration() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
       <path d="M7 8h10M7 12h4M7 16h6" />
       <circle cx="17" cy="15.5" r="2.2" />
@@ -418,8 +392,6 @@ function renderIcon(icono: MenuIconKey) {
       return <IconInventory />;
     case "movimientos":
       return <IconMovements />;
-    case "cuentasCorrientes":
-      return <IconAccounts />;
     case "administracion":
       return <IconAdministration />;
     case "facturacion":
@@ -442,11 +414,7 @@ function App() {
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [movimientoSubvista, setMovimientoSubvista] =
     useState<MovimientoSubvista>("recepcion");
-  const [cuentaCorrienteSubvista, setCuentaCorrienteSubvista] =
-    useState<CuentaCorrienteSubvista>("clientes");
   const [grupoMovimientosAbierto, setGrupoMovimientosAbierto] = useState(false);
-  const [grupoCuentaCorrienteAbierto, setGrupoCuentaCorrienteAbierto] =
-    useState(false);
 
   const [sesionCargada, setSesionCargada] = useState(false);
   const [usuarioSesion, setUsuarioSesion] = useState<UsuarioSesion | null>(null);
@@ -1088,15 +1056,6 @@ function App() {
     setMenuAbierto(false);
   }
 
-  function abrirCuentaCorriente(subvista: CuentaCorrienteSubvista) {
-    if (!usuarioPuedeVer("cuentasCorrientes")) return;
-
-    setCuentaCorrienteSubvista(subvista);
-    setVistaActiva("cuentasCorrientes");
-    setGrupoCuentaCorrienteAbierto(true);
-    setMenuAbierto(false);
-  }
-
   function itemMenuVisible(id: ModuloVista) {
     return itemsMenuVisibles.some((item) => item.id === id);
   }
@@ -1665,23 +1624,9 @@ function App() {
       );
     }
 
-if (vistaActiva === "cuentasCorrientes") {
-  if (cuentaCorrienteSubvista === "proveedores") {
-    return (
-      <CuentasCorrientesProveedores usuario={usuarioSesion} />
-    );
-  }
-
-  if (cuentaCorrienteSubvista === "pendientes") {
-    return <ImportesPendientes usuario={usuarioSesion} />;
-  }
-
-  return <CuentasCorrientes usuario={usuarioSesion} />;
+if (vistaActiva === "administracion") {
+  return <Administracion usuario={usuarioSesion} />;
 }
-
-    if (vistaActiva === "administracion") {
-      return <Administracion usuario={usuarioSesion} />;
-    }
 
     if (vistaActiva === "usuario") {
       return renderUsuario();
@@ -1773,71 +1718,19 @@ if (vistaActiva === "cuentasCorrientes") {
                 </div>
               )}
 
-              {itemMenuVisible("cuentasCorrientes") && (
-                <div className="side-menu-group">
-                  <button
-                    className={`side-menu-item side-menu-parent ${
-                      vistaActiva === "cuentasCorrientes"
-                        ? "side-menu-item-active"
-                        : ""
-                    }`}
-                    type="button"
-                    onClick={() =>
-                      setGrupoCuentaCorrienteAbierto((abierto) => !abierto)
-                    }
-                    aria-expanded={grupoCuentaCorrienteAbierto}
-                  >
-                    <span className="side-menu-icon">
-                      {renderIcon("cuentasCorrientes")}
-                    </span>
-                    <strong>CUENTA CORRIENTE</strong>
-                    <span className="side-menu-chevron">
-                      {grupoCuentaCorrienteAbierto ? "⌃" : "⌄"}
-                    </span>
-                  </button>
-
-                  {grupoCuentaCorrienteAbierto && (
-                    <div className="side-menu-submenu">
-                      <button
-                        type="button"
-                        onClick={() => abrirCuentaCorriente("clientes")}
-                      >
-                        Clientes
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => abrirCuentaCorriente("proveedores")}
-                      >
-                        Proveedores
-                      </button>
-
-                      {usuarioSesion &&
-                        tienePermiso(
-                          usuarioSesion.rol,
-                          "cuentasCorrientes.editarGuardado"
-                        ) && (
-                          <button
-                            type="button"
-                            onClick={() => abrirCuentaCorriente("pendientes")}
-                          >
-                            Importes pendientes
-                          </button>
-                        )}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {itemMenuVisible("administracion") && (
                 <button
                   className={`side-menu-item ${
-                    vistaActiva === "administracion" ? "side-menu-item-active" : ""
+                    vistaActiva === "administracion"
+                      ? "side-menu-item-active"
+                      : ""
                   }`}
                   type="button"
                   onClick={() => cambiarVista("administracion")}
                 >
-                  <span className="side-menu-icon">{renderIcon("administracion")}</span>
+                  <span className="side-menu-icon">
+                    {renderIcon("administracion")}
+                  </span>
                   <strong>ADMINISTRACIÓN</strong>
                 </button>
               )}

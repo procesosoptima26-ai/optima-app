@@ -9,10 +9,6 @@ export type Permiso =
   | "movimientos.ajustar"
   | "movimientos.revisarAjustes"
   | "movimientos.editarGuardado"
-  | "cuentasCorrientes.ver"
-  | "cuentasCorrientes.crear"
-  | "cuentasCorrientes.editarGuardado"
-  | "cuentasCorrientes.exportar"
   | "administracion.ver"
   | "administracion.gestionarTerceros"
   | "administracion.gestionarDocumentos"
@@ -38,9 +34,6 @@ const permisosPorRol: Record<RolUsuario, Permiso[]> = {
     "movimientos.crear",
     "movimientos.ajustar",
 
-    "cuentasCorrientes.ver",
-    "cuentasCorrientes.crear",
-
     "administracion.ver",
 
     "reportes.ver",
@@ -58,11 +51,6 @@ const permisosPorRol: Record<RolUsuario, Permiso[]> = {
     "movimientos.ajustar",
     "movimientos.revisarAjustes",
     "movimientos.editarGuardado",
-
-    "cuentasCorrientes.ver",
-    "cuentasCorrientes.crear",
-    "cuentasCorrientes.editarGuardado",
-    "cuentasCorrientes.exportar",
 
     "administracion.ver",
     "administracion.gestionarTerceros",

@@ -4,6 +4,7 @@ import BarcodeScanner from "./components/BarcodeScanner";
 import CuentasCorrientes from "./modules/cuentasCorrientes/CuentasCorrientes";
 import CuentasCorrientesProveedores from "./modules/cuentasCorrientes/CuentasCorrientesProveedores";
 import ImportesPendientes from "./modules/cuentasCorrientes/ImportesPendientes";
+import Administracion from "./modules/administracion/Administracion";
 import { tienePermiso } from "./config/permisos";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import logoOptima from "./assets/logo-optima.png";
@@ -91,6 +92,7 @@ type VistaActiva =
   | "inventario"
   | "movimientos"
   | "cuentasCorrientes"
+  | "administracion"
   | "facturacion"
   | "reportes"
   | "ajustes"
@@ -104,6 +106,7 @@ type MenuIconKey =
   | "inventario"
   | "movimientos"
   | "cuentasCorrientes"
+  | "administracion"
   | "facturacion"
   | "reportes"
   | "ajustes"
@@ -144,6 +147,11 @@ const itemsMenu: ItemMenu[] = [
     icono: "cuentasCorrientes",
   },
   {
+    id: "administracion",
+    etiqueta: "ADMINISTRACIÓN",
+    icono: "administracion",
+  },
+  {
     id: "facturacion",
     etiqueta: "FACTURACIÓN",
     icono: "facturacion",
@@ -170,6 +178,7 @@ const moduloPorVista: Record<ModuloVista, string> = {
   inventario: "INVENTARIO",
   movimientos: "MOVIMIENTOS",
   cuentasCorrientes: "CUENTAS_CORRIENTES",
+  administracion: "ADMINISTRACION",
   facturacion: "FACTURACION",
   reportes: "REPORTES",
   ajustes: "AJUSTES",
@@ -318,6 +327,17 @@ function IconAccounts() {
   );
 }
 
+function IconAdministration() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3.5" y="4" width="17" height="16" rx="2.5" />
+      <path d="M7 8h10M7 12h4M7 16h6" />
+      <circle cx="17" cy="15.5" r="2.2" />
+      <path d="M17 13.3v4.4M14.8 15.5h4.4" />
+    </svg>
+  );
+}
+
 function IconAutomation() {
   return (
     <svg
@@ -400,6 +420,8 @@ function renderIcon(icono: MenuIconKey) {
       return <IconMovements />;
     case "cuentasCorrientes":
       return <IconAccounts />;
+    case "administracion":
+      return <IconAdministration />;
     case "facturacion":
       return <IconAutomation />;
     case "reportes":
@@ -1657,6 +1679,10 @@ if (vistaActiva === "cuentasCorrientes") {
   return <CuentasCorrientes usuario={usuarioSesion} />;
 }
 
+    if (vistaActiva === "administracion") {
+      return <Administracion usuario={usuarioSesion} />;
+    }
+
     if (vistaActiva === "usuario") {
       return renderUsuario();
     }
@@ -1803,6 +1829,19 @@ if (vistaActiva === "cuentasCorrientes") {
                 </div>
               )}
 
+              {itemMenuVisible("administracion") && (
+                <button
+                  className={`side-menu-item ${
+                    vistaActiva === "administracion" ? "side-menu-item-active" : ""
+                  }`}
+                  type="button"
+                  onClick={() => cambiarVista("administracion")}
+                >
+                  <span className="side-menu-icon">{renderIcon("administracion")}</span>
+                  <strong>ADMINISTRACIÓN</strong>
+                </button>
+              )}
+
               {itemMenuVisible("facturacion") && (
                 <button
                   className={`side-menu-item ${
@@ -1923,4 +1962,3 @@ if (vistaActiva === "cuentasCorrientes") {
 }
 
 export default App;
-

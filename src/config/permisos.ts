@@ -13,6 +13,13 @@ export type Permiso =
   | "cuentasCorrientes.crear"
   | "cuentasCorrientes.editarGuardado"
   | "cuentasCorrientes.exportar"
+  | "administracion.ver"
+  | "administracion.gestionarTerceros"
+  | "administracion.gestionarDocumentos"
+  | "administracion.gestionarPagos"
+  | "administracion.gestionarCheques"
+  | "administracion.gestionarBancos"
+  | "administracion.configurar"
   | "facturacion.ver"
   | "facturacion.crear"
   | "reportes.ver"
@@ -34,6 +41,8 @@ const permisosPorRol: Record<RolUsuario, Permiso[]> = {
     "cuentasCorrientes.ver",
     "cuentasCorrientes.crear",
 
+    "administracion.ver",
+
     "reportes.ver",
 
     "usuarios.ver",
@@ -54,6 +63,14 @@ const permisosPorRol: Record<RolUsuario, Permiso[]> = {
     "cuentasCorrientes.crear",
     "cuentasCorrientes.editarGuardado",
     "cuentasCorrientes.exportar",
+
+    "administracion.ver",
+    "administracion.gestionarTerceros",
+    "administracion.gestionarDocumentos",
+    "administracion.gestionarPagos",
+    "administracion.gestionarCheques",
+    "administracion.gestionarBancos",
+    "administracion.configurar",
 
     "facturacion.ver",
     "facturacion.crear",

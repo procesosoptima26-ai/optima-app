@@ -1,3 +1,4 @@
+import { exigirSesion, puedeSucursal } from "../lib/session";
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -253,6 +254,9 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  const usuario = await exigirSesion(req, res, "MOVIMIENTOS");
+  if (!usuario) return;
+  if (req.method === "POST" && !puedeSucursal(usuario, req.body?.sucursal || usuario.sucursal)) return res.status(403).json({ error: "Sucursal no autorizada" });
   try {
     if (req.method === "GET") {
       const codigoIngresado = String(req.query.codigo || "").trim();

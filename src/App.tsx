@@ -116,7 +116,6 @@ type ItemMenu = {
 const sucursales = ["Bella Vista", "Goya"];
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
-const STORAGE_USUARIO_KEY = "optima_usuario_sesion_v1";
 
 const itemsMenu: ItemMenu[] = [
   {
@@ -455,23 +454,27 @@ function App() {
   ]);
 
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem(STORAGE_USUARIO_KEY);
-
-    if (usuarioGuardado) {
+    let vigente = true;
+    async function validarSesionActual() {
       try {
-        const usuarioParseado = JSON.parse(usuarioGuardado) as UsuarioSesion;
-        setUsuarioSesion(usuarioParseado);
+        const respuesta = await fetch("/api/session", { credentials: "same-origin", cache: "no-store" });
+        if (!respuesta.ok) throw new Error("Sesión no válida");
+        const datos = (await respuesta.json()) as RespuestaLoginApi;
+        if (!datos.usuario || !vigente) return;
+        setUsuarioSesion(datos.usuario);
         setVistaActiva("inicio");
-      } catch (error) {
-        console.error("No se pudo leer la sesión guardada:", error);
-        localStorage.removeItem(STORAGE_USUARIO_KEY);
-        setVistaActiva("login");
+        setSucursal(datos.usuario.sucursal.split(",")[0].trim());
+      } catch {
+        if (vigente) {
+          setUsuarioSesion(null);
+          setVistaActiva("login");
+        }
+      } finally {
+        if (vigente) setSesionCargada(true);
       }
-    } else {
-      setVistaActiva("login");
     }
-
-    setSesionCargada(true);
+    void validarSesionActual();
+    return () => { vigente = false; };
   }, []);
 
   const itemsMenuVisibles = useMemo(() => {
@@ -518,6 +521,7 @@ function App() {
       setLoginError("");
 
       const response = await fetch("/api/login", {
+        credentials: "same-origin",
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -534,8 +538,8 @@ function App() {
         throw new Error(data.error || "No se pudo iniciar sesión.");
       }
 
-      localStorage.setItem(STORAGE_USUARIO_KEY, JSON.stringify(data.usuario));
       setUsuarioSesion(data.usuario);
+      setSucursal(data.usuario.sucursal.split(",")[0].trim());
       setLoginUsuario("");
       setLoginPassword("");
       setVistaActiva("inicio");
@@ -552,8 +556,14 @@ function App() {
     }
   }
 
-  function cerrarSesion() {
-    localStorage.removeItem(STORAGE_USUARIO_KEY);
+  async function cerrarSesion() {
+    try {
+      const respuesta = await fetch("/api/logout", { method: "POST", credentials: "same-origin" });
+      if (!respuesta.ok) throw new Error("No se pudo cerrar la sesión");
+    } catch {
+      setAviso({ tipo: "error", texto: "No se pudo cerrar la sesión en el servidor. Probá nuevamente." });
+      return;
+    }
     setUsuarioSesion(null);
     setVistaActiva("login");
     setMenuAbierto(false);
@@ -917,6 +927,7 @@ function App() {
       });
 
       const response = await fetch("/api/stock", {
+        credentials: "same-origin",
         method: modoEdicion ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",

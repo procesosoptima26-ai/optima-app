@@ -1,6 +1,7 @@
 
 import dotenv from "dotenv";
 import argon2 from "argon2";
+import { crearSesion, permitirIntentoLogin, limpiarIntentosLogin, mismoOrigen } from "../lib/session";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
 dotenv.config({ path: ".env.local" });
@@ -156,6 +157,10 @@ export default async function handler(
       });
     }
 
+    if (!mismoOrigen(req)) return res.status(403).json({ ok: false, error: "Origen no autorizado" });
+    const ip = String(req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "desconocida").split(",")[0].trim();
+    if (!(await permitirIntentoLogin(usuario, ip))) return res.status(429).json({ ok: false, error: "Demasiados intentos. Probá más tarde." });
+
     const token = getEnv("AIRTABLE_TOKEN");
     const baseId = getEnv("AIRTABLE_USERS_BASE_ID");
     const tablaUsuarios = getEnv("AIRTABLE_USERS_TABLE_ID");
@@ -244,9 +249,7 @@ export default async function handler(
       token
     );
 
-    return res.status(200).json({
-      ok: true,
-      usuario: {
+    const usuarioAutenticado = {
         usuario: normalizarTexto(registro.fields.USUARIO),
         nombre: normalizarTexto(registro.fields.NOMBRE),
         empresa,
@@ -254,8 +257,10 @@ export default async function handler(
         rol: normalizarTexto(registro.fields.ROL),
         sucursal,
         modulos: normalizarModulos(registro.fields.MODULOS),
-      },
-    });
+    };
+    await crearSesion(res, registro.id, usuarioAutenticado);
+    await limpiarIntentosLogin(usuario, ip);
+    return res.status(200).json({ ok: true, usuario: usuarioAutenticado });
   } catch (error) {
     console.error("Error interno iniciando sesión:", error);
 

@@ -1,3 +1,4 @@
+import { exigirSesion, puedeSucursal } from "../lib/session";
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -52,6 +53,8 @@ function normalizarTexto(valor: unknown): string {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const usuario = await exigirSesion(req, res, "INVENTARIO");
+  if (!usuario) return;
   try {
     if (req.method !== "GET") {
       return res.status(405).json({

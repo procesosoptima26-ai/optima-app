@@ -1,3 +1,4 @@
+import { exigirSesion, puedeSucursal } from "../lib/session";
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
@@ -384,6 +385,11 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  const usuario = await exigirSesion(req, res, "INVENTARIO");
+  if (!usuario) return;
+    if (!puedeSucursal(usuario, req.body?.sucursal)) return res.status(403).json({ error: "Sucursal no autorizada" });
+    if (req.method === "PATCH") return res.status(403).json({ error: "Edición de stock bloqueada temporalmente hasta verificar propiedad de los lotes" });
+
   try {
     if (req.method !== "POST" && req.method !== "PATCH") {
       return res.status(405).json({

@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import Administracion from "./modules/administracion/Administracion";
+import InvitarUsuarios from "./modules/usuarios/InvitarUsuarios";
 import { permiteAccionUI, permiteModoMovimientoUI } from "./config/permisos-vista";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
@@ -1344,6 +1345,10 @@ function App() {
             ))}
           </div>
         </div>
+
+        {usuarioSesion.rol === "ADMIN" && usuarioSesion.permisos?.includes("usuarios.gestionar") && (
+          <InvitarUsuarios />
+        )}
 
         <button className="secondary-button logout-button" type="button" onClick={cerrarSesion}>
           Cerrar sesión

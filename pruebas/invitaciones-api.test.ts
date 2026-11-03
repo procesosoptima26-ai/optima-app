@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import opciones from "../api/usuarios/opciones.js";
-import invitar from "../api/usuarios/invitar.js";
-import validar from "../api/usuarios/validar-invitacion.js";
-import activar from "../api/usuarios/activar.js";
+import opciones from "../handlers/usuarios/opciones.js";
+import invitar from "../handlers/usuarios/invitar.js";
+import validar from "../handlers/usuarios/validar-invitacion.js";
+import activar from "../handlers/usuarios/activar.js";
 
 const adminId=`rec${"A".repeat(14)}`;
 const invitadoId=`rec${"B".repeat(14)}`;

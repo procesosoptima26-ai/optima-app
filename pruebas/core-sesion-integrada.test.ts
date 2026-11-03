@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import argon2 from "argon2";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import login from "../api/login.js";
-import session from "../api/session.js";
+import login from "../handlers/login.js";
+import session from "../handlers/session.js";
 
 const usuarioId = `rec${"A".repeat(14)}`;
 const empresaId = `rec${"B".repeat(14)}`;

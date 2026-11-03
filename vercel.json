@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/login",
+      "destination": "/api/autenticacion?accion=login"
+    },
+    {
+      "source": "/api/logout",
+      "destination": "/api/autenticacion?accion=logout"
+    },
+    {
+      "source": "/api/session",
+      "destination": "/api/autenticacion?accion=session"
+    },
+    {
+      "source": "/api/actividad",
+      "destination": "/api/autenticacion?accion=actividad"
+    },
+    {
+      "source": "/api/usuarios/:accion",
+      "destination": "/api/usuarios"
+    }
+  ]
+}

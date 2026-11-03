@@ -72,8 +72,7 @@ export default function InvitarUsuarios() {
     <section style={{ marginTop: 24, padding: 20, border: "1px solid #ddd", borderRadius: 12 }}>
       <h3>Invitar a un empleado</h3>
       <p>La cuenta se activará cuando el empleado establezca su contraseña desde el correo.</p>
-      {error && <p role="alert" style={{ color: "#a00" }}>{error}</p>}
-      {mensaje && <p role="status" style={{ color: "#136a3b" }}>{mensaje}</p>}
+      {!opciones && error && <p role="alert" style={{ color: "#a00" }}>{error}</p>}
       {!opciones ? <p>Consultando permisos...</p> : (
         <form onSubmit={enviar} style={{ display: "grid", gap: 15 }}>
           <label>Nombre completo
@@ -163,6 +162,16 @@ export default function InvitarUsuarios() {
           <button type="submit" disabled={cargando || !sucursales.length || !predeterminada}>
             {cargando ? "Enviando..." : "Enviar invitación"}
           </button>
+          {error && (
+            <p role="alert" style={{ padding: 12, margin: 0, borderRadius: 8, background: "#fff1f2", color: "#a00" }}>
+              {error}
+            </p>
+          )}
+          {mensaje && (
+            <p role="status" style={{ padding: 12, margin: 0, borderRadius: 8, background: "#ecfdf5", border: "1px solid #a7f3d0", color: "#136a3b", fontWeight: 600 }}>
+              {mensaje}
+            </p>
+          )}
         </form>
       )}
     </section>

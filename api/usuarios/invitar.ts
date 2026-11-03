@@ -40,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const admin = await autenticarAdministrador(req, res);
   if (!admin) return;
   const alta = construirAltaInvitado(req.body, admin.contexto, admin.opciones);
-  if (!alta.ok) return res.status(400).json({ ok: false, error: alta.error });
+  if ("error" in alta) return res.status(400).json({ ok: false, error: alta.error });
   // El chequeo de configuración es anterior a cualquier escritura en Airtable.
   let origin: string;
   try {

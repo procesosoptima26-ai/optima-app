@@ -14,7 +14,7 @@ function obtenerNombreVisible(tercero: Tercero) {
   return tercero.tercero || tercero.razonSocial || tercero.nombreComercial || [tercero.nombre, tercero.apellido].filter(Boolean).join(" ") || "Tercero sin nombre";
 }
 
-export default function TercerosLista() {
+export default function TercerosLista({ puedeGestionar = false }: { puedeGestionar?: boolean }) {
   const [terceros, setTerceros] = useState<Tercero[]>([]);
   const [filtro, setFiltro] = useState<RolTercero | "TODOS">("TODOS");
   const [busqueda, setBusqueda] = useState("");
@@ -54,7 +54,7 @@ export default function TercerosLista() {
             <h3>Terceros</h3>
             <p>Clientes, proveedores, empleados y otros contactos en una sola tabla.</p>
           </div>
-          <button className="adm-primary-button" type="button" disabled title="Se habilitará en el próximo bloque">+ Nuevo tercero</button>
+          {puedeGestionar && <button className="adm-primary-button" type="button" disabled title="Se habilitará en el próximo bloque">+ Nuevo tercero</button>}
         </div>
 
         <div className="adm-filter-grid">

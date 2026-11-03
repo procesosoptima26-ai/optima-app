@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -75,7 +77,7 @@ function limpiarTexto(valor: string) {
   return valor.trim();
 }
 
-function armarCamposProductoNuevo(payload: GuardarStockPayload) {
+function armarCamposProductoNuevo(payload: GuardarStockPayload, empresaId: string) {
   const codeField = getEnv("AIRTABLE_CODE_FIELD");
   const especificacionLimpia = limpiarTexto(payload.especificacion);
 
@@ -84,6 +86,7 @@ function armarCamposProductoNuevo(payload: GuardarStockPayload) {
     PRODUCTO: limpiarTexto(payload.producto),
     MARCA: limpiarTexto(payload.marca),
     "PRESENTACIÓN": limpiarTexto(payload.presentacion),
+    EMPRESA: [empresaId],
   };
 
   if (especificacionLimpia) {
@@ -93,11 +96,10 @@ function armarCamposProductoNuevo(payload: GuardarStockPayload) {
   return fields;
 }
 
-async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
+async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: string) {
   if (!payload.productoNuevo) return;
 
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_BASE_ID");
+  const { token, baseId } = configTablaOperativa("AIRTABLE_BASE_ID");
   const productosTable = getEnv("AIRTABLE_TABLE_NAME");
 
   const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
@@ -113,7 +115,7 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
     body: JSON.stringify({
       records: [
         {
-          fields: armarCamposProductoNuevo(payload),
+          fields: armarCamposProductoNuevo(payload, empresaId),
         },
       ],
       typecast: true,
@@ -125,6 +127,34 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload) {
     console.error("Error creando producto:", data);
     throw new Error("No se pudo crear el producto nuevo en Airtable");
   }
+}
+
+/** Catálogo compartido: cada código consultado tiene que estar asignado
+ * explícitamente a la empresa de la sesión (nunca se autoriza por nombre).
+ */
+async function verificarCodigoProducto(codigo: string, empresaId: string): Promise<"propio" | "ajeno" | "ausente"> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_BASE_ID");
+  const tabla = getEnv("AIRTABLE_TABLE_NAME");
+  const campo = getEnv("AIRTABLE_CODE_FIELD");
+  const numero = Number(codigo.trim());
+  if (!Number.isFinite(numero) || !/^\d+$/.test(codigo.trim())) return "ausente";
+  const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tabla)}`);
+  url.searchParams.set("filterByFormula", `{${campo}} = ${numero}`);
+  url.searchParams.set("pageSize", "100");
+  let offset: string | undefined;
+  let ajeno = false;
+  do {
+    if (offset) url.searchParams.set("offset", offset);
+    const respuesta = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    if (!respuesta.ok) throw new Error("No se pudo comprobar el producto");
+    const data = (await respuesta.json()) as { records?: AirtableRecord[]; offset?: string };
+    for (const record of data.records || []) {
+      if (productoDeEmpresa(record.fields ?? {}, empresaId)) return "propio";
+      ajeno = true;
+    }
+    offset = data.offset;
+  } while (offset);
+  return ajeno ? "ajeno" : "ausente";
 }
 
 function armarCamposStock(payload: GuardarStockPayload, lote: LotePayload) {
@@ -170,8 +200,7 @@ function partirEnGrupos<T>(items: T[], cantidadPorGrupo: number) {
 
 function getAirtableConfig() {
   return {
-    token: getEnv("AIRTABLE_TOKEN"),
-    baseId: getEnv("AIRTABLE_BASE_ID"),
+    ...configTablaOperativa("AIRTABLE_BASE_ID"),
     stockTable: getEnv("AIRTABLE_STOCK_TABLE_NAME"),
   };
 }
@@ -380,6 +409,66 @@ function validarPayload(payload: GuardarStockPayload) {
   return "";
 }
 
+/**
+ * Comprueba los lotes existentes ANTES de editar o borrar alguno.
+ * La sucursal del payload no es suficiente para autorizar un recordId.
+ */
+async function registrosStockPertenecenASucursal(
+  payload: GuardarStockPayload
+): Promise<boolean> {
+  if (
+    payload.registrosEliminados !== undefined &&
+    !Array.isArray(payload.registrosEliminados)
+  ) {
+    return false;
+  }
+
+  const ids = [
+    ...payload.lotes.map((lote) => lote.recordId).filter((id): id is string => Boolean(id)),
+    ...(payload.registrosEliminados || []),
+  ];
+
+  if (ids.length > 200) return false;
+
+  const idsUnicos = [...new Set(ids)];
+  if (idsUnicos.length === 0) return true;
+
+  const { token, baseId, stockTable } = getAirtableConfig();
+  const sucursalAutorizada = payload.sucursal.trim().toUpperCase();
+
+  for (const recordId of idsUnicos) {
+    if (!/^rec[A-Za-z0-9]{14}$/.test(recordId)) return false;
+
+    const url = `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
+      stockTable
+    )}/${encodeURIComponent(recordId)}`;
+
+    const respuesta = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (respuesta.status === 404) return false;
+    if (!respuesta.ok) {
+      throw new Error(`No se pudo verificar un lote (${respuesta.status})`);
+    }
+
+    const registro = (await respuesta.json()) as AirtableRecord;
+    const sucursalRegistrada =
+      typeof registro.fields?.SUCURSAL === "string"
+        ? registro.fields.SUCURSAL.trim().toUpperCase()
+        : "";
+
+    const codigoRegistrado = String(registro.fields?.[getEnv("AIRTABLE_CODE_FIELD")] ??
+      registro.fields?.CÓDIGO ?? "").trim();
+    const ubicacionRegistrada = String(registro.fields?.UBICACIÓN ?? "").trim().toUpperCase();
+    if (sucursalRegistrada !== sucursalAutorizada ||
+        codigoRegistrado !== payload.codigo.trim() ||
+        ubicacionRegistrada !== payload.ubicacion.trim().toUpperCase()) return false;
+  }
+
+  return true;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -391,6 +480,10 @@ export default async function handler(
       });
     }
 
+    if (!req.body || typeof req.body !== "object" || Array.isArray(req.body)) {
+      return res.status(400).json({ error: "Solicitud de stock inválida" });
+    }
+
     const payload = req.body as GuardarStockPayload;
     const errorValidacion = validarPayload(payload);
 
@@ -400,8 +493,34 @@ export default async function handler(
       });
     }
 
+    // Comprobar usuario, módulo y sucursal ANTES de escribir en Airtable.
+    const usuarioAutorizado = await exigirAutorizacion(req, res, {
+      modulos: ["INVENTARIO"],
+      permiso: req.method === "POST" ? "inventario.crear" : "inventario.editarGuardado",
+      sucursal: payload.sucursal,
+    });
+    if (!usuarioAutorizado) return;
+
+    const propiedadProducto = await verificarCodigoProducto(payload.codigo, usuarioAutorizado.empresaId);
+    // Códigos ajenos, no asignados o duplicados nunca autorizan la escritura.
+    if ((!payload.productoNuevo && propiedadProducto !== "propio") ||
+        (payload.productoNuevo && propiedadProducto !== "ausente")) {
+      return res.status(403).json({ error: "El código no corresponde a un producto habilitado para esta empresa" });
+    }
+    if (req.method === "PATCH" && payload.productoNuevo) {
+      return res.status(400).json({ error: "No se puede editar stock de un producto no creado" });
+    }
+    if (req.method === "PATCH") {
+      const permitido = await registrosStockPertenecenASucursal(payload);
+      if (!permitido) {
+        return res.status(403).json({
+          error: "Hay lotes que no pertenecen a tu sucursal o no existen",
+        });
+      }
+    }
+
     if (req.method === "POST") {
-      await crearProductoSiEsNuevo(payload);
+      await crearProductoSiEsNuevo(payload, usuarioAutorizado.empresaId);
 
       const recordsCreados = await guardarStock(payload);
 

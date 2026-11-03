@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -59,6 +61,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    // El catálogo de productos de inventario requiere sesión y módulo.
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["INVENTARIO"],
+      permiso: "inventario.ver",
+    });
+    if (!autorizado) return;
+
     const codigo = String(req.query.codigo || "").trim();
 
     if (!codigo) {
@@ -75,8 +84,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const token = getEnv("AIRTABLE_TOKEN");
-    const baseId = getEnv("AIRTABLE_BASE_ID");
+    const { token, baseId } = configTablaOperativa("AIRTABLE_BASE_ID");
     const tableName = getEnv("AIRTABLE_TABLE_NAME");
     const codeField = getEnv("AIRTABLE_CODE_FIELD");
     const nameField = getEnv("AIRTABLE_NAME_FIELD");
@@ -88,26 +96,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     );
 
     url.searchParams.set("filterByFormula", formula);
-    url.searchParams.set("maxRecords", "1");
-
-    const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-    });
-
-    const data = (await response.json()) as AirtableResponse;
-
-    if (!response.ok) {
-      console.error("Error Airtable:", data);
-
-      return res.status(response.status).json({
-        error: "Error consultando Airtable",
-        detalle: data,
+    url.searchParams.set("pageSize", "100");
+    let record: AirtableRecord | undefined;
+    let offset: string | undefined;
+    do {
+      if (offset) url.searchParams.set("offset", offset);
+      const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    }
-
-    const record = data.records[0];
+      if (!response.ok) throw new Error("No se pudo verificar el catálogo de productos");
+      const data = (await response.json()) as AirtableResponse & { offset?: string };
+      record = data.records.find((producto) =>
+        productoDeEmpresa(producto.fields, autorizado.empresaId));
+      offset = data.offset;
+    } while (!record && offset);
 
     if (!record) {
       return res.status(200).json({

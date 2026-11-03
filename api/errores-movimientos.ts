@@ -1,13 +1,7 @@
-type VercelRequest = {
-  method?: string;
-  body?: unknown;
-};
-
-type VercelResponse = {
-  status: (codigo: number) => VercelResponse;
-  json: (contenido: unknown) => void;
-  setHeader: (nombre: string, valor: string) => void;
-};
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { productoExistenteDeEmpresa, ubicacionExistenteAutorizada,
+  sucursalSolicitada } from "../lib/alcance-operativo.js";
 
 type ErrorMovimientoPayload = {
   usuario?: string;
@@ -148,7 +142,17 @@ export default async function handler(
   }
 
   try {
-    const payload = (req.body || {}) as ErrorMovimientoPayload;
+    const payload = { ...(req.body && typeof req.body === "object" ? req.body : {}) } as ErrorMovimientoPayload;
+
+    // Este registro antes podía escribirse sin ninguna sesión.
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["MOVIMIENTOS"],
+      permiso: "movimientos.crear",
+      sucursal: limpiarTexto(payload.sucursal),
+    });
+    if (!autorizado) return;
+    // Nunca confiar en el nombre de usuario que proporciona el navegador.
+    payload.usuario = autorizado.usuario;
 
     const errorValidacion = validarPayload(payload);
 
@@ -160,6 +164,13 @@ export default async function handler(
       return;
     }
 
+    const sucursalCore = sucursalSolicitada(autorizado.contexto, limpiarTexto(payload.sucursal));
+    if (!sucursalCore ||
+        !await productoExistenteDeEmpresa(limpiarTexto(payload.productoId), autorizado.empresaId) ||
+        !await ubicacionExistenteAutorizada(
+          limpiarTexto(payload.ubicacionId), autorizado.contexto, sucursalCore.id)) {
+      return res.status(403).json({ ok: false, error: "Producto o ubicación no autorizado" });
+    }
     const id = await registrarError(payload);
 
     res.status(200).json({

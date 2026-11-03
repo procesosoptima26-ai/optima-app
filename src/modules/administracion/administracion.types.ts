@@ -7,6 +7,7 @@ export type UsuarioSesion = {
   rol: RolUsuario;
   sucursal: string;
   modulos: string[];
+  permisos?: string[];
 };
 
 export type SeccionAdministracion =

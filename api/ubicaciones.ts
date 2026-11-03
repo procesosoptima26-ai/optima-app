@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, sucursalRealDeUbicacion, sucursalSolicitada } from "../lib/alcance-operativo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -80,8 +82,7 @@ function normalizarSucursal(valor: unknown) {
 }
 
 async function leerTodasLasUbicaciones() {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const tableName = getEnv("AIRTABLE_UBICACIONES_TABLE_NAME");
 
   const registros: AirtableRecord[] = [];
@@ -133,20 +134,33 @@ export default async function handler(
       });
     }
 
-    const sucursalSolicitada = normalizarSucursal(req.query.sucursal);
+    const sucursalSolicitadaNombre = normalizarSucursal(req.query.sucursal);
 
-    if (!sucursalSolicitada) {
+    if (!sucursalSolicitadaNombre) {
       return res.status(400).json({
         ok: false,
         error: "Falta indicar la sucursal",
       });
     }
 
+    // Antes de leer Airtable, validamos sesión, módulo y sucursal.
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["MOVIMIENTOS"],
+      permiso: "movimientos.ver",
+      sucursal: sucursalSolicitadaNombre,
+    });
+    if (!autorizado) return;
+
+    const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursalSolicitadaNombre);
+    if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
     const registros = await leerTodasLasUbicaciones();
 
     const ubicaciones = registros
       .map((record) => {
         const sucursal = normalizarSucursal(record.fields.SUCURSAL);
+        const idSucursalCore = sucursalRealDeUbicacion(record.fields);
+        if (idSucursalCore !== sucursalCore.id ||
+            sucursal !== normalizarSucursal(sucursalCore.nombre)) return null;
 
         const tipoUbicacion = normalizarTexto(
           record.fields["TIPO_UBICACIÓN"]
@@ -169,11 +183,10 @@ export default async function handler(
           activa,
         };
       })
-      .filter(
-        (ubicacion) =>
-          ubicacion.activa &&
-          ubicacion.sucursal === sucursalSolicitada &&
-          Boolean(ubicacion.tipoUbicacion)
+      .filter((ubicacion): ubicacion is NonNullable<typeof ubicacion> =>
+        ubicacion !== null && ubicacion.activa &&
+        ubicacion.sucursal === sucursalSolicitadaNombre &&
+        Boolean(ubicacion.tipoUbicacion)
       )
       .sort((primera, segunda) =>
         primera.tipoUbicacion.localeCompare(
@@ -184,7 +197,7 @@ export default async function handler(
 
     return res.status(200).json({
       ok: true,
-      sucursal: sucursalSolicitada,
+      sucursal: sucursalSolicitadaNombre,
       ubicaciones,
     });
   } catch (error) {

@@ -1,5 +1,9 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, sucursalRealDeUbicacion, sucursalSolicitada,
+  productoExistenteDeEmpresa, movimientoPermitido } from "../lib/alcance-operativo.js";
+import type { ContextoCore } from "../core/seguridad.js";
 
 dotenv.config({
   path: ".env.local",
@@ -21,6 +25,7 @@ type Ubicacion = {
   id: string;
   nombre: string;
   sucursal: string;
+  sucursalCoreId: string | null;
 };
 
 type MovimientoPayload = {
@@ -160,8 +165,7 @@ function partirEnGrupos<T>(items: T[], cantidad: number) {
 }
 
 async function leerUbicaciones(): Promise<Ubicacion[]> {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const tableName = getEnv("AIRTABLE_UBICACIONES_TABLE_NAME");
 
   const registros: AirtableRecord[] = [];
@@ -212,35 +216,19 @@ async function leerUbicaciones(): Promise<Ubicacion[]> {
       id: record.id,
       nombre,
       sucursal,
+      sucursalCoreId: sucursalRealDeUbicacion(record.fields),
     };
   });
 }
 
-async function validarProductoExiste(productoId: string) {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tableName = getEnv(
-    "AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME"
-  );
-
-  const url = new URL(
-    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-      tableName
-    )}/${encodeURIComponent(productoId)}`
-  );
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return response.ok;
+async function validarProductoExiste(productoId: string, empresaId: string) {
+  return productoExistenteDeEmpresa(productoId, empresaId);
 }
 
 function validarMovimiento(
   movimiento: MovimientoPayload,
   sucursal: string,
+  sucursalCoreId: string,
   ubicaciones: Ubicacion[]
 ) {
   const productoId = normalizarTexto(movimiento.productoId);
@@ -288,17 +276,17 @@ function validarMovimiento(
     return "La ubicación de destino no existe.";
   }
 
-  if (
-    ubicacionOrigen &&
+  if (ubicacionOrigen && (
+    ubicacionOrigen.sucursalCoreId !== sucursalCoreId ||
     ubicacionOrigen.sucursal !== sucursal
-  ) {
+  )) {
     return "La ubicación de origen no pertenece a la sucursal del usuario.";
   }
 
-  if (
-    ubicacionDestino &&
+  if (ubicacionDestino && (
+    ubicacionDestino.sucursalCoreId !== sucursalCoreId ||
     ubicacionDestino.sucursal !== sucursal
-  ) {
+  )) {
     return "La ubicación de destino no pertenece a la sucursal del usuario.";
   }
 
@@ -482,9 +470,17 @@ async function leerMovimientosPorIds(ids: string[]) {
   return resultados;
 }
 
+function mapaUbicacionesCore(ubicaciones: Ubicacion[]) {
+  return new Map(ubicaciones.map((u) => [u.id, {
+    id: u.id,
+    fields: { SUCURSAL_CORE: u.sucursalCoreId ? [u.sucursalCoreId] : [] },
+  }]));
+}
+
 async function leerMovimientosRecientes(
-  sucursal: string,
-  limite: number
+  sucursalCoreId: string,
+  limite: number,
+  contexto: ContextoCore,
 ) {
   const token = getEnv("AIRTABLE_TOKEN");
   const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
@@ -494,11 +490,7 @@ async function leerMovimientosRecientes(
 
   const ubicaciones = await leerUbicaciones();
 
-  const ubicacionesPermitidas = new Set(
-    ubicaciones
-      .filter((ubicacion) => ubicacion.sucursal === sucursal)
-      .map((ubicacion) => ubicacion.id)
-  );
+  const mapaUbicaciones = mapaUbicacionesCore(ubicaciones);
 
   const url = new URL(
     `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
@@ -532,20 +524,9 @@ async function leerMovimientosRecientes(
   }
 
   return (data.records || [])
-    .filter((record) => {
-      const origenId = obtenerPrimerIdVinculado(
-        record.fields["UBICACIÓN ORIGEN"]
-      );
-
-      const destinoId = obtenerPrimerIdVinculado(
-        record.fields["UBICACIÓN DESTINO"]
-      );
-
-      return (
-        (origenId && ubicacionesPermitidas.has(origenId)) ||
-        (destinoId && ubicacionesPermitidas.has(destinoId))
-      );
-    })
+    .filter((record) => movimientoPermitido(
+      record.fields, mapaUbicaciones, contexto, sucursalCoreId,
+    ))
     .slice(0, limite);
 }
 
@@ -592,6 +573,19 @@ function transformarMovimiento(record: AirtableRecord) {
   };
 }
 
+/**
+ * Los GET por IDs no incluyen una sucursal en la URL.
+ * Verificamos las ubicaciones de CADA registro antes de devolver información.
+ */
+async function movimientosPertenecenASucursales(
+  registros: AirtableRecord[], contexto: ContextoCore,
+): Promise<boolean> {
+  if (registros.length === 0) return true;
+  const ubicaciones = await leerUbicaciones();
+  const mapa = mapaUbicacionesCore(ubicaciones);
+  return registros.every((registro) => movimientoPermitido(registro.fields, mapa, contexto));
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -630,6 +624,21 @@ export default async function handler(
         });
       }
 
+      const acciones = movimientos.map((movimiento) => {
+        const tipo = normalizarOpcion(movimiento.tipoMovimiento);
+        return tipo === "AJUSTE +" || tipo === "AJUSTE -" ||
+          tipo === "AJUSTE POSITIVO" || tipo === "AJUSTE NEGATIVO"
+          ? "movimientos.ajustar" as const : "movimientos.crear" as const;
+      });
+      const autorizado = await exigirAutorizacion(req, res, {
+        modulos: ["MOVIMIENTOS"],
+        permiso: [...new Set(acciones)],
+        sucursal,
+      });
+      if (!autorizado) return;
+
+      const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
+      if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
       const ubicaciones = await leerUbicaciones();
 
       for (
@@ -642,6 +651,7 @@ export default async function handler(
         const errorValidacion = validarMovimiento(
           movimiento,
           sucursal,
+          sucursalCore.id,
           ubicaciones
         );
 
@@ -662,7 +672,7 @@ export default async function handler(
       ];
 
       for (const productoId of productosUnicos) {
-        const existe = await validarProductoExiste(productoId);
+        const existe = await validarProductoExiste(productoId, autorizado.empresaId);
 
         if (!existe) {
           return res.status(400).json({
@@ -692,7 +702,24 @@ export default async function handler(
           .filter((id) => id.startsWith("rec"))
           .slice(0, 100);
 
+        const autorizado = await exigirAutorizacion(req, res, {
+          modulos: ["MOVIMIENTOS"],
+          permiso: "movimientos.ver",
+        });
+        if (!autorizado) return;
+
         const registros = await leerMovimientosPorIds(ids);
+        const permitidos = await movimientosPertenecenASucursales(
+          registros,
+          autorizado.contexto
+        );
+
+        if (!permitidos) {
+          return res.status(403).json({
+            ok: false,
+            error: "No tenés acceso a uno o más movimientos solicitados",
+          });
+        }
 
         return res.status(200).json({
           ok: true,
@@ -712,6 +739,13 @@ export default async function handler(
         });
       }
 
+      const autorizado = await exigirAutorizacion(req, res, {
+        modulos: ["MOVIMIENTOS"],
+        permiso: "movimientos.ver",
+        sucursal,
+      });
+      if (!autorizado) return;
+
       const limiteSolicitado = Number(req.query.limite);
       const limite =
         Number.isFinite(limiteSolicitado) &&
@@ -719,10 +753,9 @@ export default async function handler(
           ? Math.min(Math.floor(limiteSolicitado), 50)
           : 20;
 
-      const recientes = await leerMovimientosRecientes(
-        sucursal,
-        limite
-      );
+      const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
+      if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
+      const recientes = await leerMovimientosRecientes(sucursalCore.id, limite, autorizado.contexto);
 
       return res.status(200).json({
         ok: true,

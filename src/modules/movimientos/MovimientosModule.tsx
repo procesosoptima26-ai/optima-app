@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import BarcodeScanner from "../../components/BarcodeScanner";
+import { permiteAccionUI, permiteModoMovimientoUI, modoMovimientoInicialUI, permiteMovimientoUI } from "../../config/permisos-vista";
 import "./Movimientos.css";
 
 type UsuarioSesion = {
@@ -10,6 +11,7 @@ type UsuarioSesion = {
   rol: string;
   sucursal: string;
   modulos: string[];
+  permisos?: string[];
 };
 
 type Props = {
@@ -328,7 +330,11 @@ export default function Movimientos({
   const codigoInputRef = useRef<HTMLInputElement | null>(null);
   const guardadoEnCursoRef = useRef(false);
 
-  const [modo, setModo] = useState<ModoMovimiento>(modoInicial);
+  const puedeCrear = permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.crear");
+  const puedeAjustar = permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ajustar");
+  const [modo, setModo] = useState<ModoMovimiento>(
+    permiteModoMovimientoUI(usuario, modoInicial) ? modoInicial : modoMovimientoInicialUI(usuario)
+  );
   const [ubicaciones, setUbicaciones] = useState<Ubicacion[]>([]);
   const [cargandoUbicaciones, setCargandoUbicaciones] = useState(false);
 
@@ -553,6 +559,12 @@ const [, setCantidadesPorLote] = useState<
     }));
   }, [lista]);
 
+  const tiposIndividualesPermitidos = tiposAjustes.filter((tipo) => permiteMovimientoUI(usuario, tipo));
+  const motivosIndividualesPermitidos = motivosAjustes.filter((motivo) =>
+    motivo === "TRANSFERENCIA" ? puedeCrear :
+    motivo === "VUELVE A DEPÓSITO" ? puedeAjustar : true
+  );
+
   const esTransferencia =
     modo === "individual" &&
     motivoIndividual === "TRANSFERENCIA";
@@ -630,8 +642,8 @@ const [, setCantidadesPorLote] = useState<
   );
 
   useEffect(() => {
-    setModo(modoInicial);
-  }, [modoInicial]);
+    setModo(permiteModoMovimientoUI(usuario, modoInicial) ? modoInicial : modoMovimientoInicialUI(usuario));
+  }, [modoInicial, usuario.permisos, usuario.modulos]);
 
   useEffect(() => {
     cargarUbicaciones();
@@ -690,6 +702,13 @@ const [, setCantidadesPorLote] = useState<
     ubicacionesOrigenReposicion,
     ubicacionGondola,
   ]);
+
+  useEffect(() => {
+    if (modo === "individual" && !puedeCrear && puedeAjustar) {
+      setTipoIndividual((actual) => actual === "AJUSTE +" || actual === "AJUSTE -" ? actual : "AJUSTE -");
+      setMotivoIndividual((actual) => actual === "TRANSFERENCIA" ? "ROTURA" : actual);
+    }
+  }, [modo, puedeCrear, puedeAjustar]);
 
   useEffect(() => {
     if (motivoIndividual === "TRANSFERENCIA") {
@@ -1663,6 +1682,10 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function agregarALista() {
+    if (!permiteModoMovimientoUI(usuario, modo)) {
+      setAviso({ tipo: "error", texto: "No tenés permiso para agregar esta operación." });
+      return;
+    }
 
     const resultadoActual = await construirMovimientosActuales();
 
@@ -1798,6 +1821,10 @@ const [, setCantidadesPorLote] = useState<
   }
 
   async function concluirYGuardar() {
+    if (!permiteModoMovimientoUI(usuario, modo)) {
+      setAviso({ tipo: "error", texto: "No tenés permiso para usar esta operación." });
+      return;
+    }
     if (guardadoEnCursoRef.current) {
       setAviso({
         tipo: "info",
@@ -1849,6 +1876,11 @@ const [, setCantidadesPorLote] = useState<
             ...resultadoActual.movimientos,
           ];
         }
+      }
+
+      if (movimientosFinales.some((movimiento) => !permiteMovimientoUI(usuario, movimiento.tipoMovimiento))) {
+        setAviso({ tipo: "error", texto: "Hay movimientos que no tenés permiso para guardar." });
+        return;
       }
 
       if (movimientosFinales.length === 0) {
@@ -1975,6 +2007,10 @@ const [, setCantidadesPorLote] = useState<
   async function guardarMovimientos(
     movimientosAGuardar: MovimientoPendiente[]
   ) {
+    if (movimientosAGuardar.some((movimiento) => !permiteMovimientoUI(usuario, movimiento.tipoMovimiento))) {
+      setAviso({ tipo: "error", texto: "No tenés autorización para esos movimientos." });
+      return;
+    }
     try {
       setGuardando(true);
       setResultado([]);
@@ -2110,7 +2146,7 @@ const [, setCantidadesPorLote] = useState<
       </div>
 
       <div className="mov-mode-grid">
-        <button
+        {permiteModoMovimientoUI(usuario, "recepcion") && <button
           type="button"
           className={
             modo === "recepcion"
@@ -2120,9 +2156,9 @@ const [, setCantidadesPorLote] = useState<
           onClick={() => setModo("recepcion")}
         >
           Recepción
-        </button>
+        </button>}
 
-        <button
+        {permiteModoMovimientoUI(usuario, "reposicion") && <button
           type="button"
           className={
             modo === "reposicion"
@@ -2132,9 +2168,9 @@ const [, setCantidadesPorLote] = useState<
           onClick={() => setModo("reposicion")}
         >
           Reposición
-        </button>
+        </button>}
 
-        <button
+        {permiteModoMovimientoUI(usuario, "individual") && <button
           type="button"
           className={
             modo === "individual"
@@ -2143,10 +2179,10 @@ const [, setCantidadesPorLote] = useState<
           }
           onClick={() => setModo("individual")}
         >
-          Ajustes
-        </button>
+          {puedeAjustar ? "Ajustes" : "Movimiento individual"}
+        </button>}
 
-        <button
+        {permiteModoMovimientoUI(usuario, "stock") && <button
           type="button"
           className={
             modo === "stock"
@@ -2156,7 +2192,7 @@ const [, setCantidadesPorLote] = useState<
           onClick={() => setModo("stock")}
         >
           Stock
-        </button>
+        </button>}
       </div>
 
       {modo === "stock" ? (
@@ -2293,7 +2329,7 @@ const [, setCantidadesPorLote] = useState<
                   esVuelveADeposito
                 }
               >
-                {tiposAjustes.map((tipo) => (
+                {tiposIndividualesPermitidos.map((tipo) => (
                   <option key={tipo} value={tipo}>
                     {tipo}
                   </option>
@@ -2310,7 +2346,7 @@ const [, setCantidadesPorLote] = useState<
                 }
                 disabled={guardando}
               >
-                {motivosAjustes.map((motivo) => (
+                {motivosIndividualesPermitidos.map((motivo) => (
                   <option key={motivo} value={motivo}>
                     {motivo}
                   </option>

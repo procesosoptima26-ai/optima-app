@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../../lib/autorizacion.js";
 
 dotenv.config({ path: ".env.local" });
 
@@ -117,7 +118,70 @@ function obtenerRol(req: VercelRequest): RolTercero | undefined {
   return valor as RolTercero;
 }
 
-async function listarTerceros(rol?: RolTercero) {
+
+// La base MAESTRA y la base ADMIN tienen IDs de empresa diferentes.
+// Las vinculamos usando CLAVE_EMPRESA, no intercambiando record IDs.
+function compararClave(valor: unknown): string {
+  return normalizarTexto(valor).toUpperCase();
+}
+
+async function resolverEmpresaAdministrativa(
+  empresaMaestraId: string
+): Promise<string | null> {
+  const token = getEnv("AIRTABLE_TOKEN");
+  const masterBase = getEnv("AIRTABLE_USERS_BASE_ID");
+  const masterCompanies = getEnv("AIRTABLE_COMPANIES_TABLE_ID");
+  const adminBase = getEnv("AIRTABLE_ADMIN_BASE_ID");
+  const adminCompanies = getEnv("AIRTABLE_ADMIN_EMPRESAS_TABLE_ID");
+
+  const urlMaestra = new URL(
+    `https://api.airtable.com/v0/${masterBase}/${encodeURIComponent(
+      masterCompanies
+    )}/${encodeURIComponent(empresaMaestraId)}`
+  );
+  const respuestaMaestra = await fetch(urlMaestra.toString(), {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (respuestaMaestra.status === 404) return null;
+  if (!respuestaMaestra.ok) {
+    throw new Error("No se pudo verificar la empresa maestra");
+  }
+  const maestra = (await respuestaMaestra.json()) as AirtableRecord;
+  const clave = compararClave(maestra.fields?.CLAVE_EMPRESA);
+  if (!clave) return null;
+
+  const coincidencias: string[] = [];
+  let offset: string | undefined;
+  do {
+    const urlAdmin = new URL(
+      `https://api.airtable.com/v0/${adminBase}/${encodeURIComponent(
+        adminCompanies
+      )}`
+    );
+    urlAdmin.searchParams.set("pageSize", "100");
+    urlAdmin.searchParams.append("fields[]", "CLAVE_EMPRESA");
+    if (offset) urlAdmin.searchParams.set("offset", offset);
+
+    const respuestaAdmin = await fetch(urlAdmin.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!respuestaAdmin.ok) {
+      throw new Error("No se pudo verificar la empresa administrativa");
+    }
+    const pagina = (await respuestaAdmin.json()) as AirtableResponse;
+    for (const record of pagina.records || []) {
+      if (compararClave(record.fields.CLAVE_EMPRESA) === clave) {
+        coincidencias.push(record.id);
+      }
+    }
+    offset = pagina.offset;
+  } while (offset);
+
+  // Sin equivalencia, o con claves ambiguas: acceso denegado.
+  return coincidencias.length === 1 ? coincidencias[0] : null;
+}
+
+async function listarTerceros(rol: RolTercero | undefined, empresaAdminId: string) {
   const { token, baseId, tercerosTable } = getAirtableConfig();
 
   const terceros: ReturnType<typeof mapearTercero>[] = [];
@@ -158,7 +222,12 @@ async function listarTerceros(rol?: RolTercero) {
       throw new Error("No se pudieron obtener los terceros");
     }
 
-    terceros.push(...(data.records || []).map(mapearTercero));
+    // Nunca devolver terceros sin vínculo con la empresa autorizada.
+    const registrosDeEmpresa = (data.records || []).filter((record) =>
+      Array.isArray(record.fields.EMPRESA) &&
+      record.fields.EMPRESA.includes(empresaAdminId)
+    );
+    terceros.push(...registrosDeEmpresa.map(mapearTercero));
     offset = data.offset;
   } while (offset);
 
@@ -169,6 +238,7 @@ export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
+  res.setHeader("Cache-Control", "no-store");
   try {
     if (req.method !== "GET") {
       return res.status(405).json({
@@ -177,8 +247,24 @@ export default async function handler(
       });
     }
 
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["ADMINISTRACION"],
+      permiso: "administracion.ver",
+    });
+    if (!autorizado) return;
+
+    const empresaAdminId = await resolverEmpresaAdministrativa(
+      autorizado.empresaId
+    );
+    if (!empresaAdminId) {
+      return res.status(403).json({
+        ok: false,
+        error: "La empresa no tiene una vinculación administrativa válida",
+      });
+    }
+
     const rol = obtenerRol(req);
-    const terceros = await listarTerceros(rol);
+    const terceros = await listarTerceros(rol, empresaAdminId);
 
     return res.status(200).json({
       ok: true,

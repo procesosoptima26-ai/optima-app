@@ -1,5 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -104,9 +106,11 @@ function transformarProducto(
 }
 
 async function buscarProductoPorCodigo(
-  codigoIngresado: string
+  codigoIngresado: string,
+  empresaId: string,
 ): Promise<{
   record: AirtableRecord | null;
+  productoAjeno: boolean;
   codigoNormalizado: string;
   nameField: string;
 }> {
@@ -116,11 +120,8 @@ async function buscarProductoPorCodigo(
     throw new Error("El código debe ser numérico");
   }
 
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tableName = getEnv(
-    "AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME"
-  );
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv("AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME");
   const codeField = getEnv("AIRTABLE_MOVIMIENTOS_CODE_FIELD");
   const nameField = getEnv("AIRTABLE_MOVIMIENTOS_NAME_FIELD");
 
@@ -134,31 +135,28 @@ async function buscarProductoPorCodigo(
   );
 
   url.searchParams.set("filterByFormula", formula);
-  url.searchParams.set("maxRecords", "1");
+  url.searchParams.set("pageSize", "100");
+  let record: AirtableRecord | null = null;
+  let productoAjeno = false;
+  let offset: string | undefined;
+  do {
+    if (offset) url.searchParams.set("offset", offset);
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("No se pudo consultar el catálogo de productos");
+    const data = (await response.json()) as AirtableResponse & { offset?: string };
+    for (const candidato of data.records || []) {
+      if (productoDeEmpresa(candidato.fields, empresaId)) { record = candidato; break; }
+      productoAjeno = true;
+    }
+    offset = data.offset;
+  } while (!record && offset);
 
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const data = (await response.json()) as AirtableResponse;
-
-  if (!response.ok) {
-    console.error("Error consultando PRODUCTOS de MOVIMIENTOS:", data);
-    throw new Error(
-      data.error?.message || "Error consultando productos en Airtable"
-    );
-  }
-
-  return {
-    record: data.records?.[0] || null,
-    codigoNormalizado,
-    nameField,
-  };
+  return { record, productoAjeno, codigoNormalizado, nameField };
 }
 
-async function crearProducto(payload: CrearProductoPayload) {
+async function crearProducto(payload: CrearProductoPayload, empresaId: string) {
   const codigoIngresado = normalizarTexto(payload.codigo);
   const producto = normalizarTexto(payload.producto);
   const marca = normalizarTexto(payload.marca);
@@ -173,7 +171,7 @@ async function crearProducto(payload: CrearProductoPayload) {
     throw new Error("Ingresá el nombre del producto");
   }
 
-  const busqueda = await buscarProductoPorCodigo(codigoIngresado);
+  const busqueda = await buscarProductoPorCodigo(codigoIngresado, empresaId);
 
   if (busqueda.record) {
     return {
@@ -187,16 +185,19 @@ async function crearProducto(payload: CrearProductoPayload) {
     };
   }
 
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tableName = getEnv(
-    "AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME"
-  );
+  if (busqueda.productoAjeno) {
+    // No duplicar ficha compartida ni vincular otro cliente sin un flujo explícito.
+    return { creado: false, necesitaVinculacion: true, producto: null };
+  }
+
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv("AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME");
   const codeField = getEnv("AIRTABLE_MOVIMIENTOS_CODE_FIELD");
 
   const fields: Record<string, unknown> = {
     [codeField]: Number(busqueda.codigoNormalizado),
     PRODUCTO: producto,
+    EMPRESA: [empresaId],
   };
 
   if (marca) {
@@ -254,6 +255,20 @@ export default async function handler(
   res: VercelResponse
 ) {
   try {
+    // Autorizar ANTES de consultar o crear productos de movimientos.
+    if (req.method !== "GET" && req.method !== "POST") {
+      return res.status(405).json({
+        ok: false,
+        error: "Método no permitido",
+      });
+    }
+
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["MOVIMIENTOS"],
+      permiso: req.method === "GET" ? "movimientos.ver" : "movimientos.crear",
+    });
+    if (!autorizado) return;
+
     if (req.method === "GET") {
       const codigoIngresado = String(req.query.codigo || "").trim();
 
@@ -264,7 +279,7 @@ export default async function handler(
         });
       }
 
-      const busqueda = await buscarProductoPorCodigo(codigoIngresado);
+      const busqueda = await buscarProductoPorCodigo(codigoIngresado, autorizado.empresaId);
 
       if (!busqueda.record) {
         return res.status(200).json({
@@ -288,8 +303,12 @@ export default async function handler(
 
     if (req.method === "POST") {
       const resultado = await crearProducto(
-        (req.body || {}) as CrearProductoPayload
+        (req.body || {}) as CrearProductoPayload, autorizado.empresaId,
       );
+      if ("necesitaVinculacion" in resultado && resultado.necesitaVinculacion) {
+        return res.status(409).json({ ok: false,
+          error: "El código ya existe en el catálogo compartido. Requiere vinculación autorizada." });
+      }
 
       return res.status(resultado.creado ? 201 : 200).json({
         ok: true,

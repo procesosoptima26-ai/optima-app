@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import Administracion from "./modules/administracion/Administracion";
+import { permiteAccionUI, permiteModoMovimientoUI } from "./config/permisos-vista";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
 import optimaHomeDesktopImage from "./assets/optima-home-desktop.png";
@@ -44,7 +45,11 @@ type UsuarioSesion = {
   empresa: string;
   rol: string;
   sucursal: string;
+  sucursalId?: string;
+  sucursales?: Array<{ id: string; nombre: string }>;
+  empresaId?: string;
   modulos: string[];
+  permisos?: string[];
 };
 
 type RespuestaLoginApi = {
@@ -113,10 +118,10 @@ type ItemMenu = {
   icono: MenuIconKey;
 };
 
-const sucursales = ["Bella Vista", "Goya"];
 const ubicaciones = ["Galpón", "Góndola", "Depósito", "Cámara"];
 
-const STORAGE_USUARIO_KEY = "optima_usuario_sesion_v1";
+const LIMITE_INACTIVIDAD_MS = 2 * 60 * 60 * 1000;
+const INTERVALO_RENOVACION_MS = 5 * 60 * 1000;
 
 const itemsMenu: ItemMenu[] = [
   {
@@ -418,6 +423,12 @@ function App() {
 
   const [sesionCargada, setSesionCargada] = useState(false);
   const [usuarioSesion, setUsuarioSesion] = useState<UsuarioSesion | null>(null);
+  const sucursalesDisponibles = usuarioSesion?.sucursales ?? [];
+  const puedeCrearInventario = permiteAccionUI(usuarioSesion, "INVENTARIO", "inventario.crear");
+  const puedeEditarInventario = permiteAccionUI(usuarioSesion, "INVENTARIO", "inventario.editarGuardado");
+  const puedeCrearMovimientos = permiteAccionUI(usuarioSesion, "MOVIMIENTOS", "movimientos.crear");
+  const puedeAjustarMovimientos = permiteAccionUI(usuarioSesion, "MOVIMIENTOS", "movimientos.ajustar");
+
   const [loginUsuario, setLoginUsuario] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginCargando, setLoginCargando] = useState(false);
@@ -454,25 +465,159 @@ function App() {
     },
   ]);
 
+  // Al cargar OPTIMA, el servidor decide si la sesión es válida.
   useEffect(() => {
-    const usuarioGuardado = localStorage.getItem(STORAGE_USUARIO_KEY);
+    let vigente = true;
 
-    if (usuarioGuardado) {
-      try {
-        const usuarioParseado = JSON.parse(usuarioGuardado) as UsuarioSesion;
-        setUsuarioSesion(usuarioParseado);
-        setVistaActiva("inicio");
-      } catch (error) {
-        console.error("No se pudo leer la sesión guardada:", error);
-        localStorage.removeItem(STORAGE_USUARIO_KEY);
-        setVistaActiva("login");
-      }
-    } else {
-      setVistaActiva("login");
+    // La versión anterior guardaba los datos del usuario en el navegador.
+    // Limpiamos ese dato antiguo, pero nunca lo usamos para dar acceso.
+    try {
+      window.localStorage.removeItem("optima_usuario_sesion_v1");
+    } catch {
+      // El acceso al almacenamiento puede estar bloqueado.
     }
 
-    setSesionCargada(true);
+    async function recuperarSesion() {
+      try {
+        const respuesta = await fetch("/api/session", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (!vigente) return;
+
+        if (!respuesta.ok) {
+          setUsuarioSesion(null);
+          setVistaActiva("login");
+          if (respuesta.status >= 500) {
+            setLoginError("No se pudo verificar la sesión. Intentá ingresar nuevamente.");
+          }
+          return;
+        }
+
+        const datos = (await respuesta.json()) as RespuestaLoginApi;
+        if (!vigente) return;
+        if (!datos.ok || !datos.usuario) {
+          setVistaActiva("login");
+          return;
+        }
+
+        setUsuarioSesion(datos.usuario);
+        setVistaActiva("inicio");
+      } catch (error) {
+        if (!vigente) return;
+        console.error("No se pudo recuperar la sesión:", error);
+        setVistaActiva("login");
+        setLoginError("No se pudo conectar con el servidor para comprobar la sesión.");
+      } finally {
+        if (vigente) setSesionCargada(true);
+      }
+    }
+
+    void recuperarSesion();
+    return () => { vigente = false; };
   }, []);
+
+  // Una vez validado el Core, usar su sucursal predeterminada real.
+  useEffect(() => {
+    if (usuarioSesion) setSucursal(usuarioSesion.sucursal);
+  }, [usuarioSesion]);
+
+  // Solo las interacciones reales renuevan las dos horas de inactividad.
+  useEffect(() => {
+    if (!usuarioSesion) return;
+
+    let vigente = true;
+    let ultimaActividad = Date.now();
+    let ultimaRenovacion = Date.now();
+    let renovacionEnCurso = false;
+    let temporizador: number | undefined;
+
+    function caducarSesion() {
+      if (!vigente) return;
+      vigente = false;
+      setUsuarioSesion(null);
+      setVistaActiva("login");
+      setMenuAbierto(false);
+      setLoginError("Tu sesión venció por inactividad. Ingresá nuevamente.");
+    }
+
+    function programarVencimiento() {
+      if (temporizador !== undefined) window.clearTimeout(temporizador);
+      temporizador = window.setTimeout(() => {
+        if (Date.now() - ultimaActividad >= LIMITE_INACTIVIDAD_MS) {
+          caducarSesion();
+        }
+      }, LIMITE_INACTIVIDAD_MS);
+    }
+
+    function registrarActividad() {
+      if (!vigente) return;
+      const ahora = Date.now();
+
+      if (ahora - ultimaActividad >= LIMITE_INACTIVIDAD_MS) {
+        caducarSesion();
+        return;
+      }
+
+      ultimaActividad = ahora;
+      programarVencimiento();
+
+      if (renovacionEnCurso || ahora - ultimaRenovacion < INTERVALO_RENOVACION_MS) {
+        return;
+      }
+
+      renovacionEnCurso = true;
+      ultimaRenovacion = ahora;
+      void fetch("/api/actividad", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      }).then((respuesta) => {
+        if (!vigente) return;
+        if (respuesta.status === 401 || respuesta.status === 403) {
+          caducarSesion();
+        }
+      }).catch((error) => {
+        console.error("No se pudo renovar la sesión:", error);
+      }).finally(() => {
+        renovacionEnCurso = false;
+      });
+    }
+
+    async function comprobarAlVolver() {
+      if (!vigente || document.visibilityState !== "visible") return;
+      if (Date.now() - ultimaActividad >= LIMITE_INACTIVIDAD_MS) {
+        caducarSesion();
+        return;
+      }
+      try {
+        const respuesta = await fetch("/api/session", {
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        if (vigente && (respuesta.status === 401 || respuesta.status === 403)) {
+          caducarSesion();
+        }
+      } catch (error) {
+        console.error("No se pudo revisar la sesión al volver:", error);
+      }
+    }
+
+    programarVencimiento();
+    window.addEventListener("pointerdown", registrarActividad);
+    window.addEventListener("keydown", registrarActividad);
+    window.addEventListener("scroll", registrarActividad, true);
+    document.addEventListener("visibilitychange", comprobarAlVolver);
+
+    return () => {
+      vigente = false;
+      if (temporizador !== undefined) window.clearTimeout(temporizador);
+      window.removeEventListener("pointerdown", registrarActividad);
+      window.removeEventListener("keydown", registrarActividad);
+      window.removeEventListener("scroll", registrarActividad, true);
+      document.removeEventListener("visibilitychange", comprobarAlVolver);
+    };
+  }, [usuarioSesion]);
 
   const itemsMenuVisibles = useMemo(() => {
     if (!usuarioSesion) return [];
@@ -482,8 +627,13 @@ function App() {
       if (item.id === "usuario") return true;
 
       const moduloRequerido = moduloPorVista[item.id];
-
-      return usuarioSesion.modulos.includes(moduloRequerido);
+      const permisoVer = {
+        inventario: "inventario.ver", movimientos: "movimientos.ver",
+        administracion: "administracion.ver", facturacion: "facturacion.ver",
+        reportes: "reportes.ver", ajustes: "ajustes.ver",
+      }[item.id as "inventario" | "movimientos" | "administracion" | "facturacion" | "reportes" | "ajustes"];
+      return usuarioSesion.modulos.includes(moduloRequerido) &&
+        Boolean(permisoVer && usuarioSesion.permisos?.includes(permisoVer));
     });
   }, [usuarioSesion]);
 
@@ -498,8 +648,13 @@ function App() {
     if (vista === "usuario") return true;
 
     const moduloRequerido = moduloPorVista[vista];
-
-    return usuarioSesion.modulos.includes(moduloRequerido);
+    const permisoVer = {
+      inventario: "inventario.ver", movimientos: "movimientos.ver",
+      administracion: "administracion.ver", facturacion: "facturacion.ver",
+      reportes: "reportes.ver", ajustes: "ajustes.ver",
+    }[vista as "inventario" | "movimientos" | "administracion" | "facturacion" | "reportes" | "ajustes"];
+    return usuarioSesion.modulos.includes(moduloRequerido) &&
+      Boolean(permisoVer && usuarioSesion.permisos?.includes(permisoVer));
   }
 
   async function iniciarSesion(event: FormEvent<HTMLFormElement>) {
@@ -519,6 +674,8 @@ function App() {
 
       const response = await fetch("/api/login", {
         method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
         },
@@ -534,7 +691,6 @@ function App() {
         throw new Error(data.error || "No se pudo iniciar sesión.");
       }
 
-      localStorage.setItem(STORAGE_USUARIO_KEY, JSON.stringify(data.usuario));
       setUsuarioSesion(data.usuario);
       setLoginUsuario("");
       setLoginPassword("");
@@ -552,13 +708,28 @@ function App() {
     }
   }
 
-  function cerrarSesion() {
-    localStorage.removeItem(STORAGE_USUARIO_KEY);
+  async function cerrarSesion() {
+    let cierreConfirmado = false;
+    try {
+      const respuesta = await fetch("/api/logout", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      cierreConfirmado = respuesta.ok;
+    } catch (error) {
+      console.error("Error cerrando la sesión:", error);
+    }
+
+    // Cerramos la pantalla incluso si falla la red; en ese caso
+    // avisamos que el servidor no confirmó la revocación.
     setUsuarioSesion(null);
     setVistaActiva("login");
     setMenuAbierto(false);
     setAviso(null);
     setUltimoMovimiento(null);
+    setLoginError(cierreConfirmado ? "" :
+      "Se cerró la pantalla, pero no se pudo confirmar el cierre de sesión en el servidor.");
   }
 
   function cargarProductoEncontrado(productoApi: ProductoApi) {
@@ -865,6 +1036,10 @@ function App() {
   }
 
   async function guardarMovimiento() {
+    if (modoEdicion ? !puedeEditarInventario : !puedeCrearInventario) {
+      setAviso({ tipo: "error", texto: "No tenés permiso para esta acción en Inventario." });
+      return;
+    }
     const error = validarFormulario();
 
     if (error) {
@@ -966,7 +1141,7 @@ function App() {
   }
 
   function editarUltimaCarga() {
-    if (!ultimoMovimiento) return;
+    if (!ultimoMovimiento || !puedeEditarInventario) return;
 
     setCodigo(ultimoMovimiento.codigo);
     setProducto(ultimoMovimiento.producto);
@@ -1048,7 +1223,7 @@ function App() {
   }
 
   function abrirMovimiento(subvista: MovimientoSubvista) {
-    if (!usuarioPuedeVer("movimientos")) return;
+    if (!usuarioPuedeVer("movimientos") || !permiteModoMovimientoUI(usuarioSesion, subvista)) return;
 
     setMovimientoSubvista(subvista);
     setVistaActiva("movimientos");
@@ -1144,6 +1319,21 @@ function App() {
             <strong>Empresa:</strong> {usuarioSesion.empresa}
           </p>
         </div>
+
+        {sucursalesDisponibles.length > 1 && (
+          <div className="field-group">
+            <label htmlFor="sucursal-cuenta">Sucursal activa</label>
+            <select
+              id="sucursal-cuenta"
+              value={sucursal}
+              onChange={(event) => setSucursal(event.target.value)}
+            >
+              {sucursalesDisponibles.map((opcion) => (
+                <option key={opcion.id} value={opcion.nombre}>{opcion.nombre}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="user-modules-box">
           <span>Módulos activos</span>
@@ -1247,9 +1437,9 @@ function App() {
                   onChange={(event) => setSucursal(event.target.value)}
                   disabled={guardando}
                 >
-                  {sucursales.map((sucursalDisponible) => (
-                    <option key={sucursalDisponible} value={sucursalDisponible}>
-                      {sucursalDisponible}
+                  {sucursalesDisponibles.map((sucursalDisponible) => (
+                    <option key={sucursalDisponible.id} value={sucursalDisponible.nombre}>
+                      {sucursalDisponible.nombre}
                     </option>
                   ))}
                 </select>
@@ -1499,8 +1689,11 @@ function App() {
             </div>
           )}
 
+          {!puedeCrearInventario && !puedeEditarInventario && (
+            <p role="status">Tenés acceso de consulta a Inventario. No podés guardar cargas.</p>
+          )}
           <div className="actions-row">
-            <button
+            {(modoEdicion ? puedeEditarInventario : puedeCrearInventario) && <button
               className="primary-button"
               type="button"
               onClick={guardarMovimiento}
@@ -1513,7 +1706,7 @@ function App() {
                 : modoEdicion
                 ? "Actualizar carga"
                 : "Guardar"}
-            </button>
+            </button>}
 
             <button
               className="secondary-button"
@@ -1534,14 +1727,14 @@ function App() {
                 <h2>{ultimoMovimiento.nombre}</h2>
               </div>
 <div className="result-actions-top">
-  <button
+  {puedeEditarInventario && <button
     className="correct-load-button"
     type="button"
     onClick={editarUltimaCarga}
     disabled={guardando || modoEdicion}
   >
     Corregir carga
-  </button>
+  </button>}
 
   <strong className="result-badge">
     {ultimoMovimiento.productoNuevo ? "Nuevo" : "Existente"}
@@ -1618,7 +1811,8 @@ function App() {
     if (vistaActiva === "movimientos") {
       return (
         <MovimientosModule
-          usuario={usuarioSesion}
+          key={sucursal}
+          usuario={{ ...usuarioSesion, sucursal }}
           modoInicial={movimientoSubvista}
         />
       );
@@ -1709,10 +1903,10 @@ if (vistaActiva === "administracion") {
 
                   {grupoMovimientosAbierto && (
                     <div className="side-menu-submenu">
-                      <button type="button" onClick={() => abrirMovimiento("recepcion")}>Recepción</button>
-                      <button type="button" onClick={() => abrirMovimiento("reposicion")}>Reposición</button>
-                      <button type="button" onClick={() => abrirMovimiento("stock")}>Stock</button>
-                      <button type="button" onClick={() => abrirMovimiento("individual")}>Ajuste</button>
+                      {puedeCrearMovimientos && <button type="button" onClick={() => abrirMovimiento("recepcion")}>Recepción</button>}
+                      {puedeCrearMovimientos && <button type="button" onClick={() => abrirMovimiento("reposicion")}>Reposición</button>}
+                      {permiteModoMovimientoUI(usuarioSesion, "stock") && <button type="button" onClick={() => abrirMovimiento("stock")}>Stock</button>}
+                      {(puedeCrearMovimientos || puedeAjustarMovimientos) && <button type="button" onClick={() => abrirMovimiento("individual")}>{puedeAjustarMovimientos ? "Ajustes" : "Movimiento individual"}</button>}
                     </div>
                   )}
                 </div>

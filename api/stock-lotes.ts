@@ -1,5 +1,10 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { exigirAutorizacion } from "../lib/autorizacion.js";
+import { configTablaOperativa, idsVinculados, productoDeEmpresa,
+  sucursalRealDeUbicacion, sucursalSolicitada,
+  productoExistenteDeEmpresa } from "../lib/alcance-operativo.js";
+import type { ContextoCore } from "../core/seguridad.js";
 
 dotenv.config({
   path: ".env.local",
@@ -44,12 +49,14 @@ type ProductoStock = {
   marca: string;
   presentacion: string;
   especificacion: string;
+  empresaIds: string[];
 };
 
 type UbicacionStock = {
   id: string;
   nombre: string;
   sucursal: string;
+  sucursalCoreId: string | null;
   tipoUbicacion: string;
 };
 
@@ -240,10 +247,7 @@ function normalizarFecha(
 async function leerTodosLosRegistros(
   tableName: string
 ): Promise<AirtableRecord[]> {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv(
-    "AIRTABLE_MOVIMIENTOS_BASE_ID"
-  );
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
 
   const registros: AirtableRecord[] = [];
   let offset: string | undefined;
@@ -345,6 +349,7 @@ async function leerMapaUbicaciones(): Promise<
       id: record.id,
       nombre: nombre || "Ubicación",
       sucursal,
+      sucursalCoreId: sucursalRealDeUbicacion(record.fields),
       tipoUbicacion,
     });
   });
@@ -438,6 +443,7 @@ async function leerMapaProductos(): Promise<
       marca,
       presentacion,
       especificacion,
+      empresaIds: idsVinculados(record.fields.EMPRESA) ?? [],
     });
   });
 
@@ -530,7 +536,8 @@ function ordenarStockGeneral(
  */
 async function responderConsultaProducto(
   req: VercelRequest,
-  res: VercelResponse
+  res: VercelResponse,
+  contexto: ContextoCore
 ) {
   const productoId = String(
     req.query.productoId || ""
@@ -551,13 +558,30 @@ async function responderConsultaProducto(
     });
   }
 
-  const [
-    registros,
-    mapaUbicaciones,
-  ] = await Promise.all([
-    leerTodosLosRegistrosStock(),
-    leerMapaUbicaciones(),
+  // La consulta por ID NO debe revelar stock de productos ajenos.
+  if (!await productoExistenteDeEmpresa(productoId, contexto.empresa.id)) {
+    return res.status(403).json({ ok: false, error: "Producto no habilitado para esta empresa" });
+  }
+  const [registros, mapaUbicaciones] = await Promise.all([
+    leerTodosLosRegistrosStock(), leerMapaUbicaciones(),
   ]);
+  const sucursalesPermitidas = new Set(
+    contexto.sucursalesAutorizadas.filter((s) => s.activa).map((s) => s.id)
+  );
+
+  if (ubicacionId) {
+    const ubicacionSolicitada = mapaUbicaciones.get(ubicacionId);
+    if (
+      !ubicacionSolicitada ||
+      !ubicacionSolicitada.sucursalCoreId ||
+      !sucursalesPermitidas.has(ubicacionSolicitada.sucursalCoreId)
+    ) {
+      return res.status(403).json({
+        ok: false,
+        error: "No tenés acceso a esa ubicación",
+      });
+    }
+  }
 
   const lotesSinNombre = registros
     .map((record): LoteStock | null => {
@@ -595,6 +619,15 @@ async function responderConsultaProducto(
         mapaUbicaciones.get(
           ubicacionVinculadaId
         );
+
+      // También filtramos cuando la consulta NO recibe ubicacionId.
+      if (
+        !ubicacion ||
+        !ubicacion.sucursalCoreId ||
+        !sucursalesPermitidas.has(ubicacion.sucursalCoreId)
+      ) {
+        return null;
+      }
 
       return {
         id: record.id,
@@ -691,7 +724,9 @@ async function responderConsultaProducto(
  */
 async function responderStockGeneral(
   req: VercelRequest,
-  res: VercelResponse
+  res: VercelResponse,
+  contexto: ContextoCore,
+  sucursalId: string,
 ) {
   const sucursalConsultada = String(
     req.query.sucursal || ""
@@ -740,7 +775,9 @@ async function responderStockGeneral(
               ubicacionId
             );
 
-          if (!ubicacion) {
+          if (!ubicacion || !producto ||
+              !producto.empresaIds.includes(contexto.empresa.id) ||
+              ubicacion.sucursalCoreId !== sucursalId) {
             return null;
           }
 
@@ -846,10 +883,27 @@ export default async function handler(
      * /api/stock-lotes?vista=general&sucursal=BELLA VISTA
      */
     if (vista === "general") {
-      return await responderStockGeneral(
-        req,
-        res
-      );
+      const sucursalSolicitadaNombre = String(req.query.sucursal || "")
+        .trim()
+        .toUpperCase();
+
+      if (!sucursalSolicitadaNombre) {
+        return res.status(400).json({
+          ok: false,
+          error: "Falta la sucursal para consultar el stock general",
+        });
+      }
+
+      const autorizado = await exigirAutorizacion(req, res, {
+        modulos: ["MOVIMIENTOS"],
+        permiso: "movimientos.ver",
+        sucursal: sucursalSolicitadaNombre,
+      });
+      if (!autorizado) return;
+
+      const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursalSolicitadaNombre);
+      if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
+      return await responderStockGeneral(req, res, autorizado.contexto, sucursalCore.id);
     }
 
     /**
@@ -857,9 +911,16 @@ export default async function handler(
      *
      * /api/stock-lotes?productoId=...&ubicacionId=...
      */
+    const autorizado = await exigirAutorizacion(req, res, {
+      modulos: ["MOVIMIENTOS"],
+      permiso: "movimientos.ver",
+    });
+    if (!autorizado) return;
+
     return await responderConsultaProducto(
       req,
-      res
+      res,
+      autorizado.contexto
     );
   } catch (error) {
     console.error(

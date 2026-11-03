@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { SeccionAdministracion, UsuarioSesion } from "./administracion.types";
 import ResumenAdministracion from "./resumen/ResumenAdministracion";
+import { permiteAccionUI } from "../../config/permisos-vista";
 import TercerosLista from "./Terceros/TercerosLista";
 import "./Administracion.css";
 
@@ -31,12 +32,28 @@ function SeccionEnConstruccion({ titulo, descripcion }: { titulo: string; descri
 
 export default function Administracion({ usuario }: Props) {
   const [seccion, setSeccion] = useState<SeccionAdministracion>("resumen");
+  const puede = (permiso: string) => permiteAccionUI(usuario, "ADMINISTRACION", permiso);
+  const permisoSeccion: Partial<Record<SeccionAdministracion, string>> = {
+    terceros: "administracion.ver", // Consultar terceros; gestionar se habilitará en su bloque.
+    documentos: "administracion.gestionarDocumentos",
+    pagos: "administracion.gestionarPagos",
+    cheques: "administracion.gestionarCheques",
+    bancos: "administracion.gestionarBancos",
+    configuracion: "administracion.configurar",
+  };
+  const seccionPermitida = (id: SeccionAdministracion) => {
+    if (id === "resumen") return puede("administracion.ver");
+    // Cuentas corrientes es un módulo independiente; no exponemos su configuración aquí.
+    if (id === "cuentasCorrientes") return false;
+    return Boolean(permisoSeccion[id] && puede(permisoSeccion[id]!));
+  };
+  const seccionSegura = seccionPermitida(seccion) ? seccion : "resumen";
 
   function renderSeccion() {
-    if (seccion === "resumen") {
+    if (seccionSegura === "resumen") {
       return <ResumenAdministracion usuario={usuario} onIrATerceros={() => setSeccion("terceros")} />;
     }
-    if (seccion === "terceros") return <TercerosLista />;
+    if (seccionSegura === "terceros") return <TercerosLista puedeGestionar={puede("administracion.gestionarTerceros")} />;
 
     const contenido = {
       documentos: { titulo: "Documentos", descripcion: "Facturas, remitos, notas de crédito, gastos, sueldos y recibos." },
@@ -47,7 +64,7 @@ export default function Administracion({ usuario }: Props) {
       configuracion: { titulo: "Configuración", descripcion: "Empresas, sucursales, usuarios, puntos de venta y ubicaciones." },
     } as const;
 
-    return <SeccionEnConstruccion titulo={contenido[seccion].titulo} descripcion={contenido[seccion].descripcion} />;
+    return <SeccionEnConstruccion titulo={contenido[seccionSegura].titulo} descripcion={contenido[seccionSegura].descripcion} />;
   }
 
   return (
@@ -62,8 +79,8 @@ export default function Administracion({ usuario }: Props) {
       </div>
 
       <nav className="adm-section-nav" aria-label="Secciones de administración">
-        {SECCIONES.map((item) => (
-          <button key={item.id} className={seccion === item.id ? "adm-section-button adm-section-button-active" : "adm-section-button"} type="button" onClick={() => setSeccion(item.id)}>
+        {SECCIONES.filter((item) => seccionPermitida(item.id)).map((item) => (
+          <button key={item.id} className={seccionSegura === item.id ? "adm-section-button adm-section-button-active" : "adm-section-button"} type="button" onClick={() => setSeccion(item.id)}>
             <span>{item.abreviatura}</span><strong>{item.etiqueta}</strong>
           </button>
         ))}

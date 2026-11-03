@@ -79,6 +79,32 @@ export async function anularInvitacion(token: string): Promise<void> {
   if (TOKEN.test(token)) await redis<number>(["DEL", claveInvitacion(token)]);
 }
 
+/** Bloqueo breve de activación; evita dos cambios de contraseña concurrentes.
+ * No consume la invitación: si Airtable falla, el empleado puede reintentar.
+ */
+function claveBloqueoActivacion(token: string): string {
+  return "optima:bloqueo-activacion:" + createHash("sha256").update(token).digest("hex");
+}
+
+export async function bloquearActivacion(token: string): Promise<string | null> {
+  if (!TOKEN.test(token)) return null;
+  const propietario = randomBytes(16).toString("hex");
+  const resultado = await redis<string | null>([
+    "SET", claveBloqueoActivacion(token), propietario, "NX", "EX", 120,
+  ]);
+  return resultado === "OK" ? propietario : null;
+}
+
+export async function liberarBloqueoActivacion(token: string, propietario: string): Promise<void> {
+  if (!TOKEN.test(token) || !/^[a-f0-9]{32}$/.test(propietario)) return;
+  // Nunca liberar el bloqueo de otra petición si este hubiera expirado.
+  await redis<number>([
+    "EVAL",
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
+    1, claveBloqueoActivacion(token), propietario,
+  ]);
+}
+
 export function validarClaveNueva(valor: unknown): valor is string {
   return typeof valor === "string" && valor.length >= 12 && valor.length <= 128 &&
     /[a-zA-Z]/.test(valor) && /\d/.test(valor);

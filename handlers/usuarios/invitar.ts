@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { construirAltaInvitado } from "../../core/alta-usuarios.js";
 import { crearInvitacion, anularInvitacion, reservarNombreUsuario } from "../../lib/invitaciones.js";
-import { autenticarAdministrador, crearUsuarioInactivo, existeNombreUsuario } from "../../lib/usuarios-maestros.js";
+import { autenticarAdministrador, crearUsuarioInactivo, existeNombreUsuario, retirarUsuarioPendiente } from "../../lib/usuarios-maestros.js";
 
 function origenPublico(): string {
   const valor = process.env.OPTIMA_PUBLIC_URL?.trim();
@@ -49,6 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch {
     return res.status(503).json({ ok: false, error: "Configurá el correo y la URL del entorno" });
   }
+  let idCreado: string | null = null;
+  let tokenCreado: string | null = null;
   try {
     if (!(await reservarNombreUsuario(alta.usuario))) {
       return res.status(429).json({ ok: false, error: "Ya hay una invitación en curso para ese usuario" });
@@ -56,21 +58,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (await existeNombreUsuario(alta.usuario)) {
       return res.status(409).json({ ok: false, error: "Ese nombre de usuario ya existe" });
     }
-    const id = await crearUsuarioInactivo(alta.campos);
-    const token = await crearInvitacion({
-      tipo: "activacion", usuarioId: id, empresaId: admin.contexto.empresa.id, email: alta.email,
+    idCreado = await crearUsuarioInactivo(alta.campos);
+    tokenCreado = await crearInvitacion({
+      tipo: "activacion", usuarioId: idCreado, empresaId: admin.contexto.empresa.id, email: alta.email,
     });
-    const enlace = `${origin}/activar.html#token=${encodeURIComponent(token)}`;
-    try {
-      await enviarEmail(alta.email, String(alta.campos.NOMBRE), enlace);
-    } catch (err) {
-      try { await anularInvitacion(token); } catch { /* expira en 24 h */ }
-      throw err;
-    }
+    const enlace = `${origin}/activar.html#token=${encodeURIComponent(tokenCreado)}`;
+    await enviarEmail(alta.email, String(alta.campos.NOMBRE), enlace);
     // No devolver el token, el enlace ni datos secretos al administrador.
     return res.status(201).json({ ok: true, mensaje: "Invitación enviada. La cuenta permanece inactiva hasta su activación." });
   } catch (error) {
+    if (tokenCreado) {
+      try { await anularInvitacion(tokenCreado); }
+      catch (fallo) { console.error("No se pudo anular enlace de invitación fallida:", fallo); }
+    }
+    if (idCreado) {
+      try {
+        const retirada = await retirarUsuarioPendiente(idCreado, admin.contexto.empresa.id, alta.email);
+        if (!retirada) console.error("Invitación fallida: revisar cuenta pendiente antes de reintentar", idCreado);
+      } catch (fallo) { console.error("No se pudo retirar cuenta pendiente:", idCreado, fallo); }
+    }
     console.error("No se pudo completar la invitación:", error);
-    return res.status(503).json({ ok: false, error: "No se pudo enviar la invitación. No intentes crear otra cuenta sin revisar el estado." });
+    return res.status(503).json({ ok: false, error: "No se pudo enviar la invitación. Verificá el estado antes de reintentar." });
   }
 }

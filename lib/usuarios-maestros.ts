@@ -16,7 +16,7 @@ function conf() {
   return { base, tabla, token };
 }
 
-export async function airtableUsuarios(method: "GET" | "POST" | "PATCH", path: string, body?: unknown) {
+export async function airtableUsuarios(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown) {
   const { base, tabla, token } = conf();
   const url = new URL(`https://api.airtable.com/v0/${base}/${tabla}${path}`);
   const r = await fetch(url, {
@@ -52,6 +52,18 @@ export async function activarUsuario(id: string, passwordHash: string): Promise<
   if (!ID.test(id) || !passwordHash.startsWith("$argon2id$")) throw new Error("Activación inválida");
   const r = await airtableUsuarios("PATCH", `/${id}`, { fields: { PASSWORD_HASH: passwordHash, ACTIVO: true }, typecast: false });
   if (r.id !== id) throw new Error("No se confirmó la activación");
+}
+
+/** Si falla el envío, retira SOLO una cuenta pendiente que todavía coincida.
+ * Nunca borra un empleado activado, modificado ni de otra empresa.
+ */
+export async function retirarUsuarioPendiente(id: string, empresaId: string, email: string): Promise<boolean> {
+  const actual = await leerUsuario(id);
+  if (!actual || actual.fields.ACTIVO === true || actual.fields.PASSWORD_HASH ||
+      actual.fields.Email !== email || !Array.isArray(actual.fields.EMPRESA) ||
+      actual.fields.EMPRESA.length !== 1 || actual.fields.EMPRESA[0] !== empresaId) return false;
+  const eliminado = await airtableUsuarios("DELETE", `/${id}`);
+  return eliminado.id === id && eliminado.deleted === true;
 }
 
 export async function autenticarAdministrador(req: VercelRequest, res: VercelResponse): Promise<{

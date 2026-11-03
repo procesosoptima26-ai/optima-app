@@ -52,6 +52,12 @@ test("API Paso 9: invitación y activación aisladas, sin llamadas reales", asyn
         if(opciones.includes("NX")&&store.has(key))return Response.json({result:null});
         store.set(key,value);return Response.json({result:"OK"});
       }
+      if(op==="EVAL"){
+        const arr=JSON.parse(String(init?.body)) as string[];
+        const lock=arr[3],propietario=arr[4];
+        if(store.get(lock)===propietario){store.delete(lock);return Response.json({result:1});}
+        return Response.json({result:0});
+      }
       if(op==="GETDEL"){const v=store.get(key)??null;store.delete(key);return Response.json({result:v});}
       if(op==="DEL"){const ok=store.delete(key);return Response.json({result:+ok});}
       throw new Error("Redis inesperado "+op);

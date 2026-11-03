@@ -113,10 +113,10 @@ test("API Paso 9: invitación y activación aisladas, sin llamadas reales", asyn
   assert.ok(token);
   r=respuesta();await validar(req("POST",{token},false),r.res);
   assert.equal(r.estado.status,200);
-  r=respuesta();await activar(req("POST",{token,password:"ClaveFicticia123"},false),r.res);
+  r=respuesta();await activar(req("POST",{token,password:"ClaveFicticia123!"},false),r.res);
   assert.equal(r.estado.status,200);
   assert.equal(nuevoActivo,true);
-  r=respuesta();await activar(req("POST",{token,password:"ClaveFicticia123"},false),r.res);
+  r=respuesta();await activar(req("POST",{token,password:"ClaveFicticia123!"},false),r.res);
   assert.equal(r.estado.status,410);
 });
 

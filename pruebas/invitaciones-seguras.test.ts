@@ -35,8 +35,9 @@ test("invitación Redis almacena hash, vence y es de un solo uso", async (t) => 
   assert.equal(await consultarInvitacion(token), null);
 });
 
-test("contraseñas para activar deben tener longitud, números y letras", () => {
-  assert.equal(validarClaveNueva("ClaveFicticia123"), true);
+test("contraseñas para activar deben tener longitud, letras, números y símbolo", () => {
+  assert.equal(validarClaveNueva("ClaveFicticia123!"), true);
+  assert.equal(validarClaveNueva("ClaveFicticia123"), false);
   assert.equal(validarClaveNueva("123456789012"), false);
   assert.equal(validarClaveNueva("demasiadocorta"), false);
   assert.equal(validarClaveNueva("Aa123"), false);

@@ -106,6 +106,6 @@ export async function liberarBloqueoActivacion(token: string, propietario: strin
 }
 
 export function validarClaveNueva(valor: unknown): valor is string {
-  return typeof valor === "string" && valor.length >= 12 && valor.length <= 128 &&
-    /[a-zA-Z]/.test(valor) && /\d/.test(valor);
+  return typeof valor === "string" && valor.length >= 8 && valor.length <= 128 &&
+    /[a-zA-Z]/.test(valor) && /\d/.test(valor) && /[^a-zA-Z0-9\s]/.test(valor);
 }

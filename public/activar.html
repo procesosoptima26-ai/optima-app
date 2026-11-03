@@ -13,6 +13,7 @@
     input,button{box-sizing:border-box;width:100%;font:inherit;padding:12px;border-radius:8px}
     input{border:1px solid #98a1ae}button{border:0;background:#181c22;color:white;margin-top:20px;cursor:pointer}
     button:disabled{opacity:.6;cursor:wait}.hint{color:#52616f;font-size:14px}.error{color:#a01515}.success{color:#116b39}
+    .reglas{list-style:none;padding:0;margin:8px 0 16px;font-size:14px;color:#52616f}.reglas li{margin:5px 0}.reglas li.cumple{color:#116b39}
   </style>
 </head>
 <body>
@@ -22,10 +23,16 @@
     <p id="estado" role="status">Comprobando invitación...</p>
     <form id="form" hidden>
       <label for="password">Crear contraseña</label>
-      <input type="password" id="password" autocomplete="new-password" minlength="12" maxlength="128" required/>
+      <input type="password" id="password" autocomplete="new-password" minlength="8" maxlength="128" required/>
       <label for="confirmar">Repetir contraseña</label>
-      <input type="password" id="confirmar" autocomplete="new-password" minlength="12" maxlength="128" required/>
-      <p class="hint">Entre 12 y 128 caracteres, con letras y números.</p>
+      <input type="password" id="confirmar" autocomplete="new-password" minlength="8" maxlength="128" required/>
+      <p class="hint">Tu contraseña debe cumplir todos estos requisitos:</p>
+      <ul class="reglas" aria-live="polite">
+        <li id="regla-longitud">○ Entre 8 y 128 caracteres</li>
+        <li id="regla-letra">○ Al menos una letra</li>
+        <li id="regla-numero">○ Al menos un número</li>
+        <li id="regla-simbolo">○ Al menos un símbolo (por ejemplo, ! @ # $)</li>
+      </ul>
       <button id="enviar" type="submit">Activar cuenta</button>
     </form>
     <p><a href="/">Volver a OPTIMA</a></p>
@@ -38,6 +45,25 @@
       const form=document.getElementById('form');
       const estado=document.getElementById('estado');
       const enviar=document.getElementById('enviar');
+      const entradaClave=document.getElementById('password');
+      const reglas=[
+        ['regla-longitud','Entre 8 y 128 caracteres',v=>v.length>=8&&v.length<=128],
+        ['regla-letra','Al menos una letra',v=>/[a-zA-Z]/.test(v)],
+        ['regla-numero','Al menos un número',v=>/\d/.test(v)],
+        ['regla-simbolo','Al menos un símbolo (por ejemplo, ! @ # $)',v=>/[^a-zA-Z0-9\s]/.test(v)]
+      ];
+      const validarClaveVisual=()=>{
+        const clave=entradaClave.value;
+        const estados=reglas.map(([id,etiqueta,validar])=>{
+          const cumple=validar(clave);
+          const elemento=document.getElementById(id);
+          elemento.classList.toggle('cumple',cumple);
+          elemento.textContent=(cumple?'✓ ':'○ ')+etiqueta;
+          return cumple;
+        });
+        return estados.every(Boolean);
+      };
+      entradaClave.addEventListener('input',validarClaveVisual);
       const mensaje=(texto,clase='')=>{estado.textContent=texto;estado.className=clase};
       if(!/^[A-Za-z0-9_-]{43}$/.test(token)){mensaje('El enlace no es válido. Solicitá una nueva invitación.','error');return}
       const solicitar=async(ruta,cuerpo)=>{
@@ -50,7 +76,7 @@
       form.addEventListener('submit',async(e)=>{
         e.preventDefault();const password=document.getElementById('password').value;
         if(password!==document.getElementById('confirmar').value){mensaje('Las contraseñas no coinciden.','error');return}
-        if(!/^(?=.*[A-Za-z])(?=.*\d).{12,128}$/.test(password)){mensaje('La contraseña debe tener letras y números, y al menos 12 caracteres.','error');return}
+        if(!validarClaveVisual()){mensaje('La contraseña debe tener entre 8 y 128 caracteres, una letra, un número y un símbolo.','error');return}
         enviar.disabled=true;
         try{const d=await solicitar('/api/usuarios/activar',{token,password});mensaje(d.mensaje||'Cuenta activada.','success');form.hidden=true}
         catch(err){mensaje(err.message,'error');enviar.disabled=false}

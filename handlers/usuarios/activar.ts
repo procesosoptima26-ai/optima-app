@@ -10,7 +10,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const token = typeof req.body?.token === "string" ? req.body.token : "";
   const password = req.body?.password;
   if (!validarClaveNueva(password)) {
-    return res.status(400).json({ ok: false, error: "Usá una contraseña de 12 a 128 caracteres, con letras y números" });
+    return res.status(400).json({ ok: false, error: "Usá una contraseña de 8 a 128 caracteres, con al menos una letra, un número y un símbolo" });
   }
   let propietario: string | null = null;
   try {

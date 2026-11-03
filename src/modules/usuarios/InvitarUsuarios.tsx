@@ -27,6 +27,7 @@ export default function InvitarUsuarios() {
   const [predeterminada, setPredeterminada] = useState("");
   const [modulos, setModulos] = useState<string[]>(["CORE"]);
   const [permisos, setPermisos] = useState<string[]>([]);
+  const [moduloAbierto, setModuloAbierto] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
@@ -61,7 +62,7 @@ export default function InvitarUsuarios() {
       if (!r.ok || !data.ok) throw new Error(data.error || "No se pudo invitar");
       setMensaje(data.mensaje ?? "Invitación enviada");
       setUsuario(""); setNombre(""); setEmail("");
-      setSucursales([]); setPredeterminada(""); setModulos(["CORE"]); setPermisos([]);
+      setSucursales([]); setPredeterminada(""); setModulos(["CORE"]); setPermisos([]); setModuloAbierto(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error enviando invitación");
     } finally { setCargando(false); }
@@ -102,27 +103,62 @@ export default function InvitarUsuarios() {
             </select>
           </label>
           <fieldset>
-            <legend>Módulos</legend>
-            {opciones.modulos.map((m) => <label key={m.id} style={{ display: "block" }}>
-              <input type="checkbox" checked={modulos.includes(m.id)} disabled={m.id === "CORE"}
-                onChange={() => {
-                  const nuevos = modulos.includes(m.id) ? modulos.filter((v) => v !== m.id) : [...modulos, m.id];
-                  setModulos(nuevos);
-                  setPermisos(permisos.filter((p) => opciones.permisos.some((o) =>
-                    o.id === p && nuevos.includes(moduloDelCampo[o.campo]))));
-                }} /> {m.opcionAirtable.replaceAll("_", " ")}
-            </label>)}
-          </fieldset>
-          <fieldset>
-            <legend>Permisos por módulo</legend>
-            {opciones.permisos.filter((p) => {
-              const modulo = moduloDelCampo[p.campo];
-              return modulo && modulos.includes(modulo);
-            }).map((p) => <label key={p.id} style={{ display: "block" }}>
-              <input type="checkbox" checked={permisos.includes(p.id)}
-                onChange={() => alternar(p.id, permisos, setPermisos)} />
-              {p.campo.replace("PERMISOS_", "")} — {p.opcionAirtable.replaceAll("_", " ")}
-            </label>)}
+            <legend>Módulos y permisos</legend>
+            <p style={{ margin: "2px 0 12px", fontSize: 14, color: "#4b5563" }}>
+              Seleccioná los módulos y configurá los permisos debajo de cada uno.
+              Podés abrir un módulo a la vez; los permisos seleccionados se conservan.
+            </p>
+            {opciones.modulos.map((m) => {
+              const seleccionado = modulos.includes(m.id);
+              const desplegado = seleccionado && moduloAbierto === m.id;
+              const permisosDelModulo = opciones.permisos.filter((p) => moduloDelCampo[p.campo] === m.id);
+              const cantidadElegida = permisosDelModulo.filter((p) => permisos.includes(p.id)).length;
+              const nombreModulo = m.opcionAirtable.replaceAll("_", " ");
+              return (
+                <div key={m.id} style={{ borderBottom: "1px solid #e5e7eb", padding: "9px 0" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: m.id === "CORE" ? "default" : "pointer" }}>
+                      <input type="checkbox" checked={seleccionado} disabled={m.id === "CORE"}
+                        onChange={() => {
+                          const nuevos = seleccionado ? modulos.filter((v) => v !== m.id) : [...modulos, m.id];
+                          setModulos(nuevos);
+                          setPermisos((actuales) => actuales.filter((p) => opciones.permisos.some((o) =>
+                            o.id === p && nuevos.includes(moduloDelCampo[o.campo]))));
+                          setModuloAbierto(seleccionado ? null : m.id);
+                        }} />
+                      <span style={{ fontWeight: seleccionado ? 600 : 400 }}>{nombreModulo}</span>
+                    </label>
+                    {seleccionado && (
+                      <button type="button" aria-expanded={desplegado}
+                        aria-controls={`optima-permisos-${m.id}`}
+                        onClick={() => setModuloAbierto(desplegado ? null : m.id)}
+                        style={{ border: "1px solid #cbd5e1", background: "#fff", borderRadius: 7,
+                          padding: "5px 10px", color: "#1e293b", cursor: "pointer", fontSize: 13 }}>
+                        {desplegado ? "Ocultar permisos" : "Ver permisos"}{cantidadElegida ? ` (${cantidadElegida})` : ""}
+                      </button>
+                    )}
+                  </div>
+                  {desplegado && (
+                    <div id={`optima-permisos-${m.id}`} role="group"
+                      aria-label={`Permisos de ${nombreModulo}`}
+                      style={{ margin: "10px 0 2px 26px", padding: "10px 14px", background: "#f8fafc",
+                        border: "1px solid #e2e8f0", borderRadius: 8 }}>
+                      {permisosDelModulo.length ? permisosDelModulo.map((p) => (
+                        <label key={p.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, margin: "7px 0" }}>
+                          <input type="checkbox" checked={permisos.includes(p.id)}
+                            onChange={() => alternar(p.id, permisos, setPermisos)} />
+                          <span>{p.opcionAirtable.replaceAll("_", " ")}</span>
+                        </label>
+                      )) : (
+                        <p style={{ margin: 0, fontSize: 14, color: "#64748b" }}>
+                          Este módulo no tiene permisos individuales configurables.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </fieldset>
           <button type="submit" disabled={cargando || !sucursales.length || !predeterminada}>
             {cargando ? "Enviando..." : "Enviar invitación"}

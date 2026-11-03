@@ -54,6 +54,7 @@ test("Consultas de lotes y productos rechazan accesos indebidos", async (t) => {
     if (url === "https://redis-ficticio.invalid") {
       const cmd = JSON.parse(String(opciones?.body)) as string[];
       assert.equal(cmd[0], "GET");
+      if (cmd[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
       return Response.json({ result: JSON.stringify({ usuarioId }) });
     }
     if (url.includes("appUsuariosPrueba/USUARIOS/")) {

@@ -55,7 +55,9 @@ test("Las API reciben contexto vigente de empresa y sucursal, y cierran el legad
   globalThis.fetch = async (entrada, opciones) => {
     const url = String(entrada);
     if (url === variables.UPSTASH_REDIS_KV_REST_API_URL) {
-      assert.equal(JSON.parse(String(opciones?.body))[0], "GET");
+      const comando = JSON.parse(String(opciones?.body)) as string[];
+      assert.equal(comando[0], "GET");
+      if (comando[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
       return Response.json({ result: JSON.stringify({ usuarioId }) });
     }
     const resCore = respuestaCoreSimulada(url, {

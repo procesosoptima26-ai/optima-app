@@ -54,7 +54,9 @@ test("Terceros: acceso por sesión, módulo y empresa", async (t) => {
     });
     if (core) return core;
     if (url === "https://redis-simulado.invalid") {
-      assert.equal(JSON.parse(String(init?.body))[0], "GET");
+      const comando = JSON.parse(String(init?.body)) as string[];
+      assert.equal(comando[0], "GET");
+      if (comando[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
       return Response.json({ result: JSON.stringify({ usuarioId: userId }) });
     }
     if (url.includes(`/tblUsuariosSimulado/${userId}`)) {

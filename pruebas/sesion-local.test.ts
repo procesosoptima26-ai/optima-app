@@ -117,12 +117,13 @@ test("Ciclo completo de una sesión OPTIMA", async (t) => {
 
   // PRUEBA 3: guardar la sesión.
   await guardarSesion(token, {
-    usuarioId: "usuario-de-prueba",
+    usuarioId: "rec00000000000001",
   });
 
   // PRUEBA 4: recuperar los datos guardados.
   assert.deepEqual(await buscarSesion(token), {
-    usuarioId: "usuario-de-prueba",
+    usuarioId: "rec00000000000001",
+    versionSesion: 0,
   });
 
   // PRUEBA 5: renovar la sesión.

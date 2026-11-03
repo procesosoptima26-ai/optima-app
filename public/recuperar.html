@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="referrer" content="no-referrer"/>
+  <title>Recuperar contraseña | OPTIMA</title>
+  <style>
+    :root{font-family:Inter,Arial,system-ui,sans-serif;background:#f4f7fa;color:#0D1B2A}
+    body{min-height:100vh;display:grid;place-items:center;margin:0;padding:24px;box-sizing:border-box}
+    main{width:min(460px,100%);background:white;border:1px solid #dbe4ea;border-radius:16px;padding:30px;box-sizing:border-box;box-shadow:0 8px 30px #0001}
+    h1{font-size:24px;margin:5px 0 12px}p{line-height:1.5}label{display:block;margin:14px 0 5px;font-weight:600}
+    input,button{box-sizing:border-box;width:100%;font:inherit;padding:12px;border-radius:8px}
+    input{border:1px solid #98a1ae}button{border:0;background:#0D1B2A;color:white;margin-top:16px;cursor:pointer}
+    button:disabled{opacity:.6;cursor:wait}.hint{color:#52616f;font-size:14px}.error{color:#a01515}.success{color:#136a3b}
+    a{color:#075a9f}#estado{min-height:1.5em}
+  </style>
+</head>
+<body>
+  <main>
+    <p class="hint">OPTIMA · Seguridad de cuentas</p>
+    <h1 id="titulo">Recuperar contraseña</h1>
+    <p id="descripcion">Ingresá tu usuario y el correo registrado en OPTIMA. Si coinciden, recibirás un enlace para recuperar el acceso.</p>
+    <p id="estado" role="status" aria-live="polite"></p>
+    <form id="solicitud">
+      <label for="usuario">Usuario</label>
+      <input id="usuario" name="usuario" autocomplete="username" maxlength="40" required pattern="[A-Za-z0-9._-]{3,40}"/>
+      <label for="email">Correo registrado</label>
+      <input id="email" name="email" autocomplete="email" type="email" maxlength="250" required/>
+      <button type="submit">Enviar enlace de recuperación</button>
+    </form>
+    <form id="cambio" hidden>
+      <label for="password">Nueva contraseña</label>
+      <input id="password" type="password" autocomplete="new-password" minlength="8" maxlength="128" required/>
+      <label for="confirmar">Repetir contraseña</label>
+      <input id="confirmar" type="password" autocomplete="new-password" minlength="8" maxlength="128" required/>
+      <p class="hint">De 8 a 128 caracteres, con una letra, un número y un símbolo.</p>
+      <button type="submit">Guardar nueva contraseña</button>
+    </form>
+    <p><a href="/">Volver a OPTIMA</a></p>
+  </main>
+  <script>
+    (()=>{
+      const params=new URLSearchParams(location.hash.slice(1));
+      const token=params.get('token')||'';
+      history.replaceState(null,'',location.pathname);
+      const solicitud=document.getElementById('solicitud');
+      const cambio=document.getElementById('cambio');
+      const estado=document.getElementById('estado');
+      const mensaje=(t,clase='')=>{estado.textContent=t;estado.className=clase;};
+      if(token){
+        document.getElementById('titulo').textContent='Nueva contraseña';
+        document.getElementById('descripcion').textContent='Elegí una contraseña segura para tu cuenta OPTIMA.';
+        solicitud.hidden=true;
+        if(!/^[A-Za-z0-9_-]{43}$/.test(token)) mensaje('Enlace inválido. Solicitá uno nuevo.','error');
+        else cambio.hidden=false;
+      }
+      const enviar=async(ruta,datos)=>{
+        const r=await fetch(ruta,{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(datos),cache:'no-store'});
+        const j=await r.json();
+        if(!r.ok||!j.ok) throw new Error(j.error||'No se pudo completar la operación');
+        return j;
+      };
+      solicitud.addEventListener('submit',async e=>{
+        e.preventDefault();mensaje('');
+        const boton=solicitud.querySelector('button');boton.disabled=true;
+        try{
+          const r=await enviar('/api/usuarios/solicitar-recuperacion',{
+            usuario:document.getElementById('usuario').value,
+            email:document.getElementById('email').value,
+          });
+          mensaje(r.mensaje||'Si los datos corresponden a una cuenta activa, recibirás un correo.','success');
+        }catch(err){mensaje(err.message,'error')}finally{boton.disabled=false}
+      });
+      cambio.addEventListener('submit',async e=>{
+        e.preventDefault();mensaje('');
+        const password=document.getElementById('password').value;
+        if(password!==document.getElementById('confirmar').value){mensaje('Las contraseñas no coinciden.','error');return}
+        if(password.length<8||password.length>128||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)||!/[^A-Za-z0-9\s]/.test(password)){
+          mensaje('Usá entre 8 y 128 caracteres, una letra, un número y un símbolo.','error');return
+        }
+        const boton=cambio.querySelector('button');boton.disabled=true;
+        try{
+          const r=await enviar('/api/usuarios/restablecer',{token,password});
+          mensaje(r.mensaje||'Contraseña actualizada.','success');cambio.hidden=true;
+        }catch(err){mensaje(err.message,'error')}finally{boton.disabled=false}
+      });
+    })();
+  </script>
+</body>
+</html>

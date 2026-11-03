@@ -12,6 +12,7 @@ const NOMBRE_COOKIE_SESION = "optima_sesion";
 // Información que Redis guarda de cada sesión.
 export type DatosSesion = {
   usuarioId: string;
+  versionSesion?: number;
 };
 
 // CONEXIÓN CON REDIS
@@ -57,6 +58,24 @@ async function ejecutarComandoRedis<T>(
   return resultado.result as T;
 }
 
+/** Contador persistente por usuario; un reset invalida TODAS sus sesiones antiguas. */
+function claveVersionSesion(usuarioId: string): string {
+  if (!/^rec[A-Za-z0-9]{14}$/.test(usuarioId)) throw new Error("Usuario de sesión inválido");
+  return `optima:version-sesion:${usuarioId}`;
+}
+
+async function versionActualSesion(usuarioId: string): Promise<number> {
+  const raw = await ejecutarComandoRedis<string | number | null>(["GET", claveVersionSesion(usuarioId)]);
+  const version = raw === null ? 0 : Number(raw);
+  if (!Number.isSafeInteger(version) || version < 0) throw new Error("Versión de sesión inválida");
+  return version;
+}
+
+export async function revocarSesionesUsuario(usuarioId: string): Promise<void> {
+  const valor = await ejecutarComandoRedis<number>(["INCR", claveVersionSesion(usuarioId)]);
+  if (!Number.isSafeInteger(valor) || valor < 1) throw new Error("No se confirmó la revocación de sesiones");
+}
+
 // IDENTIFICADORES DE SESIÓN
 
 export function generarTokenSesion(): string {
@@ -81,10 +100,11 @@ export async function guardarSesion(
     throw new Error("Falta identificar al usuario");
   }
 
+  const versionSesion = await versionActualSesion(datos.usuarioId);
   const resultado = await ejecutarComandoRedis<string>([
     "SET",
     obtenerClaveSesion(token),
-    JSON.stringify(datos),
+    JSON.stringify({ usuarioId: datos.usuarioId, versionSesion }),
     "EX",
     DURACION_INACTIVIDAD_SEGUNDOS,
   ]);
@@ -124,9 +144,12 @@ export async function buscarSesion(
     throw new Error("Datos de sesión inválidos");
   }
 
-  return {
-    usuarioId: datos.usuarioId,
-  };
+  const versionSesion = "versionSesion" in datos ? datos.versionSesion : 0;
+  if (typeof versionSesion !== "number" || !Number.isSafeInteger(versionSesion) || versionSesion < 0) {
+    throw new Error("Versión de sesión corrupta");
+  }
+  if (versionSesion !== await versionActualSesion(datos.usuarioId)) return null;
+  return { usuarioId: datos.usuarioId, versionSesion };
 }
 
 // RENOVAR SESIÓN POR ACTIVIDAD

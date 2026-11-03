@@ -50,6 +50,7 @@ test("API de ubicaciones y productos respetan los permisos", async (t) => {
     if (url === "https://redis-inventado.invalid") {
       const comando = JSON.parse(String(opciones?.body)) as string[];
       assert.equal(comando[0], "GET");
+      if (comando[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
       return Response.json({
         result: estado.sesionValida
           ? JSON.stringify({ usuarioId: "rec00000000000001" })

@@ -42,6 +42,30 @@ export async function existeNombreUsuario(usuario: string): Promise<boolean> {
   return Array.isArray(r.records) && r.records.length > 0;
 }
 
+/** Recuperación: exigir coincidencia EXACTA entre usuario y correo. No revelar el resultado al cliente. */
+export async function buscarUsuarioParaRecuperacion(usuario: string, email: string): Promise<RegistroAirtable | null> {
+  const limpio = usuario.trim().toUpperCase();
+  if (!/^[A-Z0-9._-]{3,40}$/.test(limpio) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
+  const seguro = limpio.toLowerCase();
+  const q = new URLSearchParams({ filterByFormula: `LOWER({USUARIO})="${seguro}"`, maxRecords: "1" });
+  const r = await airtableUsuarios("GET", `?${q}`);
+  const registro = Array.isArray(r.records) ? r.records[0] as RegistroAirtable | undefined : undefined;
+  if (!registro || !ID.test(registro.id) || !registro.fields ||
+      registro.fields.ACTIVO !== true ||
+      typeof registro.fields.Email !== "string" || registro.fields.Email.trim().toLowerCase() !== email ||
+      typeof registro.fields.PASSWORD_HASH !== "string" || !registro.fields.PASSWORD_HASH.startsWith("$argon2id$") ||
+      !Array.isArray(registro.fields.EMPRESA) || registro.fields.EMPRESA.length !== 1 ||
+      typeof registro.fields.EMPRESA[0] !== "string" || !ID.test(registro.fields.EMPRESA[0])) return null;
+  return registro;
+}
+
+/** Cambia ÚNICAMENTE el hash; nunca toca empresa, rol, estado ni permisos. */
+export async function actualizarPasswordUsuario(id: string, passwordHash: string): Promise<void> {
+  if (!ID.test(id) || !passwordHash.startsWith("$argon2id$")) throw new Error("Hash inválido");
+  const r = await airtableUsuarios("PATCH", `/${id}`, { fields: { PASSWORD_HASH: passwordHash }, typecast: false });
+  if (r.id !== id) throw new Error("Airtable no confirmó el cambio de contraseña");
+}
+
 export async function crearUsuarioInactivo(campos: Record<string, unknown>): Promise<string> {
   const r = await airtableUsuarios("POST", "", { fields: campos, typecast: false });
   if (typeof r.id !== "string" || !ID.test(r.id)) throw new Error("Airtable no confirmó el usuario");

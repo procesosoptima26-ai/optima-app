@@ -58,6 +58,7 @@ test("Seguridad de permisos OPTIMA", async (t) => {
       ) as string[];
 
       assert.equal(comando[0], "GET");
+      if (comando[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
 
       return Response.json({
         result: estado.sesionActiva

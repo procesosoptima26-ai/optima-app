@@ -1292,6 +1292,10 @@ function App() {
             >
               {loginCargando ? "Ingresando..." : "Ingresar"}
             </button>
+            <a href="/recuperar.html" style={{ display: "block", textAlign: "center", marginTop: 12,
+              color: "#075a9f", textDecoration: "underline", fontSize: 14 }}>
+              ¿Olvidaste tu contraseña?
+            </a>
           </form>
         </div>
       </section>

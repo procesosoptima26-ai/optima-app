@@ -99,6 +99,8 @@ test("Acceso por sucursal y por IDs", async (t) => {
     }
 
     if (url === variables.UPSTASH_REDIS_KV_REST_API_URL) {
+      const comando = JSON.parse(String(opciones?.body)) as string[];
+      if (comando[1]?.startsWith("optima:version-sesion:")) return Response.json({ result: null });
       return Response.json({ result: JSON.stringify({ usuarioId: "rec11111111111111" }) });
     }
     if (url.includes("appUsuariosPrueba/STOCK_PRUEBA/")) {

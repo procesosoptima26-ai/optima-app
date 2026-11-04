@@ -134,6 +134,56 @@ async function obtenerEmpresa(
   };
 }
 
+
+/**
+ * Compatibilidad con la Base Maestra actual: la columna antigua SUCURSAL fue
+ * reemplazada por links a SUCURSALES. No aceptar nombres enviados por el cliente.
+ * Fail closed cuando la sucursal no pertenece a la empresa o está inactiva.
+ */
+async function obtenerSucursalPredeterminada(
+  camposUsuario: Record<string, unknown>,
+  empresaId: string,
+  baseId: string,
+  token: string
+): Promise<string | null> {
+  const vinculadas = camposUsuario.SUCURSALES_AUTORIZADAS;
+  const predeterminadas = camposUsuario.SUCURSAL_PREDETERMINADA;
+  const idValido = /^rec[A-Za-z0-9]{14}$/;
+
+  if (
+    !Array.isArray(vinculadas) ||
+    !Array.isArray(predeterminadas) ||
+    predeterminadas.length !== 1 ||
+    !predeterminadas.every((id) => typeof id === "string" && idValido.test(id)) ||
+    !vinculadas.every((id) => typeof id === "string" && idValido.test(id)) ||
+    !vinculadas.includes(predeterminadas[0])
+  ) {
+    return null;
+  }
+
+  const idSucursal = predeterminadas[0] as string;
+  const tablaSucursales = getEnv("AIRTABLE_SUCURSALES_TABLE_ID");
+  const url = new URL(
+    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tablaSucursales)}/${idSucursal}`
+  );
+  const registro = await consultarAirtable<AirtableRecord>(url, token);
+
+  const empresasVinculadas = registro.fields?.EMPRESA;
+  const nombre = normalizarTexto(registro.fields?.NOMBRE).toUpperCase();
+  if (
+    registro.id !== idSucursal ||
+    registro.fields?.ACTIVA !== true ||
+    !Array.isArray(empresasVinculadas) ||
+    empresasVinculadas.length !== 1 ||
+    empresasVinculadas[0] !== empresaId ||
+    !nombre
+  ) {
+    return null;
+  }
+
+  return nombre;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -226,23 +276,25 @@ export default async function handler(
       });
     }
 
-    const sucursal = normalizarTexto(
-      registro.fields.SUCURSAL
-    ).toUpperCase();
-
-    if (!sucursal) {
-      return res.status(403).json({
-        ok: false,
-        error: "El usuario no tiene sucursal asignada",
-      });
-    }
-
     const { empresa, empresaId } = await obtenerEmpresa(
       registro.fields.EMPRESA,
       baseId,
       tablaEmpresas,
       token
     );
+
+    const sucursal = await obtenerSucursalPredeterminada(
+      registro.fields,
+      empresaId,
+      baseId,
+      token
+    );
+    if (!sucursal) {
+      return res.status(403).json({
+        ok: false,
+        error: "El usuario no tiene una sucursal activa y autorizada",
+      });
+    }
 
     return res.status(200).json({
       ok: true,

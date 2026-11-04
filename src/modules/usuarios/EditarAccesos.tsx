@@ -146,6 +146,11 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
             </div>;
           })}
         </fieldset>
+        {permisosFueraDeModulo.length > 0 && <button type="button" disabled={guardando}
+          onClick={() => setPermisos(actual => actual.filter(p =>
+            !opciones.permisos.some(op => op.id === p && !modulos.includes(moduloPorCampo[op.campo]))))}>
+          Quitar permisos de módulos deshabilitados ({permisosFueraDeModulo.length})
+        </button>}
         {errorCliente && <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>{errorCliente}</p>}
         {error && <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>{error}</p>}
         {mensaje && <p role="status" style={{ color: "#166534", margin: 0 }}>{mensaje}</p>}

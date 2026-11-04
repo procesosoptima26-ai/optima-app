@@ -4,6 +4,7 @@ import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import Administracion from "./modules/administracion/Administracion";
 import InvitarUsuarios from "./modules/usuarios/InvitarUsuarios";
+import ListadoUsuarios from "./modules/usuarios/ListadoUsuarios";
 import { permiteAccionUI, permiteModoMovimientoUI } from "./config/permisos-vista";
 import logoOptima from "./assets/logo-optima.png";
 import optimaHomeImage from "./assets/optima-home.png";
@@ -1351,7 +1352,10 @@ function App() {
         </div>
 
         {usuarioSesion.rol === "ADMIN" && usuarioSesion.permisos?.includes("usuarios.gestionar") && (
-          <InvitarUsuarios />
+          <>
+            <ListadoUsuarios />
+            <InvitarUsuarios />
+          </>
         )}
 
         <button className="secondary-button logout-button" type="button" onClick={cerrarSesion}>

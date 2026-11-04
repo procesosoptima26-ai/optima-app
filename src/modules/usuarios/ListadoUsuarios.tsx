@@ -64,22 +64,22 @@ export default function ListadoUsuarios() {
         <p>No hay usuarios que coincidan con la búsqueda.</p>
       ) : (
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: 700 }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: 700, fontSize: 13, lineHeight: 1.4 }}>
             <thead><tr>
               {['Usuario', 'Nombre', 'Correo', 'Rol', 'Estado', 'Sucursales', 'Módulos'].map((h) =>
-                <th key={h} scope="col" style={{ borderBottom: "2px solid #cbd5e1", padding: 9 }}>{h}</th>)}
+                <th key={h} scope="col" style={{ borderBottom: "2px solid #cbd5e1", padding: "6px 8px" }}>{h}</th>)}
             </tr></thead>
             <tbody>{visibles.map((u) => <tr key={u.id}>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.usuario || "—"}</td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.nombre || "—"}</td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.email || "—"}</td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.rol}</td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.activo ? "Activo" : "Inactivo"}</td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.usuario || "—"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.nombre || "—"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.email || "—"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.rol}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.activo ? "Activo" : "Inactivo"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>
                 {u.sucursales.join(", ") || "—"}
                 {u.sucursalesNoVisibles > 0 ? ` (+${u.sucursalesNoVisibles} fuera de tu alcance)` : ""}
               </td>
-              <td style={{ padding: 9, borderBottom: "1px solid #e2e8f0" }}>{u.modulos.join(", ") || "—"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.modulos.join(", ") || "—"}</td>
             </tr>)}</tbody>
           </table>
         </div>

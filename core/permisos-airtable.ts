@@ -38,6 +38,9 @@ export const CAMPOS_PERMISOS = {
     VER: "ajustes.ver",
     CONFIGURAR: "ajustes.configurar",
   },
+  PERMISOS_SUCURSALES: {
+    GESTIONAR_SUCURSALES: "sucursales.gestionar",
+  },
   PERMISOS_USUARIOS: {
     VER: "usuarios.ver",
     GESTIONAR_USUARIOS: "usuarios.gestionar",

@@ -1,6 +1,8 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { autenticarAdministrador } from "../lib/usuarios-maestros.js";
+import { autenticarAdministrador } from "../../lib/usuarios-maestros.js";
+import { prepararAltaSucursal } from "../../core/gestion-sucursales.js";
+import { bloquearAltaSucursal, liberarAltaSucursal } from "../../lib/bloqueo-sucursales.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 
@@ -48,7 +50,7 @@ export default async function handler(
 ) {
   res.setHeader("Cache-Control", "no-store");
 
-  if (req.method !== "GET") {
+  if (req.method !== "GET" && req.method !== "POST") {
     return res.status(405).json({
       ok: false,
       error: "Método no permitido",
@@ -57,8 +59,14 @@ export default async function handler(
 
   // Autorización existente: ADMIN con usuarios.gestionar.
   // Esta ruta es únicamente de lectura.
-  const admin = await autenticarAdministrador(req, res);
+  const admin = await autenticarAdministrador(
+    req, res,
+    req.method === "POST" ? "sucursales.gestionar" : "usuarios.gestionar"
+  );
   if (!admin) return;
+
+  const empresaId = admin.contexto.empresa.id;
+  let propietario: string | null = null;
 
   try {
     const base = process.env.AIRTABLE_USERS_BASE_ID;
@@ -70,7 +78,22 @@ export default async function handler(
       throw new Error("Configuración incompleta");
     }
 
-    const empresaId = admin.contexto.empresa.id;
+    if (req.method === "POST") {
+      if (req.body?.accion !== "crear") {
+        return res.status(400).json({
+          ok: false, error: "Operación no admitida"
+        });
+      }
+
+      propietario = await bloquearAltaSucursal(empresaId);
+
+      if (!propietario) {
+        return res.status(409).json({
+          ok: false,
+          error: "Otra creación de sucursal está en proceso"
+        });
+      }
+    }
 
     // La empresa se obtiene de la sesión, nunca del navegador.
     const empresa = await leerRegistro(
@@ -122,6 +145,60 @@ export default async function handler(
       a.nombre.localeCompare(b.nombre, "es")
     );
 
+
+    if (req.method === "POST") {
+      const alta = prepararAltaSucursal(
+        req.body?.nombre, empresaId, sucursales
+      );
+
+      if (!alta.ok) {
+        return res.status(400).json({
+          ok: false, error: alta.error
+        });
+      }
+
+      const respuesta = await fetch(
+        `https://api.airtable.com/v0/${base}/${tablaSucursales}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fields: alta.campos,
+            typecast: false,
+          }),
+        }
+      );
+
+      if (!respuesta.ok) {
+        throw new Error("Airtable rechazó el alta");
+      }
+
+      const creada = await respuesta.json() as Registro;
+
+      if (
+        !ID.test(creada.id) ||
+        !creada.fields ||
+        !Array.isArray(creada.fields.EMPRESA) ||
+        creada.fields.EMPRESA.length !== 1 ||
+        creada.fields.EMPRESA[0] !== empresaId ||
+        creada.fields.ACTIVA !== true
+      ) {
+        throw new Error("No se pudo confirmar el alta");
+      }
+
+      return res.status(201).json({
+        ok: true,
+        sucursal: {
+          id: creada.id,
+          nombre: creada.fields.NOMBRE,
+          activa: true,
+        },
+      });
+    }
+
     return res.status(200).json({
       ok: true,
       sucursales,
@@ -133,5 +210,13 @@ export default async function handler(
       ok: false,
       error: "No se pudieron consultar las sucursales",
     });
+  } finally {
+    if (propietario) {
+      try {
+        await liberarAltaSucursal(empresaId, propietario);
+      } catch (error) {
+        console.error("No se pudo liberar el bloqueo:", error);
+      }
+    }
   }
 }

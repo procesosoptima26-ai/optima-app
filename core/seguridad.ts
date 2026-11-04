@@ -49,6 +49,7 @@ export const PERMISOS = [
   "ajustes.configurar",
   "usuarios.ver",
   "usuarios.gestionar",
+  "sucursales.gestionar",
 ] as const;
 
 export type Permiso = (typeof PERMISOS)[number];
@@ -77,6 +78,7 @@ export const MODULO_DEL_PERMISO: Readonly<Record<Permiso, Modulo>> = {
   "ajustes.configurar": "CONFIGURACION",
   "usuarios.ver": "CORE",
   "usuarios.gestionar": "CORE",
+  "sucursales.gestionar": "CORE",
 };
 
 // Compatibilidad EXACTA con los permisos de UI existentes.

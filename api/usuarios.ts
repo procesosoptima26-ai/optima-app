@@ -1,3 +1,5 @@
+import empresa from "../handlers/core/empresa.js";
+import sucursales from "../handlers/core/sucursales.js";
 /** Router OPTIMA: agrupa endpoints sin alterar las autorizaciones internas. */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import opciones from "../handlers/usuarios/opciones.js";
@@ -9,7 +11,7 @@ import activar from "../handlers/usuarios/activar.js";
 import solicitar_recuperacion from "../handlers/usuarios/solicitar-recuperacion.js";
 import restablecer from "../handlers/usuarios/restablecer.js";
 
-const handlers = { opciones, listar, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
+const handlers = { empresa, sucursales, opciones, listar, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
   "solicitar-recuperacion": solicitar_recuperacion, restablecer };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

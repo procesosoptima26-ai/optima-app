@@ -20,6 +20,14 @@
     {
       "source": "/api/usuarios/:accion",
       "destination": "/api/usuarios"
+    },
+    {
+      "source": "/api/empresa",
+      "destination": "/api/usuarios?accion=empresa"
+    },
+    {
+      "source": "/api/sucursales",
+      "destination": "/api/usuarios?accion=sucursales"
     }
   ]
 }

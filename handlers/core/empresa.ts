@@ -1,6 +1,6 @@
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { autenticarAdministrador } from "../lib/usuarios-maestros.js";
+import { autenticarAdministrador } from "../../lib/usuarios-maestros.js";
 
 /**
  * Paso 11A — Configuración empresarial.

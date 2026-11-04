@@ -117,7 +117,7 @@ test("Paso 10B: API sin sesión, ajenos, conflicto de versión y PATCH limitado"
         assert.deepEqual(Object.keys(p.fields).sort(),[
           "SUCURSALES_AUTORIZADAS","SUCURSAL_PREDETERMINADA","MODULOS","PERMISOS_INVENTARIO",
           "PERMISOS_MOVIMIENTOS","PERMISOS_ADMINISTRACION","PERMISOS_FACTURACION",
-          "PERMISOS_REPORTES","PERMISOS_AJUSTES","PERMISOS_USUARIOS",
+          "PERMISOS_REPORTES","PERMISOS_AJUSTES","PERMISOS_USUARIOS","PERMISOS_SUCURSALES",
         ].sort());
         const curr=store.get("usuario") as {id:string;fields:Record<string,unknown>};
         const res={...curr,fields:{...curr.fields,...p.fields}};

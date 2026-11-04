@@ -2,7 +2,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion } from "./session.js";
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
-import { puedeRealizarAccion, type ContextoCore } from "../core/seguridad.js";
+import { puedeRealizarAccion, type ContextoCore, type Permiso } from "../core/seguridad.js";
 import { opcionesParaAlta, type OpcionesAlta } from "../core/alta-usuarios.js";
 
 export type RegistroAirtable = { id: string; fields: Record<string, unknown> };
@@ -90,7 +90,7 @@ export async function retirarUsuarioPendiente(id: string, empresaId: string, ema
   return eliminado.id === id && eliminado.deleted === true;
 }
 
-export async function autenticarAdministrador(req: VercelRequest, res: VercelResponse): Promise<{
+export async function autenticarAdministrador(req: VercelRequest, res: VercelResponse, permiso: Permiso = "usuarios.gestionar"): Promise<{
   contexto: ContextoCore; opciones: OpcionesAlta;
 } | null> {
   res.setHeader("Cache-Control", "no-store");
@@ -101,8 +101,8 @@ export async function autenticarAdministrador(req: VercelRequest, res: VercelRes
     if (!sesion) { res.status(401).json({ ok: false, error: "Sesión vencida" }); return null; }
     const acceso = await leerAccesoCoreDesdeAirtable(sesion.usuarioId);
     if (!acceso.ok || acceso.datosVista.rol !== "ADMIN" ||
-        !puedeRealizarAccion(acceso.contexto, "usuarios.gestionar", { empresaId: acceso.contexto.empresa.id })) {
-      res.status(403).json({ ok: false, error: "No tenés permiso para invitar empleados" });
+        !puedeRealizarAccion(acceso.contexto, permiso, { empresaId: acceso.contexto.empresa.id })) {
+      res.status(403).json({ ok: false, error: "No tenés permiso para esta operación" });
       return null;
     }
     const raw = await leerUsuario(sesion.usuarioId);

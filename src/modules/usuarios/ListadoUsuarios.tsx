@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import EditarAccesos from "./EditarAccesos";
 
 type Usuario = {
   id: string;
@@ -15,6 +16,7 @@ type Usuario = {
 export default function ListadoUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [consulta, setConsulta] = useState("");
+  const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -66,7 +68,7 @@ export default function ListadoUsuarios() {
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: 700, fontSize: 13, lineHeight: 1.4 }}>
             <thead><tr>
-              {['Usuario', 'Nombre', 'Correo', 'Rol', 'Estado', 'Sucursales', 'Módulos'].map((h) =>
+              {['Usuario', 'Nombre', 'Correo', 'Rol', 'Estado', 'Sucursales', 'Módulos', 'Accesos'].map((h) =>
                 <th key={h} scope="col" style={{ borderBottom: "2px solid #cbd5e1", padding: "6px 8px" }}>{h}</th>)}
             </tr></thead>
             <tbody>{visibles.map((u) => <tr key={u.id}>
@@ -80,10 +82,16 @@ export default function ListadoUsuarios() {
                 {u.sucursalesNoVisibles > 0 ? ` (+${u.sucursalesNoVisibles} fuera de tu alcance)` : ""}
               </td>
               <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>{u.modulos.join(", ") || "—"}</td>
+              <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>
+                {u.rol === "USUARIO" && <button type="button" onClick={() => setEmpleadoSeleccionado(u.id)}
+                  style={{ fontSize: 12, padding: "5px 8px" }}>Editar accesos</button>}
+              </td>
             </tr>)}</tbody>
           </table>
         </div>
       ))}
+      {empleadoSeleccionado && <EditarAccesos key={empleadoSeleccionado} id={empleadoSeleccionado}
+        onCerrar={() => setEmpleadoSeleccionado(null)} onGuardado={() => setVersion((n) => n + 1)} />}
     </section>
   );
 }

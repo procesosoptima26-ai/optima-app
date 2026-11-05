@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion } from "../../lib/session.js";
 import { leerAccesoPlataforma } from "../../core/acceso-plataforma.js";
 import { normalizarNombreModulo } from "../../core/alta-usuarios.js";
+import { leerEstadoModulos } from "../../core/gestion-modulos.js";
 import type { Modulo } from "../../core/seguridad.js";
 
 type Registro = { id: string; fields: Record<string, unknown> };
@@ -25,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!base || !tabla || !token) throw new Error("Base Maestra no configurada");
 
     const empresas: Array<{ id: string; nombre: string; clave: string; activa: boolean;
-      modulosHabilitados: Modulo[]; requiereRevision: boolean }> = [];
+      modulosHabilitados: Modulo[]; requiereRevision: boolean; version: string | null; esPlataforma: boolean }> = [];
     let offset: string | undefined;
     let paginas = 0;
     do {
@@ -56,15 +57,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           if (!modulo) { requiereRevision = true; continue; }
           if (modulo !== "CORE" && !modulos.includes(modulo)) modulos.push(modulo);
         }
+        const estado = leerEstadoModulos(registro.id, campos.ACTIVA === true, campos.MODULOS_CONTRATADOS);
         empresas.push({ id: registro.id, nombre, clave, activa: campos.ACTIVA === true,
-          modulosHabilitados: requiereRevision ? [] : modulos, requiereRevision });
+          modulosHabilitados: requiereRevision ? [] : modulos, requiereRevision: requiereRevision || !estado.ok,
+          version: estado.ok ? estado.estado.version : null, esPlataforma: registro.id === admin.empresaId });
       }
       if (respuesta.offset !== undefined && (typeof respuesta.offset !== "string" || !respuesta.offset))
         throw new Error("Paginación de empresas inválida");
       offset = respuesta.offset as string | undefined;
     } while (offset);
     empresas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-    return res.status(200).json({ ok: true, soloConsulta: true, empresas });
+    const gestionHabilitada = process.env.OPTIMA_MODULES_CHANGES_ENABLED === "true";
+    return res.status(200).json({ ok: true, soloConsulta: !gestionHabilitada, gestionHabilitada, empresas });
   } catch (error) {
     console.error("11C.2: error en consulta de plataforma:", error);
     return res.status(503).json({ ok: false, error: "No se pudo verificar la administración OPTIMA" });

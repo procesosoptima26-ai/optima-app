@@ -3,6 +3,7 @@ import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import GestionSucursales from "./modules/usuarios/GestionSucursales";
+import ConsultaEmpresa from "./modules/usuarios/ConsultaEmpresa";
 import Administracion from "./modules/administracion/Administracion";
 import InvitarUsuarios from "./modules/usuarios/InvitarUsuarios";
 import ListadoUsuarios from "./modules/usuarios/ListadoUsuarios";
@@ -1352,6 +1353,10 @@ function App() {
             ))}
           </div>
         </div>
+
+        {usuarioSesion.rol === "ADMIN" && usuarioSesion.permisos?.includes("usuarios.gestionar") && (
+          <ConsultaEmpresa nombreEmpresa={usuarioSesion.empresa} />
+        )}
 
         {usuarioSesion.rol === "ADMIN" && usuarioSesion.permisos?.includes("usuarios.gestionar") && (
           <>

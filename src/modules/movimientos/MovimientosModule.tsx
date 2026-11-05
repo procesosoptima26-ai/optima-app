@@ -10,6 +10,7 @@ type UsuarioSesion = {
   empresa: string;
   rol: string;
   sucursal: string;
+  sucursalId?: string;
   modulos: string[];
   permisos?: string[];
 };
@@ -793,7 +794,7 @@ const [, setCantidadesPorLote] = useState<
 
       const response = await fetch(
         `/api/ubicaciones?sucursal=${encodeURIComponent(
-          usuario.sucursal
+          usuario.sucursalId || usuario.sucursal
         )}`
       );
 
@@ -825,7 +826,7 @@ const [, setCantidadesPorLote] = useState<
 
       const response = await fetch(
         `/api/movimientos?sucursal=${encodeURIComponent(
-          usuario.sucursal
+          usuario.sucursalId || usuario.sucursal
         )}&limite=15`
       );
 
@@ -852,7 +853,7 @@ const [, setCantidadesPorLote] = useState<
 
       const response = await fetch(
         `/api/stock-lotes?vista=general&sucursal=${encodeURIComponent(
-          usuario.sucursal
+          usuario.sucursalId || usuario.sucursal
         )}`
       );
 
@@ -2026,7 +2027,7 @@ const [, setCantidadesPorLote] = useState<
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          sucursal: usuario.sucursal,
+          sucursal: usuario.sucursalId || usuario.sucursal,
           movimientos: movimientosAGuardar.map((movimiento) => ({
             productoId: movimiento.productoId,
             tipoMovimiento: movimiento.tipoMovimiento,

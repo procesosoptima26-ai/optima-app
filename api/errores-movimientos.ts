@@ -171,6 +171,8 @@ export default async function handler(
           limpiarTexto(payload.ubicacionId), autorizado.contexto, sucursalCore.id)) {
       return res.status(403).json({ ok: false, error: "Producto o ubicación no autorizado" });
     }
+    // El registro de alerta guarda una etiqueta visible; la autorización usó el ID.
+    payload.sucursal = sucursalCore.nombre;
     const id = await registrarError(payload);
 
     res.status(200).json({

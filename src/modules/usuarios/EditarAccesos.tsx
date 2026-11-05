@@ -18,6 +18,7 @@ const moduloPorCampo: Record<string, string> = {
   PERMISOS_REPORTES: "REPORTES",
   PERMISOS_AJUSTES: "CONFIGURACION",
   PERMISOS_USUARIOS: "CORE",
+  PERMISOS_SUCURSALES: "CORE",
 };
 
 export default function EditarAccesos({ id, onCerrar, onGuardado }: {

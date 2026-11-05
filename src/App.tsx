@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
+import GestionSucursales from "./modules/usuarios/GestionSucursales";
 import Administracion from "./modules/administracion/Administracion";
 import InvitarUsuarios from "./modules/usuarios/InvitarUsuarios";
 import ListadoUsuarios from "./modules/usuarios/ListadoUsuarios";
@@ -1074,6 +1075,7 @@ function App() {
 
     const payload = {
       ...movimiento,
+      sucursal: sucursalesDisponibles.find(s => s.nombre === sucursal)?.id || usuarioSesion?.sucursalId || "",
       productoNuevo: modoEdicion ? false : estadoProducto === "nuevo",
       registrosEliminados: modoEdicion ? registrosEliminadosEdicion : [],
       lotes: lotesNormalizados.map((lote) => ({
@@ -1356,6 +1358,10 @@ function App() {
             <ListadoUsuarios />
             <InvitarUsuarios />
           </>
+        )}
+
+        {usuarioSesion.rol === "ADMIN" && usuarioSesion.permisos?.includes("sucursales.gestionar") && (
+          <GestionSucursales />
         )}
 
         <button className="secondary-button logout-button" type="button" onClick={cerrarSesion}>
@@ -1825,7 +1831,7 @@ function App() {
       return (
         <MovimientosModule
           key={sucursal}
-          usuario={{ ...usuarioSesion, sucursal }}
+          usuario={{ ...usuarioSesion, sucursal, sucursalId: sucursalesDisponibles.find(s => s.nombre === sucursal)?.id || usuarioSesion.sucursalId }}
           modoInicial={movimientoSubvista}
         />
       );

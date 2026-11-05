@@ -50,7 +50,7 @@ test("11B: condiciones sintéticas válidas pasan solo evaluación preliminar", 
   assert.equal(evaluarCambioSucursal("desactivar", BASE).permitido, true);
 });
 
-test("11B: PATCH y DELETE aún no escriben sucursales", async () => {
+test("11B: PATCH y DELETE exigen sesión antes de consultar Airtable", async () => {
   const anterior = globalThis.fetch;
   let consultas = 0;
   globalThis.fetch = async () => { consultas++; throw new Error("No se debe llamar a servicios externos"); };
@@ -64,7 +64,7 @@ test("11B: PATCH y DELETE aún no escriben sucursales", async () => {
         json() { return this; },
       } as unknown as VercelResponse;
       await sucursales(req, res);
-      assert.equal(status, 405);
+      assert.equal(status, method === "PUT" ? 405 : 401);
     }
     assert.equal(consultas, 0);
   } finally {

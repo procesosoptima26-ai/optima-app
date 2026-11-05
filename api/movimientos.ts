@@ -91,7 +91,8 @@ function normalizarTexto(valor: unknown): string {
 }
 
 function normalizarSucursal(valor: unknown) {
-  return normalizarTexto(valor).toUpperCase();
+  const texto = normalizarTexto(valor);
+  return /^rec[A-Za-z0-9]{14}$/.test(texto) ? texto : texto.toUpperCase();
 }
 
 function normalizarOpcion(valor: unknown) {
@@ -227,7 +228,6 @@ async function validarProductoExiste(productoId: string, empresaId: string) {
 
 function validarMovimiento(
   movimiento: MovimientoPayload,
-  sucursal: string,
   sucursalCoreId: string,
   ubicaciones: Ubicacion[]
 ) {
@@ -277,15 +277,13 @@ function validarMovimiento(
   }
 
   if (ubicacionOrigen && (
-    ubicacionOrigen.sucursalCoreId !== sucursalCoreId ||
-    ubicacionOrigen.sucursal !== sucursal
+    ubicacionOrigen.sucursalCoreId !== sucursalCoreId
   )) {
     return "La ubicación de origen no pertenece a la sucursal del usuario.";
   }
 
   if (ubicacionDestino && (
-    ubicacionDestino.sucursalCoreId !== sucursalCoreId ||
-    ubicacionDestino.sucursal !== sucursal
+    ubicacionDestino.sucursalCoreId !== sucursalCoreId
   )) {
     return "La ubicación de destino no pertenece a la sucursal del usuario.";
   }
@@ -650,7 +648,6 @@ export default async function handler(
 
         const errorValidacion = validarMovimiento(
           movimiento,
-          sucursal,
           sucursalCore.id,
           ubicaciones
         );

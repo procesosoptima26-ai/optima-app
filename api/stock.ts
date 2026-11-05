@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
-import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
+import { configTablaOperativa, productoDeEmpresa, sucursalSolicitada, sucursalRealDeUbicacion } from "../lib/alcance-operativo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -469,6 +469,38 @@ async function registrosStockPertenecenASucursal(
   return true;
 }
 
+/** Valor heredado de SUCURSAL, resuelto exclusivamente desde UBICACIÓN por ID.
+ * No confiar en un nombre suministrado por el navegador tras un renombrado.
+ */
+async function nombreSucursalInventarioLegacy(sucursalId: string): Promise<string | null> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tabla = getEnv("AIRTABLE_UBICACIONES_TABLE_NAME");
+  const opciones = new Set<string>();
+  let offset: string | undefined;
+  let paginas = 0;
+  do {
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tabla)}`);
+    url.searchParams.set("pageSize", "100");
+    if (offset) url.searchParams.set("offset", offset);
+    const respuesta = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    if (!respuesta.ok) throw new Error("No se pudo resolver la sucursal heredada");
+    const datos = await respuesta.json() as { records?: AirtableRecord[]; offset?: string };
+    if (!Array.isArray(datos.records)) throw new Error("Respuesta de ubicaciones inválida");
+    for (const r of datos.records) {
+      const campos = r.fields || {};
+      if (sucursalRealDeUbicacion(campos) === sucursalId) {
+        const etiqueta = campos.SUCURSAL;
+        if (typeof etiqueta !== "string" || !etiqueta.trim()) return null;
+        opciones.add(etiqueta.trim());
+      }
+    }
+    offset = datos.offset;
+    paginas++;
+    if (paginas > 100) throw new Error("Demasiadas páginas de ubicaciones");
+  } while (offset);
+  return opciones.size === 1 ? [...opciones][0] : null;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -501,6 +533,14 @@ export default async function handler(
     });
     if (!usuarioAutorizado) return;
 
+    const sucursalCore = sucursalSolicitada(usuarioAutorizado.contexto, payload.sucursal);
+    if (!sucursalCore) return res.status(403).json({ error: "Sucursal no autorizada" });
+    const etiquetaLegacy = await nombreSucursalInventarioLegacy(sucursalCore.id);
+    if (!etiquetaLegacy) return res.status(409).json({
+      error: "No hay una correspondencia única con el inventario heredado de esta sucursal",
+    });
+    const payloadInterno = { ...payload, sucursal: etiquetaLegacy };
+
     const propiedadProducto = await verificarCodigoProducto(payload.codigo, usuarioAutorizado.empresaId);
     // Códigos ajenos, no asignados o duplicados nunca autorizan la escritura.
     if ((!payload.productoNuevo && propiedadProducto !== "propio") ||
@@ -511,7 +551,7 @@ export default async function handler(
       return res.status(400).json({ error: "No se puede editar stock de un producto no creado" });
     }
     if (req.method === "PATCH") {
-      const permitido = await registrosStockPertenecenASucursal(payload);
+      const permitido = await registrosStockPertenecenASucursal(payloadInterno);
       if (!permitido) {
         return res.status(403).json({
           error: "Hay lotes que no pertenecen a tu sucursal o no existen",
@@ -520,9 +560,9 @@ export default async function handler(
     }
 
     if (req.method === "POST") {
-      await crearProductoSiEsNuevo(payload, usuarioAutorizado.empresaId);
+      await crearProductoSiEsNuevo(payloadInterno, usuarioAutorizado.empresaId);
 
-      const recordsCreados = await guardarStock(payload);
+      const recordsCreados = await guardarStock(payloadInterno);
 
       return res.status(200).json({
         ok: true,
@@ -535,7 +575,7 @@ export default async function handler(
       });
     }
 
-    const resultadoActualizacion = await actualizarCargaStock(payload);
+    const resultadoActualizacion = await actualizarCargaStock(payloadInterno);
 
     return res.status(200).json({
       ok: true,

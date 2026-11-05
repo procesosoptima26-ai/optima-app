@@ -728,11 +728,10 @@ async function responderStockGeneral(
   contexto: ContextoCore,
   sucursalId: string,
 ) {
-  const sucursalConsultada = String(
-    req.query.sucursal || ""
-  )
-    .trim()
-    .toUpperCase();
+  const sucursalConsultada = String(req.query.sucursal || "").trim();
+  const sucursalNombre = contexto.sucursalesAutorizadas.find(s => s.id === sucursalId && s.activa)?.nombre;
+  if (!sucursalConsultada) return res.status(400).json({ ok: false, error: "Falta la sucursal" });
+  if (!sucursalNombre) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
 
   const [
     registrosStock,
@@ -781,19 +780,6 @@ async function responderStockGeneral(
             return null;
           }
 
-          const sucursalUbicacion =
-            ubicacion.sucursal
-              .trim()
-              .toUpperCase();
-
-          if (
-            sucursalConsultada &&
-            sucursalUbicacion !==
-              sucursalConsultada
-          ) {
-            return null;
-          }
-
           return {
             id: record.id,
             productoId,
@@ -821,8 +807,7 @@ async function responderStockGeneral(
               producto?.presentacion || "",
             especificacion:
               producto?.especificacion || "",
-            sucursal:
-              ubicacion.sucursal,
+            sucursal: sucursalNombre,
             tipoUbicacion:
               ubicacion.tipoUbicacion,
           };
@@ -847,8 +832,7 @@ async function responderStockGeneral(
 
   return res.status(200).json({
     ok: true,
-    sucursal:
-      sucursalConsultada || null,
+    sucursal: sucursalNombre,
     cantidadTotal:
       Math.round(
         cantidadTotal * 1000
@@ -883,9 +867,7 @@ export default async function handler(
      * /api/stock-lotes?vista=general&sucursal=BELLA VISTA
      */
     if (vista === "general") {
-      const sucursalSolicitadaNombre = String(req.query.sucursal || "")
-        .trim()
-        .toUpperCase();
+      const sucursalSolicitadaNombre = String(req.query.sucursal || "").trim();
 
       if (!sucursalSolicitadaNombre) {
         return res.status(400).json({

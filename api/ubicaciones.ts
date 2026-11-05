@@ -134,7 +134,7 @@ export default async function handler(
       });
     }
 
-    const sucursalSolicitadaNombre = normalizarSucursal(req.query.sucursal);
+    const sucursalSolicitadaNombre = normalizarTexto(req.query.sucursal);
 
     if (!sucursalSolicitadaNombre) {
       return res.status(400).json({
@@ -159,8 +159,7 @@ export default async function handler(
       .map((record) => {
         const sucursal = normalizarSucursal(record.fields.SUCURSAL);
         const idSucursalCore = sucursalRealDeUbicacion(record.fields);
-        if (idSucursalCore !== sucursalCore.id ||
-            sucursal !== normalizarSucursal(sucursalCore.nombre)) return null;
+        if (idSucursalCore !== sucursalCore.id) return null;
 
         const tipoUbicacion = normalizarTexto(
           record.fields["TIPO_UBICACIÓN"]
@@ -178,14 +177,13 @@ export default async function handler(
         return {
           id: record.id,
           nombre,
-          sucursal,
+          sucursal: normalizarSucursal(sucursalCore.nombre),
           tipoUbicacion,
           activa,
         };
       })
       .filter((ubicacion): ubicacion is NonNullable<typeof ubicacion> =>
         ubicacion !== null && ubicacion.activa &&
-        ubicacion.sucursal === sucursalSolicitadaNombre &&
         Boolean(ubicacion.tipoUbicacion)
       )
       .sort((primera, segunda) =>
@@ -197,7 +195,7 @@ export default async function handler(
 
     return res.status(200).json({
       ok: true,
-      sucursal: sucursalSolicitadaNombre,
+      sucursal: sucursalCore.nombre,
       ubicaciones,
     });
   } catch (error) {

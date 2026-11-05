@@ -90,7 +90,7 @@ export async function retirarUsuarioPendiente(id: string, empresaId: string, ema
   return eliminado.id === id && eliminado.deleted === true;
 }
 
-export async function autenticarAdministrador(req: VercelRequest, res: VercelResponse, permiso: Permiso = "usuarios.gestionar"): Promise<{
+export async function autenticarAdministrador(req: VercelRequest, res: VercelResponse, permiso: Permiso | readonly Permiso[] = "usuarios.gestionar"): Promise<{
   contexto: ContextoCore; opciones: OpcionesAlta;
 } | null> {
   res.setHeader("Cache-Control", "no-store");
@@ -100,8 +100,9 @@ export async function autenticarAdministrador(req: VercelRequest, res: VercelRes
     const sesion = await buscarSesion(token);
     if (!sesion) { res.status(401).json({ ok: false, error: "Sesión vencida" }); return null; }
     const acceso = await leerAccesoCoreDesdeAirtable(sesion.usuarioId);
+    const permisosNecesarios: readonly Permiso[] = typeof permiso === "string" ? [permiso] : permiso;
     if (!acceso.ok || acceso.datosVista.rol !== "ADMIN" ||
-        !puedeRealizarAccion(acceso.contexto, permiso, { empresaId: acceso.contexto.empresa.id })) {
+        !permisosNecesarios.some(p => puedeRealizarAccion(acceso.contexto, p, { empresaId: acceso.contexto.empresa.id }))) {
       res.status(403).json({ ok: false, error: "No tenés permiso para esta operación" });
       return null;
     }

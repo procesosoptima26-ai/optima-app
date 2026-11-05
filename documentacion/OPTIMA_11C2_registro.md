@@ -1,0 +1,12 @@
+# OPTIMA — Paso 11C.2 — Identidad global de plataforma
+
+- **Base:** commit `689b8ce3461ccfee23fbe9ee246d861d7c3b978f` de `aprender-sesiones-optima` (11C.1 en Preview READY).
+- **Alcance:** separar una cuenta administrativa global de cualquier administrador cliente, permitir login/sesión sin sucursales para esa cuenta y exponer un catálogo **sólo lectura** de empresas en la UI.
+- **Autoridad:** `OPTIMA_PLATFORM_ADMIN_USER_ID` identifica UN único registro en `USUARIOS`; `OPTIMA_PLATFORM_COMPANY_ID` indica el registro canónico de `EMPRESAS` de la plataforma. Ambos IDs deben provenir de la Base Maestra. No se autoriza por nombre visible, email ni ROL únicamente.
+- **Requisitos verificables en cada petición:** usuario activo, `ROL=ADMIN`, vinculado únicamente a empresa plataforma por ID, empresa activa, sin sucursales asignadas ni predeterminada. El servidor lee los registros vigentes de Airtable.
+- **Segregación:** presenta al cliente web `rol=PLATAFORMA`, `sucursales=[]`, `modulos=[]`, `permisos=[]`. Nunca concede permisos operativos de empresas clientes. Los endpoints de administradores de empresas siguen exigiendo el contexto normal por sucursal y permisos explícitos.
+- **Deshabilitado por defecto:** si no está configurado `OPTIMA_PLATFORM_ADMIN_USER_ID`, no existe un acceso global. El código NO crea cuentas, NO añade campos ni rellena valores de Vercel. Antes de activarlo habrá que provisionar una cuenta exclusiva, completar ambas variables en el entorno elegido y probar Preview con autorización explícita.
+- **Ruta:** `GET /api/plataforma` -> función existente `api/usuarios.ts` mediante rewrite. No crea función nueva de Vercel. Solo devuelve identidad comercial mínima: nombre, clave, estado técnico y módulos informativos; no usuarios, stock ni datos operativos. `POST/PATCH/DELETE` devuelven 405.
+- **Airtable:** no se realiza ningún cambio. `MODULOS_CONTRATADOS` no acredita compra ni contrato; opciones anómalas se muestran como requeridas de revisión, sin atribuir habilitaciones.
+- **Pruebas:** ejecutar suite con mocks; cubrir exclusión de ADMIN cliente, vínculo incorrecto, usuario/empresa inactivos, sucursales asignadas, sesión y prohibición de escrituras. El script valida y hace rollback local si falla.
+- **Fases siguientes:** 11C.3 administración de módulos, operaciones autorizadas y su auditoría; 11C.4 pruebas integradas. P0 STOCK_INVENTARIO sigue separado.

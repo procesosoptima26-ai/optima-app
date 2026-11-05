@@ -7,6 +7,7 @@ import {
   borrarCookieSesion,
 } from "../lib/session.js";
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
+import { leerAccesoPlataforma, presentarUsuarioPlataforma } from "../core/acceso-plataforma.js";
 import { presentarUsuarioCore } from "../core/usuario-publico.js";
 
 dotenv.config({ path: ".env.local" });
@@ -25,6 +26,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!sesion) {
       borrarCookieSesion(res);
       return res.status(401).json({ ok: false, error: "La sesión venció o fue cerrada" });
+    }
+    const plataforma = await leerAccesoPlataforma(sesion.usuarioId);
+    if (plataforma !== null) {
+      if (!plataforma) {
+        await eliminarSesion(token);
+        borrarCookieSesion(res);
+        return res.status(401).json({ ok: false, error: "La sesión de plataforma no está autorizada" });
+      }
+      return res.status(200).json({ ok: true, usuario: presentarUsuarioPlataforma(plataforma) });
     }
     const acceso = await leerAccesoCoreDesdeAirtable(sesion.usuarioId);
     if (!acceso.ok) {

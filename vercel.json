@@ -26,6 +26,10 @@
       "destination": "/api/usuarios?accion=empresa"
     },
     {
+      "source": "/api/plataforma",
+      "destination": "/api/usuarios?accion=plataforma"
+    },
+    {
       "source": "/api/sucursales",
       "destination": "/api/usuarios?accion=sucursales"
     }

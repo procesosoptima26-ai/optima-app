@@ -4,6 +4,7 @@ import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
 import GestionSucursales from "./modules/usuarios/GestionSucursales";
 import ConsultaEmpresa from "./modules/usuarios/ConsultaEmpresa";
+import ConsultaPlataforma from "./modules/usuarios/ConsultaPlataforma";
 import Administracion from "./modules/administracion/Administracion";
 import InvitarUsuarios from "./modules/usuarios/InvitarUsuarios";
 import ListadoUsuarios from "./modules/usuarios/ListadoUsuarios";
@@ -1308,6 +1309,19 @@ function App() {
 
   function renderUsuario() {
     if (!usuarioSesion) return renderLogin();
+    if (usuarioSesion.rol === "PLATAFORMA") {
+      return (
+        <section className="user-card">
+          <div className="user-card-header"><div><p className="user-kicker">OPTIMA</p>
+            <h2>{usuarioSesion.nombre}</h2></div>
+            <span className="user-role-badge">ADMINISTRACIÓN DE PLATAFORMA</span></div>
+          <ConsultaPlataforma />
+          <button className="secondary-button logout-button" type="button" onClick={cerrarSesion}>
+            Cerrar sesión
+          </button>
+        </section>
+      );
+    }
 
     return (
       <section className="user-card">

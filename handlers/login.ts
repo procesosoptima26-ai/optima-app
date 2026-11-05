@@ -7,6 +7,7 @@ import {
   establecerCookieSesion,
 } from "../lib/session.js";
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
+import { leerAccesoPlataforma, presentarUsuarioPlataforma } from "../core/acceso-plataforma.js";
 import { presentarUsuarioCore } from "../core/usuario-publico.js";
 
 dotenv.config({ path: ".env.local" });
@@ -57,6 +58,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     if (!(await argon2.verify(hash, password))) {
       return res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
+    }
+
+    // Identidad global por ID explícito y empresa de plataforma por ID (no por ROL solo).
+    // Un candidato inválido NO puede entrar por la ruta de un cliente.
+    const plataforma = await leerAccesoPlataforma(registro.id);
+    if (plataforma !== null) {
+      if (!plataforma) return res.status(403).json({ ok: false, error: "Cuenta de plataforma no autorizada" });
+      const token = generarTokenSesion();
+      await guardarSesion(token, { usuarioId: registro.id });
+      establecerCookieSesion(res, token);
+      return res.status(200).json({ ok: true, usuario: presentarUsuarioPlataforma(plataforma) });
     }
 
     // La Base Maestra decide: empresa activa, sucursales reales, módulos contratados.

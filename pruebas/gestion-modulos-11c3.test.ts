@@ -87,6 +87,10 @@ test("11C.3: autorización global, versión y confirmación bajo mocks", async (
       throw Error("Comando Redis no simulado");
     }
     assert.equal(url.hostname, "api.airtable.com");
+    if (url.pathname.endsWith(`/${AUDITORIA}`) && init?.method === "GET") {
+      assert.equal(url.searchParams.get("filterByFormula"), `{EMPRESA_ID}="${CLIENTE}"`);
+      return Response.json({ records: [] });
+    }
     if (url.pathname.endsWith(`/${AUDITORIA}`) && init?.method === "POST") {
       const solicitud = JSON.parse(String(init.body)) as { records: Array<{fields: Record<string, string>}> };
       const campos = solicitud.records[0].fields;

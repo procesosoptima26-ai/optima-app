@@ -5,6 +5,7 @@ import { leerAccesoPlataforma } from "../../core/acceso-plataforma.js";
 import { leerEstadoModulos, prepararCambioModulo } from "../../core/gestion-modulos.js";
 import { bloquearModulos, liberarModulos } from "../../lib/bloqueo-modulos.js";
 import { ejecutarCambioModulosAuditado, ErrorCambioAuditado } from "../../lib/cambio-modulos-auditado.js";
+import { consultarIncidenciasAuditoria, ErrorConsultaAuditoria } from "../../lib/conciliacion-modulos.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 type Registro = { id: string; fields: Record<string, unknown> };
@@ -65,6 +66,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const cfg = config();
     owner = await bloquearModulos(empresaId);
     if (!owner) return res.status(409).json({ ok: false, error: "Ya existe un cambio de módulos en proceso" });
+    // 12B.4.2: bloqueo preventivo bajo el mismo lock por empresa.
+    // Si el historial no es íntegro, está pendiente o no puede consultarse,
+    // jamás consultar/cambiar módulos ni crear un nuevo evento INTENTO.
+    const historial = await consultarIncidenciasAuditoria(empresaId);
+    if (historial.bloqueada)
+      return res.status(409).json({ ok: false,
+        error: "Hay operaciones de módulos pendientes o inconsistentes; deben conciliarse antes de modificar esta empresa",
+        incidenciasPendientes: historial.incidencias.length });
     const actual = await consultar(empresaId, cfg);
     if (actual.fields.ACTIVA !== true)
       return res.status(409).json({ ok: false, error: "La empresa está inactiva" });
@@ -114,6 +123,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       operacionId: resultado.operacionId,
       mensaje: "Habilitaciones técnicas actualizadas y auditadas" });
   } catch (error) {
+    if (error instanceof ErrorConsultaAuditoria) {
+      console.error("12B.4.2: lectura de auditoría no disponible", { codigo: error.codigo, empresaId });
+      return res.status(503).json({ ok: false,
+        error: "No se pudo verificar el historial de auditoría. No se modificaron módulos; revisá la conexión y el historial antes de reintentar" });
+    }
     if (error instanceof ErrorCambioAuditado) {
       console.error("12B.3: incidente auditado", { codigo: error.codigo, operacionId: error.operacionId });
       const mensajes = {

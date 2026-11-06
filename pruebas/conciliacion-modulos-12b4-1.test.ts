@@ -149,11 +149,11 @@ test("12B.4.1: paginación que repite cursor se rechaza", async (t) => {
   assert.equal(llamadas, 2);
 });
 
-test("12B.4.1: no modifica endpoints, flags ni rutas existentes", async () => {
+test("12B.4.1: la conexión 12B.4.2 mantiene solo lectura y ambos gates", async () => {
   const a = await readFile("handlers/core/gestion-modulos.ts", "utf8");
   assert.match(a, /OPTIMA_MODULES_CHANGES_ENABLED\s*!==\s*"true"/);
   assert.match(a, /OPTIMA_AUDIT_WRITES_ENABLED\s*!==\s*"true"/);
-  assert.doesNotMatch(a, /consultarIncidenciasAuditoria/);
+  assert.match(a, /consultarIncidenciasAuditoria/);
   const b = await readFile("lib/conciliacion-modulos.ts", "utf8");
   assert.match(b, /method:\s*"GET"/);
   assert.doesNotMatch(b, /method:\s*"(?:PATCH|POST|DELETE)"/);

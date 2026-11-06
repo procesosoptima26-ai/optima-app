@@ -67,7 +67,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       offset = respuesta.offset as string | undefined;
     } while (offset);
     empresas.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
-    const gestionHabilitada = process.env.OPTIMA_MODULES_CHANGES_ENABLED === "true";
+    const gestionHabilitada = process.env.OPTIMA_MODULES_CHANGES_ENABLED === "true" &&
+      process.env.OPTIMA_AUDIT_WRITES_ENABLED === "true" &&
+      /^tbl[A-Za-z0-9]{14}$/.test(process.env.AIRTABLE_AUDITORIA_TABLE_ID ?? "");
     return res.status(200).json({ ok: true, soloConsulta: !gestionHabilitada, gestionHabilitada, empresas });
   } catch (error) {
     console.error("11C.2: error en consulta de plataforma:", error);

@@ -112,7 +112,7 @@ export default function ConsultaPlataforma() {
           <button type="button" className="secondary-button" disabled={!listo}
             onClick={() => { void guardar(); }}>Confirmar cambio</button>
         </div>}
-      <small>Al reactivar un módulo vuelven a aplicarse los permisos de empleados que sigan asignados. La auditoría permanente se incorporará en el Paso 12.</small>
+      <small>Al reactivar un módulo vuelven a aplicarse los permisos de empleados que sigan asignados. Los cambios se registran con operación, actor, motivo y resultado. La gestión permanece deshabilitada hasta su activación controlada.</small>
     </>}
   </section>;
 }

@@ -4,6 +4,7 @@ import { buscarSesion, leerTokenSesion } from "../../lib/session.js";
 import { leerAccesoPlataforma } from "../../core/acceso-plataforma.js";
 import { leerEstadoModulos, prepararCambioModulo } from "../../core/gestion-modulos.js";
 import { bloquearModulos, liberarModulos } from "../../lib/bloqueo-modulos.js";
+import { ejecutarCambioModulosAuditado, ErrorCambioAuditado } from "../../lib/cambio-modulos-auditado.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 type Registro = { id: string; fields: Record<string, unknown> };
@@ -31,8 +32,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "PATCH") return res.status(405).json({ ok: false, error: "Método no permitido" });
   // Sin esta configuración no existen escrituras, incluso si el frontend fue manipulado.
-  if (process.env.OPTIMA_MODULES_CHANGES_ENABLED !== "true")
-    return res.status(503).json({ ok: false, error: "Gestión de módulos no habilitada" });
+  if (process.env.OPTIMA_MODULES_CHANGES_ENABLED !== "true" ||
+      process.env.OPTIMA_AUDIT_WRITES_ENABLED !== "true" ||
+      !/^tbl[A-Za-z0-9]{14}$/.test(process.env.AIRTABLE_AUDITORIA_TABLE_ID ?? ""))
+    return res.status(503).json({ ok: false, error: "Gestión de módulos no habilitada: requiere auditoría" });
   const tokenSesion = leerTokenSesion(req);
   if (!tokenSesion) return res.status(401).json({ ok: false, error: "Iniciá sesión" });
   let owner: string | null = null;
@@ -77,27 +80,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const comprobado = leerEstadoModulos(empresaId, relectura.fields.ACTIVA, relectura.fields.MODULOS_CONTRATADOS);
     if (!comprobado.ok || comprobado.estado.version !== estado.estado.version)
       return res.status(409).json({ ok: false, error: "Cambios simultáneos detectados; actualizá la consulta" });
-    const r = await fetch(`https://api.airtable.com/v0/${cfg.base}/${cfg.tabla}/${empresaId}`, {
-      method: "PATCH", headers: {
-        Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json",
-      }, body: JSON.stringify({ fields: { MODULOS_CONTRATADOS: cambio.opciones }, typecast: false }),
+    // Sólo escribe tras insertar y confirmar un evento INTENTO en AUDITORIA_EVENTOS.
+    // El actor se deriva de la sesión verificada y nunca del body del navegador.
+    const resultado = await ejecutarCambioModulosAuditado({
+      actor: { usuarioId: admin.usuarioId, usuario: admin.usuario, tipo: "PLATAFORMA" },
+      empresaId,
+      empresaNombre: typeof relectura.fields.NOMBRE_COMERCIAL === "string"
+        ? relectura.fields.NOMBRE_COMERCIAL : "",
+      modulo: cuerpo.modulo,
+      accion: cuerpo.accion,
+      motivo: motivo.trim(),
+      estadoAnterior: comprobado.estado,
+      opcionesNuevas: cambio.opciones,
+      escribir: async () => {
+        const r = await fetch(`https://api.airtable.com/v0/${cfg.base}/${cfg.tabla}/${empresaId}`, {
+          method: "PATCH", headers: {
+            Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json",
+          }, body: JSON.stringify({ fields: { MODULOS_CONTRATADOS: cambio.opciones }, typecast: false }),
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!r.ok) throw new Error("Airtable no confirmó el cambio empresarial");
+        const respuesta = await r.json() as Registro;
+        if (respuesta.id !== empresaId) throw new Error("Airtable no confirmó empresa de destino");
+      },
+      releer: async () => {
+        const actualizada = await consultar(empresaId, cfg);
+        return { activa: actualizada.fields.ACTIVA, modulos: actualizada.fields.MODULOS_CONTRATADOS };
+      },
     });
-    if (!r.ok) throw new Error(`Airtable rechazó cambio de módulos (${r.status})`);
-    const respuesta = await r.json() as Registro;
-    if (respuesta.id !== empresaId) throw new Error("Airtable no confirmó empresa de destino");
-    const confirmado = await consultar(empresaId, cfg);
-    const despues = leerEstadoModulos(empresaId, confirmado.fields.ACTIVA, confirmado.fields.MODULOS_CONTRATADOS);
-    if (!despues.ok || JSON.stringify([...despues.estado.originales].sort()) !== JSON.stringify([...cambio.opciones].sort()))
-      throw new Error("Cambio no confirmado; comprobar empresa antes de reintentar");
-    // La auditoría permanente (actor, motivo, antes/después) se desarrolla en Paso 12.
-    // No cambiar este gate a true antes de contar con ese registro.
     return res.status(200).json({ ok: true, empresaId, accion: cuerpo.accion,
-      modulo: cuerpo.modulo, version: despues.estado.version,
-      modulosHabilitados: despues.estado.modulos,
-      mensaje: "Habilitaciones técnicas actualizadas" });
+      modulo: cuerpo.modulo, version: resultado.nuevoEstado.version,
+      modulosHabilitados: resultado.nuevoEstado.modulos,
+      operacionId: resultado.operacionId,
+      mensaje: "Habilitaciones técnicas actualizadas y auditadas" });
   } catch (error) {
-    console.error("11C.3: fallo en cambio de módulos", error);
-    return res.status(503).json({ ok: false, error: "No se pudo confirmar el cambio; revisá el estado antes de reintentar" });
+    if (error instanceof ErrorCambioAuditado) {
+      console.error("12B.3: incidente auditado", { codigo: error.codigo, operacionId: error.operacionId });
+      const mensajes = {
+        AUDITORIA_INICIO: "No se confirmó el evento inicial de auditoría. No se modificaron módulos; conciliar antes de reintentar.",
+        AUDITORIA_FINAL: "No se confirmó la auditoría final. No repitas el cambio: requiere conciliación manual.",
+        CAMBIO_FALLIDO: "El cambio no fue aplicado. Consultá el estado y el historial antes de reintentar.",
+        CAMBIO_INDETERMINADO: "No se pudo determinar el resultado. No repitas el cambio: requiere conciliación manual.",
+      };
+      return res.status(503).json({ ok: false, error: mensajes[error.codigo],
+        operacionId: error.operacionId, puedeEstarAplicado: error.puedeEstarAplicado });
+    }
+    console.error("12B.3: fallo previo a operación auditada", error);
+    return res.status(503).json({ ok: false, error: "No se pudo preparar el cambio; revisá el estado antes de reintentar" });
   } finally {
     if (owner) {
       try { await liberarModulos(empresaId, owner); }

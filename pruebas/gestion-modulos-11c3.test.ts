@@ -7,7 +7,7 @@ import handler from "../handlers/core/gestion-modulos.js";
 const id = (x: string) => "rec" + x.repeat(14);
 const tabla = (x: string) => "tbl" + x.repeat(14);
 const USUARIO = id("A"), PLATAFORMA = id("B"), CLIENTE = id("C");
-const USUARIOS = tabla("U"), EMPRESAS = tabla("E");
+const USUARIOS = tabla("U"), EMPRESAS = tabla("E"), AUDITORIA = tabla("T");
 const COOKIE = "s".repeat(43);
 
 test("11C.3: conserva CORE y equivalencias; suspensión no elimina otros módulos", () => {
@@ -52,6 +52,8 @@ test("11C.3: autorización global, versión y confirmación bajo mocks", async (
   const original = globalThis.fetch;
   const env = {
     OPTIMA_MODULES_CHANGES_ENABLED: "true",
+    OPTIMA_AUDIT_WRITES_ENABLED: "true",
+    AIRTABLE_AUDITORIA_TABLE_ID: AUDITORIA,
     OPTIMA_PLATFORM_ADMIN_USER_ID: USUARIO,
     OPTIMA_PLATFORM_COMPANY_ID: PLATAFORMA,
     AIRTABLE_USERS_BASE_ID: "app" + "X".repeat(14),
@@ -73,6 +75,7 @@ test("11C.3: autorización global, versión y confirmación bajo mocks", async (
   let opciones = ["USUARIO", "INVENTARIO", "REPORTES"];
   let escrituras = 0;
   let locks = 0;
+  const eventos: Array<Record<string, string>> = [];
   globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.hostname === "redis-prueba.invalid") {
@@ -84,6 +87,14 @@ test("11C.3: autorización global, versión y confirmación bajo mocks", async (
       throw Error("Comando Redis no simulado");
     }
     assert.equal(url.hostname, "api.airtable.com");
+    if (url.pathname.endsWith(`/${AUDITORIA}`) && init?.method === "POST") {
+      const solicitud = JSON.parse(String(init.body)) as { records: Array<{fields: Record<string, string>}> };
+      const campos = solicitud.records[0].fields;
+      eventos.push(campos);
+      return Response.json({ records: [{ id: id("R"), fields: {
+        ID_EVENTO: campos.ID_EVENTO, OPERACION_ID: campos.OPERACION_ID,
+      } }] });
+    }
     if (url.pathname.endsWith(`/${USUARIOS}/${USUARIO}`)) return Response.json({ id: USUARIO, fields: {
       ACTIVO: true, ROL: "ADMIN", EMPRESA: [PLATAFORMA], USUARIO: "GLOBAL", NOMBRE: "Plataforma",
       SUCURSALES_AUTORIZADAS: [], SUCURSAL_PREDETERMINADA: [],
@@ -130,5 +141,7 @@ test("11C.3: autorización global, versión y confirmación bajo mocks", async (
   assert.deepEqual(opciones, ["USUARIO", "INVENTARIO"]);
   assert.equal((await solicitar(body)).status, 409);
   assert.equal(escrituras, 1);
+  assert.deepEqual(eventos.map(e => e.RESULTADO), ["INTENTO", "CONFIRMADO"]);
+  assert.equal(eventos[0].OPERACION_ID, eventos[1].OPERACION_ID);
   assert.ok(locks > 0);
 });

@@ -180,12 +180,13 @@ test("12B.2: si la respuesta no confirma el UUID exacto, exige conciliación", a
   assert.equal(llamadas, 1);
 });
 
-test("12B.2: no altera endpoints existentes ni habilita cambios comerciales", async () => {
+test("12B.2: motor append-only y gate de módulos permanecen seguros con integración 12B.3", async () => {
   const fuente = await readFile("lib/auditoria-eventos.ts", "utf8");
   assert.match(fuente, /OPTIMA_AUDIT_WRITES_ENABLED\s*!==\s*"true"/);
   assert.match(fuente, /method:\s*"POST"/);
   assert.doesNotMatch(fuente, /method:\s*"(?:PATCH|DELETE)"/);
   const cambios = await readFile("handlers/core/gestion-modulos.ts", "utf8");
   assert.match(cambios, /OPTIMA_MODULES_CHANGES_ENABLED\s*!==\s*"true"/);
-  assert.doesNotMatch(cambios, /registrarEventoAuditoria/);
+  assert.match(cambios, /ejecutarCambioModulosAuditado/);
+  assert.match(cambios, /OPTIMA_AUDIT_WRITES_ENABLED\s*!==\s*"true"/);
 });

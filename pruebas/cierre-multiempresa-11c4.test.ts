@@ -219,12 +219,14 @@ test("11C.4: un ADMIN cliente no pasa la API global, aun con un empresaId ajeno"
 test("11C.4: bloqueo de concurrencia impide escrituras incluso con gate habilitado en mocks", async (t) => {
   const fetchOriginal = globalThis.fetch;
   const claves = ["OPTIMA_PLATFORM_ADMIN_USER_ID", "OPTIMA_PLATFORM_COMPANY_ID", "OPTIMA_MODULES_CHANGES_ENABLED",
+    "OPTIMA_AUDIT_WRITES_ENABLED", "AIRTABLE_AUDITORIA_TABLE_ID",
     "AIRTABLE_USERS_BASE_ID", "AIRTABLE_USERS_TABLE_ID", "AIRTABLE_COMPANIES_TABLE_ID", "AIRTABLE_TOKEN",
     "UPSTASH_REDIS_KV_REST_API_URL", "UPSTASH_REDIS_KV_REST_API_TOKEN"];
   const restaurar = guardarEntorno(claves);
   Object.assign(process.env, {
     OPTIMA_PLATFORM_ADMIN_USER_ID: ADMIN_OPTIMA, OPTIMA_PLATFORM_COMPANY_ID: EMPRESA_OPTIMA,
     OPTIMA_MODULES_CHANGES_ENABLED: "true", AIRTABLE_USERS_BASE_ID: "app" + "X".repeat(14),
+    OPTIMA_AUDIT_WRITES_ENABLED: "true", AIRTABLE_AUDITORIA_TABLE_ID: "tbl" + "T".repeat(14),
     AIRTABLE_USERS_TABLE_ID: USERS, AIRTABLE_COMPANIES_TABLE_ID: COMPANIES, AIRTABLE_TOKEN: "ficticio",
     UPSTASH_REDIS_KV_REST_API_URL: "https://redis-prueba.invalid", UPSTASH_REDIS_KV_REST_API_TOKEN: "ficticio",
   });

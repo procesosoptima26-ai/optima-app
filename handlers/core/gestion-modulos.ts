@@ -3,7 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion } from "../../lib/session.js";
 import { leerAccesoPlataforma } from "../../core/acceso-plataforma.js";
 import { leerEstadoModulos, prepararCambioModulo } from "../../core/gestion-modulos.js";
-import { bloquearModulos, liberarModulos } from "../../lib/bloqueo-modulos.js";
+import { bloquearModulos, liberarModulos, renovarBloqueoModulos } from "../../lib/bloqueo-modulos.js";
 import { ejecutarCambioModulosAuditado, ErrorCambioAuditado } from "../../lib/cambio-modulos-auditado.js";
 import { consultarIncidenciasAuditoria, ErrorConsultaAuditoria } from "../../lib/conciliacion-modulos.js";
 
@@ -89,6 +89,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const comprobado = leerEstadoModulos(empresaId, relectura.fields.ACTIVA, relectura.fields.MODULOS_CONTRATADOS);
     if (!comprobado.ok || comprobado.estado.version !== estado.estado.version)
       return res.status(409).json({ ok: false, error: "Cambios simultáneos detectados; actualizá la consulta" });
+    if (!(await renovarBloqueoModulos(empresaId, owner)))
+      return res.status(409).json({ ok: false, error: "Se perdió el bloqueo de empresa; no se hicieron cambios" });
     // Sólo escribe tras insertar y confirmar un evento INTENTO en AUDITORIA_EVENTOS.
     // El actor se deriva de la sesión verificada y nunca del body del navegador.
     const resultado = await ejecutarCambioModulosAuditado({
@@ -102,6 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       estadoAnterior: comprobado.estado,
       opcionesNuevas: cambio.opciones,
       escribir: async () => {
+        if (!owner || !(await renovarBloqueoModulos(empresaId, owner)))
+          throw new Error("No se conserva el bloqueo exclusivo antes de PATCH");
         const r = await fetch(`https://api.airtable.com/v0/${cfg.base}/${cfg.tabla}/${empresaId}`, {
           method: "PATCH", headers: {
             Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json",

@@ -73,7 +73,12 @@ function preparar(t: { after(fn: () => void): void }, escenario: Escenario): Sim
       if (op === "GET") return Response.json({ result: key.startsWith("optima:version-sesion:") ? null :
         JSON.stringify({ usuarioId: USUARIO, versionSesion: 0 }) });
       if (op === "SET") { secuencia.push("LOCK"); return Response.json({ result: escenario === "lock_ocupado" ? null : "OK" }); }
-      if (op === "EVAL") { lockLiberados++; secuencia.push("UNLOCK"); return Response.json({ result: 1 }); }
+      if (op === "EVAL") {
+        if (String((JSON.parse(String(init?.body)) as unknown[])[1]).includes("EXPIRE")) {
+          secuencia.push("RENOVAR"); return Response.json({ result: 1 });
+        }
+        lockLiberados++; secuencia.push("UNLOCK"); return Response.json({ result: 1 });
+      }
       throw Error("Comando de Redis inesperado: " + op);
     }
     assert.equal(url.hostname, "api.airtable.com");

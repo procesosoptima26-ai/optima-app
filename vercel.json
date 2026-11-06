@@ -34,6 +34,10 @@
       "destination": "/api/usuarios?accion=gestion_modulos"
     },
     {
+      "source": "/api/plataforma-conciliacion",
+      "destination": "/api/usuarios?accion=conciliacion_modulos"
+    },
+    {
       "source": "/api/sucursales",
       "destination": "/api/usuarios?accion=sucursales"
     }

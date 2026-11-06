@@ -13,9 +13,10 @@ const FINALES = new Set(["CONFIRMADO", "FALLIDO"]);
 const MAX_PAGINAS = 50;
 const MAX_EVENTOS = 5000;
 const CAMPOS = ["ID_EVENTO", "OPERACION_ID", "EMPRESA_ID", "ACTOR_USUARIO_ID", "MODULO", "ACCION",
-  "RECURSO_TIPO", "RECURSO_ID", "RESULTADO", "ESTADO_ANTERIOR", "ESTADO_NUEVO", "ESQUEMA_VERSION"] as const;
+  "RECURSO_TIPO", "RECURSO_ID", "RESULTADO", "ESTADO_ANTERIOR", "ESTADO_NUEVO", "DETALLE", "ESQUEMA_VERSION"] as const;
 
-type RegistroAirtable = Readonly<{ id: string; fields: Record<string, unknown> }>;
+export type RegistroAuditoriaAirtable = Readonly<{ id: string; fields: Record<string, unknown> }>;
+type RegistroAirtable = RegistroAuditoriaAirtable;
 type Causa = "SIN_RESULTADO" | "INDETERMINADO" | "SECUENCIA_INVALIDA" | "HISTORIAL_INVALIDO";
 export type IncidenciaAuditoria = Readonly<{ operacionId: string | null; causa: Causa }>;
 export type EstadoIncidencias = Readonly<{
@@ -42,6 +43,7 @@ type Evento = Readonly<{
   resultado: string;
   anterior: string;
   nuevo: string;
+  detalle: string;
 }>;
 
 function snapshotTecnicoValido(texto: string, obligatorio: boolean): boolean {
@@ -71,15 +73,19 @@ function extraerEvento(registro: RegistroAirtable, empresaId: string): Evento | 
       (typeof f.MODULO !== "string" || !/^[A-Z][A-Z0-9_]{1,79}$/.test(f.MODULO)) ||
       (typeof f.ACCION !== "string" || !/^MODULO_(HABILITAR|SUSPENDER|REACTIVAR)$/.test(f.ACCION)) ||
       !ESTADOS.has(String(f.RESULTADO)) ||
-      typeof f.ESTADO_ANTERIOR !== "string" || typeof f.ESTADO_NUEVO !== "string") return null;
+      typeof f.ESTADO_ANTERIOR !== "string") return null;
+  // Airtable omite campos de texto vacío al listar; INDETERMINADO puede no tener snapshot final.
+  const nuevo = f.ESTADO_NUEVO === undefined && f.RESULTADO === "INDETERMINADO" ? "" : f.ESTADO_NUEVO;
+  if (typeof nuevo !== "string") return null;
   if (!snapshotTecnicoValido(f.ESTADO_ANTERIOR, true) ||
-      !snapshotTecnicoValido(f.ESTADO_NUEVO, ["INTENTO", "CONFIRMADO", "FALLIDO"].includes(String(f.RESULTADO))))
+      !snapshotTecnicoValido(nuevo, ["INTENTO", "CONFIRMADO", "FALLIDO"].includes(String(f.RESULTADO))))
     return null;
   return {
     eventoId: f.ID_EVENTO as string, operacionId: f.OPERACION_ID as string,
     empresaId, actorId: f.ACTOR_USUARIO_ID as string, modulo: f.MODULO as string,
     accion: f.ACCION as string, recursoId: f.RECURSO_ID as string,
-    resultado: f.RESULTADO as string, anterior: f.ESTADO_ANTERIOR, nuevo: f.ESTADO_NUEVO,
+    resultado: f.RESULTADO as string, anterior: f.ESTADO_ANTERIOR, nuevo,
+    detalle: typeof f.DETALLE === "string" ? f.DETALLE : "",
   };
 }
 
@@ -109,22 +115,35 @@ export function analizarHistorialAuditoria(empresaId: string, registros: readonl
   for (const [operacionId, eventos] of grupos) {
     const inicios = eventos.filter(e => e.resultado === "INTENTO");
     const finales = eventos.filter(e => FINALES.has(e.resultado));
-    const ambiguos = eventos.some(e => !FINALES.has(e.resultado) && e.resultado !== "INTENTO");
-    const base = eventos[0];
-    const consistente = eventos.every(e => e.empresaId === base.empresaId && e.actorId === base.actorId &&
-      e.modulo === base.modulo && e.accion === base.accion && e.recursoId === base.recursoId &&
-      e.anterior === base.anterior);
-    if (!consistente || inicios.length !== 1 || finales.length > 1) {
+    const cierres = eventos.filter(e => e.resultado === "CONCILIADO");
+    const indeterminados = eventos.filter(e => e.resultado === "INDETERMINADO");
+    const base = inicios[0] ?? eventos[0];
+    // Un conciliador distinto puede actuar, pero NO puede cambiar la identidad
+    // ni la descripción de la operación original.
+    const consistente = eventos.every(e => e.empresaId === base.empresaId &&
+      e.modulo === base.modulo && e.accion === base.accion &&
+      e.recursoId === base.recursoId && e.anterior === base.anterior &&
+      (e.resultado === "CONCILIADO" || e.actorId === base.actorId));
+    if (!consistente || inicios.length !== 1 || finales.length > 1 || cierres.length > 1 ||
+        eventos.some(e => e.resultado === "RECHAZADO") || indeterminados.length > 1) {
       incidencias.push({ operacionId, causa: "SECUENCIA_INVALIDA" });
-    } else if (eventos.some(e => e.resultado === "INDETERMINADO")) {
+    } else if (cierres.length === 1) {
+      const cierre = cierres[0], inicio = inicios[0];
+      const aplicado = cierre.detalle === "CONCILIADO_APLICADO" && cierre.nuevo === inicio.nuevo;
+      const noAplicado = cierre.detalle === "CONCILIADO_NO_APLICADO" && cierre.nuevo === inicio.anterior;
+      // Solo INTENTO + [INDETERMINADO] + CONCILIADO, sin finales adicionales.
+      if (finales.length || eventos.length !== 2 + indeterminados.length ||
+          indeterminados.some(e => e.nuevo && e.nuevo !== inicio.anterior && e.nuevo !== inicio.nuevo) ||
+          !snapshotTecnicoValido(cierre.nuevo, true) || !(aplicado || noAplicado)) {
+        incidencias.push({ operacionId, causa: "SECUENCIA_INVALIDA" });
+      }
+    } else if (indeterminados.length) {
       incidencias.push({ operacionId, causa: "INDETERMINADO" });
-    } else if (ambiguos) {
-      incidencias.push({ operacionId, causa: "SECUENCIA_INVALIDA" });
     } else if (finales.length === 0) {
       incidencias.push({ operacionId, causa: "SIN_RESULTADO" });
-    } else if (finales[0].resultado === "CONFIRMADO" && finales[0].nuevo !== inicios[0].nuevo) {
-      incidencias.push({ operacionId, causa: "SECUENCIA_INVALIDA" });
-    } else if (finales[0].resultado === "FALLIDO" && finales[0].nuevo !== inicios[0].anterior) {
+    } else if (eventos.length !== 2 ||
+               (finales[0].resultado === "CONFIRMADO" && finales[0].nuevo !== inicios[0].nuevo) ||
+               (finales[0].resultado === "FALLIDO" && finales[0].nuevo !== inicios[0].anterior)) {
       incidencias.push({ operacionId, causa: "SECUENCIA_INVALIDA" });
     }
   }
@@ -136,7 +155,7 @@ export function analizarHistorialAuditoria(empresaId: string, registros: readonl
  * Sólo lectura del historial completo por empresa; falla cerrado ante páginas incompletas.
  * NO es una barrera activa de la API de cambios hasta el paso 12B.4.2.
  */
-export async function consultarIncidenciasAuditoria(empresaId: string): Promise<EstadoIncidencias> {
+export async function consultarHistorialAuditoriaEmpresa(empresaId: string): Promise<readonly RegistroAuditoriaAirtable[]> {
   const base = process.env.AIRTABLE_USERS_BASE_ID?.trim() ?? "";
   const tabla = process.env.AIRTABLE_AUDITORIA_TABLE_ID?.trim() ?? "";
   const token = process.env.AIRTABLE_TOKEN?.trim() ?? "";
@@ -163,11 +182,16 @@ export async function consultarIncidenciasAuditoria(empresaId: string): Promise<
     registros.push(...datos.records as RegistroAirtable[]);
     if (registros.length > MAX_EVENTOS) throw new ErrorConsultaAuditoria("PAGINACION_INVALIDA");
     const siguiente = 'offset' in datos ? datos.offset : undefined;
-    if (siguiente === undefined) return analizarHistorialAuditoria(empresaId, registros);
+    if (siguiente === undefined) return registros;
     if (typeof siguiente !== "string" || !siguiente || siguiente.length > 512 || offsets.has(siguiente))
       throw new ErrorConsultaAuditoria("PAGINACION_INVALIDA");
     offsets.add(siguiente);
     offset = siguiente;
   }
   throw new ErrorConsultaAuditoria("PAGINACION_INVALIDA");
+}
+
+/** Consulta completa compartida: cualquier historial incompleto se considera error. */
+export async function consultarIncidenciasAuditoria(empresaId: string): Promise<EstadoIncidencias> {
+  return analizarHistorialAuditoria(empresaId, await consultarHistorialAuditoriaEmpresa(empresaId));
 }

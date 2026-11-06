@@ -28,3 +28,12 @@ export async function liberarModulos(id: string, owner: string): Promise<void> {
     "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) else return 0 end",
     1, clave(id), owner]);
 }
+
+/** Verifica propiedad y renueva TTL antes de insertar un cierre auditado. */
+export async function renovarBloqueoModulos(id: string, owner: string): Promise<boolean> {
+  if (!ID.test(id) || !/^[a-f0-9]{32}$/.test(owner)) return false;
+  const r = await redis<number>(["EVAL",
+    "if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], 120) else return 0 end",
+    1, clave(id), owner]);
+  return r === 1;
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import ConsultaComercial from "./ConsultaComercial";
 
 type Empresa = Readonly<{
   id: string; nombre: string; clave: string; activa: boolean;
@@ -144,6 +145,7 @@ export default function ConsultaPlataforma() {
         <div><small>Módulos técnicos: {empresa.requiereRevision ? "Requieren revisión" :
           empresa.modulosHabilitados.length ? empresa.modulosHabilitados.join(", ").replaceAll("_", " ") : "Ninguno"}</small></div>
       </li>)}</ul>
+      <ConsultaComercial empresas={empresas} />
       {!gestionHabilitada ? <p>Los cambios están deshabilitados hasta que OPTIMA configure y autorice la gestión.</p> :
         <div className="field-group" style={{ display: "grid", gap: 10 }}>
           <h4>Cambiar habilitación técnica</h4>

@@ -1,5 +1,6 @@
 import empresa from "../handlers/core/empresa.js";
 import plataforma from "../handlers/core/plataforma.js";
+import consulta_comercial from "../handlers/core/consulta-comercial.js";
 import gestion_modulos from "../handlers/core/gestion-modulos.js";
 import conciliacion_modulos from "../handlers/core/conciliar-modulos.js";
 import sucursales from "../handlers/core/sucursales.js";
@@ -14,7 +15,7 @@ import activar from "../handlers/usuarios/activar.js";
 import solicitar_recuperacion from "../handlers/usuarios/solicitar-recuperacion.js";
 import restablecer from "../handlers/usuarios/restablecer.js";
 
-const handlers = { empresa, plataforma, gestion_modulos, conciliacion_modulos, sucursales, opciones, listar, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
+const handlers = { empresa, plataforma, consulta_comercial, gestion_modulos, conciliacion_modulos, sucursales, opciones, listar, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
   "solicitar-recuperacion": solicitar_recuperacion, restablecer };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

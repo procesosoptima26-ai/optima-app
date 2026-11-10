@@ -7,7 +7,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion } from "../../lib/session.js";
 import { leerAccesoPlataforma } from "../../core/acceso-plataforma.js";
 import { consultarContratacionVigenteAirtable, type ResultadoConsultaContrataciones } from "../../core/consulta-contrataciones-airtable.js";
-import type { DefinicionSubmodulo } from "../../core/reglas-comerciales.js";
+import { CATALOGO_SUBMODULOS_CONTRATACION } from "../../core/catalogo-comercial-jerarquico.js";
 
 const ID_REGISTRO = /^rec[A-Za-z0-9]{14}$/;
 const ID_BASE = /^app[A-Za-z0-9]{14}$/;
@@ -17,16 +17,6 @@ const ID_TABLA = /^tbl[A-Za-z0-9]{14}$/;
 // Solo se consulta si la configuración apunta a la misma Base Maestra.
 const BASE_MAESTRA = "appHVaLyE72Q1okqg";
 const TABLA_CONTRATACIONES = "tblHiIQqmWNGwDeC9";
-
-/**
- * Submódulos ya utilizados en los ejemplos comerciales aprobados para diseño.
- * Catálogo PARCIAL de solo lectura: NO define su alcance ni habilita funciones.
- * Los demás submódulos se incorporarán cuando se apruebe el catálogo definitivo.
- */
-const CATALOGO_SUBMODULOS: readonly DefinicionSubmodulo[] = [
-  { id: "CHEQUES", moduloPadre: "ADMINISTRACION" },
-  { id: "BANCOS", moduloPadre: "ADMINISTRACION" },
-];
 
 type Autenticacion =
   | Readonly<{ estado: "SIN_SESION" | "NO_AUTORIZADO" }>
@@ -150,7 +140,7 @@ const dependenciasReales: DependenciasConsultaComercial = {
     return consultarContratacionVigenteAirtable({
       empresaId, baseId, tablaId: TABLA_CONTRATACIONES, token,
       ahoraIso: new Date().toISOString(),
-      catalogoSubmodulos: CATALOGO_SUBMODULOS,
+      catalogoSubmodulos: CATALOGO_SUBMODULOS_CONTRATACION,
     });
   },
 };

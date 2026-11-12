@@ -3,6 +3,8 @@ import argon2 from "argon2";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { consultarInvitacion, bloquearActivacion, liberarBloqueoActivacion, anularInvitacion, validarClaveNueva } from "../../lib/invitaciones.js";
 import { activarUsuario, leerUsuario } from "../../lib/usuarios-maestros.js";
+import { auditoriaCoreExigida } from "../../lib/auditoria-core-transversal.js";
+import { ejecutarIdentidadAuditada, snapshotIdentidad, ErrorAuditoriaIdentidad } from "../../lib/auditoria-identidad-core.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
@@ -26,6 +28,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         registro.fields.EMPRESA[0] !== invitacion.empresaId) {
       return res.status(410).json({ ok: false, error: "Invitación vencida o utilizada" });
     }
+    if (auditoriaCoreExigida()) {
+      let hashGenerado: string | null = null;
+      const operacion = await ejecutarIdentidadAuditada({
+        actor: { usuarioId: "SISTEMA", usuario: "ENLACE_ACTIVACION_VERIFICADO", tipo: "SISTEMA" },
+        empresaId: invitacion.empresaId, empresaNombre: "EMPRESA_VERIFICADA_POR_ENLACE",
+        accion: "USUARIO_ACTIVAR", recursoTipo: "USUARIO", recursoId: invitacion.usuarioId,
+        motivo: "Activación solicitada mediante enlace verificado",
+        anterior: snapshotIdentidad(false, false), propuesto: snapshotIdentidad(true, true),
+        escribir: async () => {
+          hashGenerado = await argon2.hash(password, { type: argon2.argon2id });
+          await activarUsuario(invitacion.usuarioId, hashGenerado);
+          try { await anularInvitacion(token); }
+          catch { console.error("La cuenta activada requiere revisar invalidación del enlace"); }
+        },
+        releer: async () => {
+          const comprobado = await leerUsuario(invitacion.usuarioId);
+          if (!comprobado || !Array.isArray(comprobado.fields.EMPRESA) ||
+              comprobado.fields.EMPRESA.length !== 1 || comprobado.fields.EMPRESA[0] !== invitacion.empresaId ||
+              comprobado.fields.Email !== invitacion.email) throw new Error("Cuenta no verificable");
+          return { estado: snapshotIdentidad(comprobado.fields.ACTIVO === true,
+            Boolean(hashGenerado && comprobado.fields.PASSWORD_HASH === hashGenerado)),
+            dato: { activada: comprobado.fields.ACTIVO === true } };
+        },
+      });
+      return res.status(200).json({ ok: true, operacionId: operacion.operacionId,
+        mensaje: "Cuenta activada. Ya podés iniciar sesión." });
+    }
     const hash = await argon2.hash(password, { type: argon2.argon2id });
     await activarUsuario(invitacion.usuarioId, hash);
     // Si Redis falla en este punto, ACTIVO ya impide reutilizar el enlace.
@@ -33,6 +62,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     catch (fallo) { console.error("No se pudo anular enlace de cuenta activada:", fallo); }
     return res.status(200).json({ ok: true, mensaje: "Cuenta activada. Ya podés iniciar sesión." });
   } catch (error) {
+    if (error instanceof ErrorAuditoriaIdentidad) {
+      console.error("Auditoría activación", { codigo: error.codigo, operacionId: error.operacionId });
+      return res.status(503).json({ ok: false, operacionId: error.operacionId,
+        puedeEstarAplicado: error.puedeEstarAplicado,
+        error: "La activación no se pudo confirmar; verificá la cuenta antes de reintentar" });
+    }
     console.error("Error activando invitación:", error);
     return res.status(503).json({ ok: false, error: "No se pudo completar la activación. Podés volver a intentarlo desde el mismo enlace." });
   } finally {

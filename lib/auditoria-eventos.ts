@@ -42,6 +42,11 @@ export type EstadoTecnicoAuditoria = Readonly<{
   PERMISOS?: readonly string[];
   NOMBRE_SUCURSAL?: string;
   SUCURSAL_ID?: string;
+  /** Auditoría de identidad: marcadores técnicos, nunca claves o tokens. */
+  USUARIO_AFECTADO_ID?: string;
+  INVITACION_ACEPTADA_POR_PROVEEDOR?: boolean;
+  CREDENCIAL_ACTUALIZADA?: boolean;
+  SESIONES_REVOCADAS?: boolean;
 }>;
 
 export type EntradaAuditoria = Readonly<{
@@ -99,7 +104,8 @@ function snapshot(valor: unknown): string {
   const campos = valor as Record<string, unknown>;
   const keys = Object.keys(campos);
   const aceptados = ["MODULOS_CONTRATADOS", "ACTIVA", "VERSION", "SUCURSALES",
-    "SUCURSAL_PRINCIPAL", "MODULOS_HABILITADOS", "PERMISOS", "NOMBRE_SUCURSAL", "SUCURSAL_ID"];
+    "SUCURSAL_PRINCIPAL", "MODULOS_HABILITADOS", "PERMISOS", "NOMBRE_SUCURSAL", "SUCURSAL_ID",
+    "USUARIO_AFECTADO_ID", "INVITACION_ACEPTADA_POR_PROVEEDOR", "CREDENCIAL_ACTUALIZADA", "SESIONES_REVOCADAS"];
   if (!keys.length || keys.some(k => !aceptados.includes(k))) return invalido();
   const limpio: Record<string, unknown> = {};
   for (const key of keys) {
@@ -112,7 +118,7 @@ function snapshot(valor: unknown): string {
       if (!Array.isArray(v) || v.length > 100 || !v.every(x => typeof x === "string" && ID_REGISTRO.test(x)) ||
           new Set(v).size !== v.length) return invalido();
       limpio[key] = [...v];
-    } else if (key === "SUCURSAL_PRINCIPAL" || key === "SUCURSAL_ID") {
+    } else if (key === "SUCURSAL_PRINCIPAL" || key === "SUCURSAL_ID" || key === "USUARIO_AFECTADO_ID") {
       if (typeof v !== "string" || !ID_REGISTRO.test(v)) return invalido();
       limpio[key] = v;
     } else if (key === "MODULOS_HABILITADOS") {
@@ -125,6 +131,9 @@ function snapshot(valor: unknown): string {
       limpio[key] = [...v];
     } else if (key === "NOMBRE_SUCURSAL") {
       limpio[key] = texto(v, 80);
+    } else if (key === "INVITACION_ACEPTADA_POR_PROVEEDOR" || key === "CREDENCIAL_ACTUALIZADA" || key === "SESIONES_REVOCADAS") {
+      if (typeof v !== "boolean") return invalido();
+      limpio[key] = v;
     } else if (key === "ACTIVA") {
       if (typeof v !== "boolean") return invalido();
       limpio[key] = v;

@@ -2,7 +2,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { construirAltaInvitado } from "../../core/alta-usuarios.js";
 import { crearInvitacion, anularInvitacion, reservarNombreUsuario } from "../../lib/invitaciones.js";
-import { autenticarAdministrador, crearUsuarioInactivo, existeNombreUsuario, retirarUsuarioPendiente } from "../../lib/usuarios-maestros.js";
+import { autenticarAdministrador, crearUsuarioInactivo, existeNombreUsuario, retirarUsuarioPendiente, leerUsuario } from "../../lib/usuarios-maestros.js";
+import { auditoriaCoreExigida } from "../../lib/auditoria-core-transversal.js";
+import { ejecutarIdentidadAuditada, snapshotIdentidad, ErrorAuditoriaIdentidad } from "../../lib/auditoria-identidad-core.js";
 
 function origenPublico(): string {
   const valor = process.env.OPTIMA_PUBLIC_URL?.trim();
@@ -49,6 +51,75 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch {
     return res.status(503).json({ ok: false, error: "Configurá el correo y la URL del entorno" });
   }
+  // Identidad auditada sólo en entorno aislado habilitado explícitamente.
+  // La reserva de nombre y todos los efectos vienen DESPUÉS del INTENTO confirmado.
+  if (auditoriaCoreExigida()) {
+    try {
+      if (await existeNombreUsuario(alta.usuario))
+        return res.status(409).json({ ok: false, error: "Ese nombre de usuario ya existe" });
+      let idCreadoAuditoria: string | null = null;
+      let tokenCreadoAuditoria: string | null = null;
+      let proveedorAcepto = false;
+      const operacion = await ejecutarIdentidadAuditada({
+        actor: { usuarioId: admin.contexto.usuarioId, usuario: admin.contexto.usuarioId, tipo: "CLIENTE" },
+        empresaId: admin.contexto.empresa.id, empresaNombre: admin.contexto.empresa.clave,
+        accion: "USUARIO_INVITAR", recursoTipo: "EMPRESA", recursoId: admin.contexto.empresa.id,
+        motivo: "Invitación solicitada por administrador autorizado",
+        anterior: snapshotIdentidad(false, false, { invitacionAceptada: false }),
+        propuesto: snapshotIdentidad(false, false, { invitacionAceptada: true }),
+        escribir: async () => {
+          if (!(await reservarNombreUsuario(alta.usuario))) throw new Error("INVITACION_OCUPADA");
+          // Revalidar la unicidad tras adquirir la reserva del nombre.
+          if (await existeNombreUsuario(alta.usuario)) throw new Error("USUARIO_EXISTENTE");
+          try {
+            idCreadoAuditoria = await crearUsuarioInactivo(alta.campos);
+            tokenCreadoAuditoria = await crearInvitacion({
+              tipo: "activacion", usuarioId: idCreadoAuditoria,
+              empresaId: admin.contexto.empresa.id, email: alta.email,
+            });
+            const enlace = `${origin}/activar.html#token=${encodeURIComponent(tokenCreadoAuditoria)}`;
+            await enviarEmail(alta.email, String(alta.campos.NOMBRE), enlace);
+            proveedorAcepto = true; // aceptación de Resend, NO prueba de entrega al destinatario
+          } catch (error) {
+            if (tokenCreadoAuditoria) {
+              try { await anularInvitacion(tokenCreadoAuditoria); } catch { /* incidente sin reintento */ }
+            }
+            if (idCreadoAuditoria) {
+              try { await retirarUsuarioPendiente(idCreadoAuditoria, admin.contexto.empresa.id, alta.email); }
+              catch { /* El estado se considera incierto */ }
+            }
+            throw error;
+          }
+        },
+        releer: async () => {
+          if (!idCreadoAuditoria) throw new Error("No es posible identificar alta incierta");
+          const registro = await leerUsuario(idCreadoAuditoria);
+          if (!registro || !Array.isArray(registro.fields.EMPRESA) ||
+              registro.fields.EMPRESA.length !== 1 || registro.fields.EMPRESA[0] !== admin.contexto.empresa.id ||
+              registro.fields.Email !== alta.email || registro.fields.ACTIVO === true ||
+              registro.fields.PASSWORD_HASH) throw new Error("Alta no verificable");
+          return { estado: snapshotIdentidad(false, false, {
+            usuarioAfectadoId: idCreadoAuditoria, invitacionAceptada: proveedorAcepto,
+          }), dato: { usuarioId: idCreadoAuditoria } };
+        },
+        // La operación involucra Airtable, Redis y un envío externo: no afirmar
+        // que no tuvo efectos aunque una compensación haya respondido OK.
+        falloSinEfecto: () => false,
+      });
+      return res.status(201).json({ ok: true, operacionId: operacion.operacionId,
+        mensaje: "Invitación aceptada por el proveedor. La cuenta permanece inactiva hasta su activación." });
+    } catch (error) {
+      if (error instanceof ErrorAuditoriaIdentidad) {
+        console.error("Auditoría invitación", { codigo: error.codigo, operacionId: error.operacionId });
+        return res.status(503).json({ ok: false, operacionId: error.operacionId,
+          puedeEstarAplicado: error.puedeEstarAplicado,
+          error: "No se pudo confirmar la operación; revisá su estado antes de reintentar" });
+      }
+      console.error("Error al iniciar invitación auditada (sin datos sensibles)");
+      return res.status(503).json({ ok: false, error: "No se pudo iniciar la invitación" });
+    }
+  }
+
   let idCreado: string | null = null;
   let tokenCreado: string | null = null;
   try {

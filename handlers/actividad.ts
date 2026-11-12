@@ -6,11 +6,14 @@ import type {
 
 import {
   buscarSesion,
+  eliminarSesion,
   renovarSesion,
   leerTokenSesion,
   establecerCookieSesion,
   borrarCookieSesion,
 } from "../lib/session.js";
+import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
+import { leerAccesoPlataforma } from "../core/acceso-plataforma.js";
 
 export default async function handler(
   req: VercelRequest,
@@ -51,7 +54,23 @@ export default async function handler(
       });
     }
 
-    // 3. Renovar el vencimiento en Redis.
+    // 3. La sesión Redis NO equivale a una cuenta aún autorizada.
+    //    Revalidar usuario y empresa en la fuente autoritativa antes de renovar.
+    //    Una cuenta configurada como PLATAFORMA nunca puede caer al Core cliente.
+    const plataforma = await leerAccesoPlataforma(sesion.usuarioId);
+    const autorizado = plataforma === null
+      ? (await leerAccesoCoreDesdeAirtable(sesion.usuarioId)).ok
+      : plataforma !== false;
+    if (!autorizado) {
+      await eliminarSesion(tokenSesion);
+      borrarCookieSesion(res);
+      return res.status(401).json({
+        ok: false,
+        error: "La sesión ya no está autorizada",
+      });
+    }
+
+    // 4. Renovar el vencimiento en Redis solo después de validar el acceso.
     const renovada = await renovarSesion(tokenSesion);
 
     if (!renovada) {
@@ -63,7 +82,7 @@ export default async function handler(
       });
     }
 
-    // 4. Renovar también la cookie del navegador.
+    // 5. Renovar también la cookie del navegador.
     establecerCookieSesion(res, tokenSesion);
 
     return res.status(200).json({

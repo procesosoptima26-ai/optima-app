@@ -32,13 +32,26 @@ async function buscarUsuarioPorNombre(usuario: string): Promise<RegistroAirtable
   const token = exigirEnv("AIRTABLE_TOKEN");
   const url = new URL(`https://api.airtable.com/v0/${base}/${tabla}`);
   url.searchParams.set("filterByFormula", `LOWER({USUARIO}) = "${escaparFormula(usuario.toLowerCase())}"`);
-  url.searchParams.set("maxRecords", "1");
+  // Consultar hasta dos coincidencias: jamás elegir silenciosamente entre cuentas duplicadas.
+  url.searchParams.set("maxRecords", "2");
   const respuesta = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!respuesta.ok) throw new Error(`Fallo buscando usuario (${respuesta.status})`);
   const datos = (await respuesta.json()) as RespuestaAirtable;
-  return datos.records?.[0] ?? null;
+  if (!datos || !Array.isArray(datos.records) || datos.records.length > 2) {
+    throw new Error("Respuesta de identidad inválida");
+  }
+  if (datos.records.length > 1) {
+    throw new Error("Identidad ambigua: más de una cuenta con el mismo usuario");
+  }
+  const registro = datos.records[0];
+  if (registro && (typeof registro.id !== "string" ||
+      !/^rec[A-Za-z0-9]{14}$/.test(registro.id) ||
+      !registro.fields || typeof registro.fields !== "object" || Array.isArray(registro.fields))) {
+    throw new Error("Identidad inválida en Base Maestra");
+  }
+  return registro ?? null;
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

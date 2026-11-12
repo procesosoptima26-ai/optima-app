@@ -35,6 +35,7 @@ export function sucursalRealDeUbicacion(campos: Record<string, unknown>): string
 export function sucursalAutorizadaPorId(
   contexto: ContextoCore, sucursalId: string,
 ): SucursalCore | null {
+  if (!contexto.activo || !contexto.empresa.activa) return null;
   return contexto.sucursalesAutorizadas.find((s) =>
     s.activa && s.id === sucursalId && s.empresaId === contexto.empresa.id
   ) ?? null;
@@ -55,15 +56,19 @@ export function ubicacionesDeRegistroPermitidas(
   ubicacionesPorId: ReadonlyMap<string, RegistroOperativo>,
   contexto: ContextoCore, sucursalEspecificaId?: string,
 ): boolean {
-  const ids = claves.flatMap((campo) => {
+  const ids: string[] = [];
+  for (const campo of claves) {
     const valor = campos[campo];
-    if (valor === undefined) return [];
+    // Un vínculo ausente puede ser legítimo (por ejemplo, una entrada sin
+    // origen); un vínculo presente pero vacío o inválido es inconsistente.
+    if (valor === undefined) continue;
     const encontrados = idsVinculados(valor);
-    return encontrados === null ? [null] : encontrados;
-  });
-  if (!ids.length || ids.some((id) => !id)) return false;
+    if (!encontrados?.length) return false;
+    ids.push(...encontrados);
+  }
+  if (!ids.length) return false;
   return ids.every((id) => {
-    const ubicacion = ubicacionesPorId.get(id!);
+    const ubicacion = ubicacionesPorId.get(id);
     return Boolean(ubicacion && ubicacionPermitida(ubicacion.fields, contexto, sucursalEspecificaId));
   });
 }
@@ -140,11 +145,16 @@ export async function ubicacionExistenteAutorizada(
 }
 
 export function sucursalSolicitada(contexto: ContextoCore, valor: string): SucursalCore | null {
-  const normalizar = (texto: string) => texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+  if (!contexto.activo || !contexto.empresa.activa || typeof valor !== "string") return null;
+  const texto = valor.trim();
+  if (!texto) return null;
+  // Si parece un ID de Airtable, jamás resolverlo como nombre de otra sucursal.
+  if (REGISTRO.test(texto)) return sucursalAutorizadaPorId(contexto, texto);
+  const normalizar = (entrada: string) => entrada.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .trim().toUpperCase().replace(/[_\s]+/g, " ");
   const buscadas = contexto.sucursalesAutorizadas.filter((s) =>
     s.activa && s.empresaId === contexto.empresa.id &&
-    (s.id === valor || normalizar(s.nombre) === normalizar(valor))
+    normalizar(s.nombre) === normalizar(texto)
   );
   return buscadas.length === 1 ? buscadas[0] : null;
 }

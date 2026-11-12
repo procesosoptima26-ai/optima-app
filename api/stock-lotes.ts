@@ -99,32 +99,11 @@ function getOptionalEnv(
 /**
  * Extrae el primer ID de un campo vinculado de Airtable.
  */
-function obtenerPrimerIdVinculado(
-  valor: unknown
-): string | null {
-  if (!Array.isArray(valor) || valor.length === 0) {
-    return null;
-  }
-
-  const primerElemento = valor[0];
-
-  if (typeof primerElemento === "string") {
-    return primerElemento.trim() || null;
-  }
-
-  if (
-    primerElemento &&
-    typeof primerElemento === "object"
-  ) {
-    const objeto =
-      primerElemento as Record<string, unknown>;
-
-    if (typeof objeto.id === "string") {
-      return objeto.id.trim() || null;
-    }
-  }
-
-  return null;
+function obtenerPrimerIdVinculado(valor: unknown): string | null {
+  // Un lote pertenece a un único producto y a una única ubicación.
+  // No elegir el primer enlace si el registro es ambiguo o está corrupto.
+  const ids = idsVinculados(valor);
+  return ids?.length === 1 ? ids[0] : null;
 }
 
 /**

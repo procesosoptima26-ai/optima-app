@@ -11,6 +11,7 @@
  */
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion, borrarCookieSesion } from "./session.js";
+import { sucursalSolicitada as resolverSucursalOperativa } from "./alcance-operativo.js";
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
 import { puedeRealizarAccion, MODULO_DEL_PERMISO,
   type ContextoCore, type Modulo, type Permiso, MODULOS } from "../core/seguridad.js";
@@ -55,18 +56,6 @@ function resolverModulo(nombre: string): Modulo | null {
   return modulo && MODULOS.includes(modulo) ? modulo : null;
 }
 
-/**
- * Rechaza nombres ambiguos; no elige arbitrariamente entre dos sucursales.
- * El usuario solo puede elegir una sucursal activa de SU propia empresa.
- */
-function sucursalUnica(contexto: ContextoCore, solicitada: string) {
-  const texto = solicitada.trim();
-  if (!texto) return null;
-  const coincidencias = contexto.sucursalesAutorizadas.filter((s) =>
-    s.activa && s.empresaId === contexto.empresa.id &&
-    (s.id === texto || normalizar(s.nombre) === normalizar(texto)));
-  return coincidencias.length === 1 ? coincidencias[0] : null;
-}
 
 export async function exigirAutorizacion(
   req: VercelRequest,
@@ -122,14 +111,15 @@ export async function exigirAutorizacion(
     }
 
     // Evita que el código heredado confunda dos sucursales con el mismo nombre.
-    const sucursales = contexto.sucursalesAutorizadas.filter((s) => s.activa);
+    const sucursales = contexto.sucursalesAutorizadas.filter((s) =>
+      s.activa && s.empresaId === contexto.empresa.id);
     const nombres = sucursales.map((s) => normalizar(s.nombre));
     if (!nombres.length || new Set(nombres).size !== nombres.length) {
       res.status(403).json({ ok: false, error: "Las sucursales asignadas requieren revisión" });
       return null;
     }
     const sucursalSolicitada = opciones.sucursal === undefined
-      ? undefined : sucursalUnica(contexto, opciones.sucursal);
+      ? undefined : resolverSucursalOperativa(contexto, opciones.sucursal);
     if (opciones.sucursal !== undefined && !sucursalSolicitada) {
       res.status(403).json({ ok: false, error: "No tenés acceso a esta sucursal" });
       return null;

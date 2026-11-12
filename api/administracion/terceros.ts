@@ -147,6 +147,9 @@ async function resolverEmpresaAdministrativa(
     throw new Error("No se pudo verificar la empresa maestra");
   }
   const maestra = (await respuestaMaestra.json()) as AirtableRecord;
+  // El ID solicitado proviene de la sesión. Una respuesta inconsistente
+  // nunca habilita la equivalencia con otra base administrativa.
+  if (maestra?.id !== empresaMaestraId) return null;
   const clave = compararClave(maestra.fields?.CLAVE_EMPRESA);
   if (!clave) return null;
 

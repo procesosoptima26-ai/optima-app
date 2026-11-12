@@ -21,6 +21,8 @@ type AirtableResponse = {
   error?: unknown;
 };
 
+const REGISTRO_ID = /^rec[A-Za-z0-9]{14}$/;
+
 type Ubicacion = {
   id: string;
   nombre: string;
@@ -435,36 +437,29 @@ async function crearMovimientos(
   return registrosCreados;
 }
 
-async function leerMovimientosPorIds(ids: string[]) {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tableName = getEnv(
-    "AIRTABLE_MOVIMIENTOS_TABLE_NAME"
-  );
-
+async function leerMovimientosPorIds(ids: readonly string[]): Promise<AirtableRecord[] | null> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv("AIRTABLE_MOVIMIENTOS_TABLE_NAME");
   const resultados: AirtableRecord[] = [];
 
   for (const id of ids) {
     const url = new URL(
-      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-        tableName
-      )}/${encodeURIComponent(id)}`
+      `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}/${id}`
     );
-
     const response = await fetch(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+      headers: { Authorization: `Bearer ${token}` },
     });
-
-    if (!response.ok) {
-      continue;
+    // No devolver una lista parcial cuando un ID no existe.
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("No se pudo verificar la consulta de movimientos");
+    const dato: unknown = await response.json();
+    if (!dato || typeof dato !== "object" || Array.isArray(dato) ||
+        !("id" in dato) || dato.id !== id || !("fields" in dato) ||
+        !dato.fields || typeof dato.fields !== "object" || Array.isArray(dato.fields)) {
+      return null;
     }
-
-    const record = (await response.json()) as AirtableRecord;
-    resultados.push(record);
+    resultados.push(dato as AirtableRecord);
   }
-
   return resultados;
 }
 
@@ -480,52 +475,52 @@ async function leerMovimientosRecientes(
   limite: number,
   contexto: ContextoCore,
 ) {
-  const token = getEnv("AIRTABLE_TOKEN");
-  const baseId = getEnv("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tableName = getEnv(
-    "AIRTABLE_MOVIMIENTOS_TABLE_NAME"
-  );
-
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tableName = getEnv("AIRTABLE_MOVIMIENTOS_TABLE_NAME");
   const ubicaciones = await leerUbicaciones();
-
   const mapaUbicaciones = mapaUbicacionesCore(ubicaciones);
 
-  const url = new URL(
-    `https://api.airtable.com/v0/${baseId}/${encodeURIComponent(
-      tableName
-    )}`
-  );
+  const encontrados: AirtableRecord[] = [];
+  const offsetsVistos = new Set<string>();
+  let offset: string | undefined;
+  // Una página puede contener movimientos de otras sucursales o empresas.
+  // Se pagina hasta reunir el límite AUTORIZADO o agotar el historial.
+  for (let pagina = 0; pagina < 50; pagina++) {
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tableName)}`);
+    url.searchParams.set("pageSize", "100");
+    url.searchParams.set("sort[0][field]", "FECHA_HORA");
+    url.searchParams.set("sort[0][direction]", "desc");
+    if (offset) url.searchParams.set("offset", offset);
 
-  url.searchParams.set("pageSize", "100");
-  url.searchParams.append(
-    "sort[0][field]",
-    "FECHA_HORA"
-  );
-  url.searchParams.append(
-    "sort[0][direction]",
-    "desc"
-  );
-
-  const response = await fetch(url.toString(), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  const data = (await response.json()) as AirtableResponse;
-
-  if (!response.ok) {
-    console.error("Error leyendo movimientos recientes:", data);
-    throw new Error(
-      "No se pudieron consultar los movimientos recientes"
-    );
+    const response = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) throw new Error("No se pudieron consultar los movimientos recientes");
+    const data: unknown = await response.json();
+    if (!data || typeof data !== "object" || Array.isArray(data) ||
+        !("records" in data) || !Array.isArray(data.records)) {
+      throw new Error("Respuesta incompleta al consultar los movimientos");
+    }
+    for (const registro of data.records) {
+      if (!registro || typeof registro !== "object" || Array.isArray(registro) ||
+          !REGISTRO_ID.test(String(registro.id ?? "")) || !registro.fields ||
+          typeof registro.fields !== "object" || Array.isArray(registro.fields)) {
+        throw new Error("Historial de movimientos inconsistente");
+      }
+      if (movimientoPermitido(registro.fields, mapaUbicaciones, contexto, sucursalCoreId)) {
+        encontrados.push(registro as AirtableRecord);
+        if (encontrados.length >= limite) return encontrados.slice(0, limite);
+      }
+    }
+    const siguiente = "offset" in data ? data.offset : undefined;
+    if (siguiente === undefined) return encontrados;
+    if (typeof siguiente !== "string" || !siguiente.trim() || offsetsVistos.has(siguiente)) {
+      throw new Error("Paginación inconsistente en movimientos");
+    }
+    offsetsVistos.add(siguiente);
+    offset = siguiente;
   }
-
-  return (data.records || [])
-    .filter((record) => movimientoPermitido(
-      record.fields, mapaUbicaciones, contexto, sucursalCoreId,
-    ))
-    .slice(0, limite);
+  throw new Error("La consulta de movimientos excedió el límite seguro de páginas");
 }
 
 function transformarMovimiento(record: AirtableRecord) {
@@ -693,19 +688,24 @@ export default async function handler(
       const idsTexto = normalizarTexto(req.query.ids);
 
       if (idsTexto) {
-        const ids = idsTexto
-          .split(",")
-          .map((id) => id.trim())
-          .filter((id) => id.startsWith("rec"))
-          .slice(0, 100);
-
         const autorizado = await exigirAutorizacion(req, res, {
           modulos: ["MOVIMIENTOS"],
           permiso: "movimientos.ver",
         });
         if (!autorizado) return;
 
+        const ids = idsTexto.split(",").map((id) => id.trim());
+        if (ids.length === 0 || ids.length > 100 ||
+            ids.some((id) => !REGISTRO_ID.test(id)) ||
+            new Set(ids).size !== ids.length) {
+          return res.status(400).json({ ok: false, error: "Lista de IDs de movimientos inválida" });
+        }
         const registros = await leerMovimientosPorIds(ids);
+        if (!registros || registros.length !== ids.length) {
+          return res.status(403).json({
+            ok: false, error: "No tenés acceso a uno o más movimientos solicitados",
+          });
+        }
         const permitidos = await movimientosPertenecenASucursales(
           registros,
           autorizado.contexto

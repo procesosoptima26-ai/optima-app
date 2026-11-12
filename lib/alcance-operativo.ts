@@ -63,8 +63,10 @@ export function ubicacionesDeRegistroPermitidas(
     // origen); un vínculo presente pero vacío o inválido es inconsistente.
     if (valor === undefined) continue;
     const encontrados = idsVinculados(valor);
-    if (!encontrados?.length) return false;
-    ids.push(...encontrados);
+    // Cada campo de origen o destino referencia una sola ubicación.
+    // Más de un vínculo es un registro ambiguo, aunque ambas ubicaciones sean propias.
+    if (encontrados?.length !== 1) return false;
+    ids.push(encontrados[0]);
   }
   if (!ids.length) return false;
   return ids.every((id) => {

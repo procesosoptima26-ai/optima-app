@@ -2,6 +2,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { autenticarAdministrador, leerUsuario, airtableUsuarios } from "../../lib/usuarios-maestros.js";
 import { construirCambiosEmpleado, leerEmpleadoEditable } from "../../core/edicion-usuarios.js";
+import { snapshotAccesosEmpleado } from "../../core/snapshots-auditoria-core.js";
+import { auditoriaCoreExigida, ejecutarOperacionCoreAuditada,
+  motivoAuditoriaCore, ErrorAuditoriaCore } from "../../lib/auditoria-core-transversal.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 function idValido(valor: unknown): valor is string {
@@ -49,6 +52,33 @@ export async function editarEmpleado(req: VercelRequest, res: VercelResponse) {
     if (detalle.version !== version)
       return res.status(409).json({ ok: false, error: "Los accesos cambiaron. Actualizá el empleado antes de guardar." });
 
+    if (auditoriaCoreExigida()) {
+      const motivo = motivoAuditoriaCore(req.body?.motivo);
+      if (!motivo) return res.status(400).json({ ok: false, error: "Indicá un motivo de al menos 10 caracteres" });
+      const proyectado = leerEmpleadoEditable({ id, fields: { ...registro!.fields, ...cambios.campos } },
+        admin.contexto.empresa.id, admin.contexto.usuarioId, admin.opciones);
+      if (!proyectado) throw new Error("Propuesta de accesos inconsistente");
+      const operacion = await ejecutarOperacionCoreAuditada({
+        actorId: admin.contexto.usuarioId, empresaId: admin.contexto.empresa.id,
+        empresaNombre: admin.contexto.empresa.clave,
+        accion: "USUARIO_EDITAR_ACCESOS", recursoTipo: "USUARIO", recursoId: id,
+        motivo, anterior: snapshotAccesosEmpleado(detalle),
+        propuesto: snapshotAccesosEmpleado(proyectado),
+        escribir: async () => {
+          const r = await airtableUsuarios("PATCH", "/" + id, { fields: cambios.campos, typecast: false });
+          if (r.id !== id || !r.fields || typeof r.fields !== "object") throw new Error("PATCH sin confirmar");
+        },
+        releer: async () => {
+          const nuevoRegistro = await leerUsuario(id);
+          const nuevo = leerEmpleadoEditable(nuevoRegistro, admin.contexto.empresa.id,
+            admin.contexto.usuarioId, admin.opciones);
+          if (!nuevo) throw new Error("Accesos no verificables");
+          return { estado: snapshotAccesosEmpleado(nuevo), dato: nuevo };
+        },
+      });
+      return res.status(200).json({ ok: true, empleado: operacion.dato,
+        operacionId: operacion.operacionId, mensaje: "Accesos actualizados y auditados" });
+    }
     const resultado = await airtableUsuarios("PATCH", "/" + id, { fields: cambios.campos, typecast: false });
     if (resultado.id !== id || !resultado.fields || typeof resultado.fields !== "object") {
       throw new Error("Airtable no confirmó la actualización de accesos");
@@ -58,6 +88,12 @@ export async function editarEmpleado(req: VercelRequest, res: VercelResponse) {
     if (!verificado) throw new Error("Airtable devolvió accesos inconsistentes");
     return res.status(200).json({ ok: true, empleado: verificado, mensaje: "Accesos actualizados" });
   } catch (error) {
+    if (error instanceof ErrorAuditoriaCore) {
+      console.error("Core: incidente de auditoría de accesos", { codigo: error.codigo, operacionId: error.operacionId });
+      return res.status(503).json({ ok: false, operacionId: error.operacionId,
+        puedeEstarAplicado: error.puedeEstarAplicado,
+        error: "No se confirmó íntegramente la auditoría; revisá el historial antes de reintentar" });
+    }
     console.error("Paso 10B: error actualizando accesos", error);
     return res.status(503).json({ ok: false, error: "No se pudo confirmar el guardado. Verificá el empleado antes de reintentar." });
   }

@@ -13,6 +13,7 @@ export default function GestionSucursales() {
   const [nombreEditado, setNombreEditado] = useState("");
   const [ocupado, setOcupado] = useState(false);
   const [mensaje, setMensaje] = useState("");
+  const [motivo, setMotivo] = useState("");
   const [error, setError] = useState("");
   const [cargando, setCargando] = useState(true);
 
@@ -38,12 +39,12 @@ export default function GestionSucursales() {
       const respuesta = await fetch("/api/sucursales", {
         method: metodo, credentials: "same-origin", cache: "no-store",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(datos),
+        body: JSON.stringify({ ...datos, motivo }),
       });
       const resultado = await respuesta.json() as Respuesta;
       if (!respuesta.ok || !resultado.ok) throw new Error(resultado.error || "No se pudo guardar");
       await consultar();
-      setNombre(""); setEditando(""); setNombreEditado("");
+      setNombre(""); setEditando(""); setNombreEditado(""); setMotivo("");
       setMensaje("Operación realizada correctamente");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de gestión");
@@ -57,6 +58,13 @@ export default function GestionSucursales() {
         Cada sucursal conserva su identificador al cambiar de nombre.
         No se pueden desactivar sucursales con usuarios o ubicaciones vinculadas.
       </p>
+      <label style={{ display: "block", marginBottom: 12 }}>Motivo de la operación
+        <textarea aria-label="Motivo de operación de sucursal" value={motivo} maxLength={500}
+          disabled={ocupado || cargando} rows={2}
+          onChange={e => setMotivo(e.target.value)}
+          placeholder="Obligatorio cuando se habilite la auditoría integral"
+          style={{ display: "block", width: "100%" }} />
+      </label>
       {cargando && <p>Cargando sucursales...</p>}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
         <input aria-label="Nueva sucursal" placeholder="Nombre de nueva sucursal" value={nombre}

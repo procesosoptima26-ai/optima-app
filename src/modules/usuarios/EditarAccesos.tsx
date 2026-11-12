@@ -30,6 +30,7 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
   const [predeterminada, setPredeterminada] = useState("");
   const [modulos, setModulos] = useState<string[]>([]);
   const [permisos, setPermisos] = useState<string[]>([]);
+  const [motivo, setMotivo] = useState("");
   const [cargando, setCargando] = useState(true);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState("");
@@ -37,7 +38,7 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
 
   useEffect(() => {
     const controlador = new AbortController();
-    setCargando(true); setError(""); setMensaje(""); setEmpleado(null); setOpciones(null);
+    setCargando(true); setError(""); setMensaje(""); setMotivo(""); setEmpleado(null); setOpciones(null);
     void fetch("/api/usuarios/detalle?id=" + encodeURIComponent(id), {
       credentials: "same-origin", cache: "no-store", signal: controlador.signal,
     }).then(async r => {
@@ -79,7 +80,7 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
         body: JSON.stringify({
           id: empleado.id, version: empleado.version,
           sucursalIds: sucursales, sucursalPredeterminadaId: predeterminada,
-          modulos, permisos,
+          modulos, permisos, motivo,
         }),
       });
       const d = await r.json() as { ok: boolean; error?: string; empleado?: Empleado };
@@ -87,6 +88,7 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
       setEmpleado(d.empleado); setSucursales(d.empleado.sucursalIds);
       setPredeterminada(d.empleado.sucursalPredeterminadaId);
       setModulos(d.empleado.modulos); setPermisos(d.empleado.permisos);
+      setMotivo("");
       setMensaje("Accesos actualizados correctamente");
       onGuardado();
     } catch (e) {
@@ -152,6 +154,11 @@ export default function EditarAccesos({ id, onCerrar, onGuardado }: {
             !opciones.permisos.some(op => op.id === p && !modulos.includes(moduloPorCampo[op.campo]))))}>
           Quitar permisos de módulos deshabilitados ({permisosFueraDeModulo.length})
         </button>}
+        <label>Motivo del cambio (obligatorio cuando se habilite la auditoría integral)
+          <textarea aria-label="Motivo del cambio de accesos" value={motivo} maxLength={500}
+            disabled={guardando} onChange={e => setMotivo(e.target.value)} rows={2}
+            placeholder="Explicá por qué se modifican los accesos" style={{ display: "block", width: "100%" }} />
+        </label>
         {errorCliente && <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>{errorCliente}</p>}
         {error && <p role="alert" style={{ color: "#991b1b", fontSize: 13, margin: 0 }}>{error}</p>}
         {mensaje && <p role="status" style={{ color: "#166534", margin: 0 }}>{mensaje}</p>}

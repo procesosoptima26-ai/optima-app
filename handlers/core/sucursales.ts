@@ -4,6 +4,9 @@ import { prepararAltaSucursal, prepararCambioNombreSucursal,
   prepararDesactivacionSucursal } from "../../core/gestion-sucursales.js";
 import { evaluarCambioSucursal } from "../../core/control-cambios-sucursales.js";
 import { bloquearAltaSucursal, liberarAltaSucursal } from "../../lib/bloqueo-sucursales.js";
+import { snapshotSucursal } from "../../core/snapshots-auditoria-core.js";
+import { auditoriaCoreExigida, ejecutarOperacionCoreAuditada,
+  motivoAuditoriaCore, ErrorAuditoriaCore } from "../../lib/auditoria-core-transversal.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const TABLA = /^(?:tbl[A-Za-z0-9]{14}|[\p{L}\p{N}_ -]{1,80})$/u;
@@ -101,6 +104,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
+    const motivo = !lectura && auditoriaCoreExigida() ? motivoAuditoriaCore(req.body?.motivo) : null;
+    if (!lectura && auditoriaCoreExigida() && !motivo)
+      return res.status(400).json({ ok: false, error: "Indicá un motivo de al menos 10 caracteres" });
     const empresa = await leerRegistro(base, tablaEmpresas, empresaId, token);
     const ids = idsRelacion(empresa.fields.SUCURSALES);
     if (!ids || ids.length > 100) throw new Error("Vínculos de sucursales inválidos");
@@ -132,13 +138,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "POST") {
       const alta = prepararAltaSucursal(req.body.nombre, empresaId, sucursales);
       if (!alta.ok) return res.status(400).json({ ok: false, error: alta.error });
+      if (auditoriaCoreExigida() && motivo) {
+        let idCreada: string | null = null;
+        const operacion = await ejecutarOperacionCoreAuditada({
+          actorId: admin.contexto.usuarioId, empresaId,
+          empresaNombre: String(empresa.fields.NOMBRE_COMERCIAL || admin.contexto.empresa.clave),
+          accion: "SUCURSAL_CREAR", recursoTipo: "EMPRESA", recursoId: empresaId,
+          motivo, anterior: { ACTIVA: true }, propuesto: snapshotSucursal({ nombre: alta.campos.NOMBRE as string, activa: true }),
+          escribir: async () => {
+            const creada = await escribirRegistro(base, tablaSucursales, token, "POST", alta.campos);
+            idCreada = creada.id;
+          },
+          releer: async () => {
+            if (!idCreada) throw new Error("Alta incierta: consultar antes de reintentar");
+            const registrada = await leerRegistro(base, tablaSucursales, idCreada, token);
+            if (idsRelacion(registrada.fields.EMPRESA)?.length !== 1 ||
+                idsRelacion(registrada.fields.EMPRESA)?.[0] !== empresaId ||
+                typeof registrada.fields.NOMBRE !== "string" || typeof registrada.fields.ACTIVA !== "boolean")
+              throw new Error("Alta no confirmable");
+            return { estado: snapshotSucursal({ id: registrada.id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA }),
+              dato: { id: registrada.id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA } };
+          },
+        });
+        return res.status(201).json({ ok: true, sucursal: operacion.dato, operacionId: operacion.operacionId });
+      }
       const creada = await escribirRegistro(base, tablaSucursales, token, "POST", alta.campos);
       if (creada.fields.ACTIVA !== true ||
           idsRelacion(creada.fields.EMPRESA)?.[0] !== empresaId)
         throw new Error("No se pudo confirmar el alta");
-      return res.status(201).json({
-        ok: true, sucursal: { id: creada.id, nombre: creada.fields.NOMBRE, activa: true },
-      });
+      return res.status(201).json({ ok: true, sucursal: { id: creada.id, nombre: creada.fields.NOMBRE, activa: true } });
     }
 
     const id = req.body.id;
@@ -160,6 +188,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (req.method === "PATCH") {
       const cambio = prepararCambioNombreSucursal(id, req.body.nombre, sucursales);
       if (!cambio.ok) return res.status(400).json({ ok: false, error: cambio.error });
+      if (auditoriaCoreExigida() && motivo) {
+        const operacion = await ejecutarOperacionCoreAuditada({
+          actorId: admin.contexto.usuarioId, empresaId,
+          empresaNombre: String(empresa.fields.NOMBRE_COMERCIAL || admin.contexto.empresa.clave),
+          accion: "SUCURSAL_RENOMBRAR", recursoTipo: "SUCURSAL", recursoId: id,
+          motivo, anterior: snapshotSucursal(actual),
+          propuesto: snapshotSucursal({ ...actual, nombre: cambio.campos.NOMBRE as string }),
+          escribir: async () => { await escribirRegistro(base, tablaSucursales, token, "PATCH", cambio.campos, id); },
+          releer: async () => {
+            const registrada = await leerRegistro(base, tablaSucursales, id, token);
+            if (idsRelacion(registrada.fields.EMPRESA)?.[0] !== empresaId ||
+                typeof registrada.fields.NOMBRE !== "string" || typeof registrada.fields.ACTIVA !== "boolean")
+              throw new Error("Sucursal no verificable");
+            return { estado: snapshotSucursal({ id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA }),
+              dato: { id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA } };
+          },
+        });
+        return res.status(200).json({ ok: true, sucursal: operacion.dato, operacionId: operacion.operacionId });
+      }
       const actualizado = await escribirRegistro(base, tablaSucursales, token, "PATCH", cambio.campos, id);
       if (actualizado.fields.NOMBRE !== cambio.campos.NOMBRE)
         throw new Error("No se pudo confirmar el nuevo nombre");
@@ -176,10 +223,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     const baja = prepararDesactivacionSucursal(id, sucursales, actual.usuariosAsignados);
     if (!baja.ok) return res.status(409).json({ ok: false, error: baja.error });
+    if (auditoriaCoreExigida() && motivo) {
+      const operacion = await ejecutarOperacionCoreAuditada({
+        actorId: admin.contexto.usuarioId, empresaId,
+        empresaNombre: String(empresa.fields.NOMBRE_COMERCIAL || admin.contexto.empresa.clave),
+        accion: "SUCURSAL_DESACTIVAR", recursoTipo: "SUCURSAL", recursoId: id,
+        motivo, anterior: snapshotSucursal(actual), propuesto: snapshotSucursal({ ...actual, activa: false }),
+        escribir: async () => { await escribirRegistro(base, tablaSucursales, token, "PATCH", baja.campos, id); },
+        releer: async () => {
+          const registrada = await leerRegistro(base, tablaSucursales, id, token);
+          if (idsRelacion(registrada.fields.EMPRESA)?.[0] !== empresaId ||
+              typeof registrada.fields.NOMBRE !== "string" || typeof registrada.fields.ACTIVA !== "boolean")
+            throw new Error("Sucursal no verificable");
+          return { estado: snapshotSucursal({ id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA }),
+            dato: { id, nombre: registrada.fields.NOMBRE, activa: registrada.fields.ACTIVA } };
+        },
+      });
+      return res.status(200).json({ ok: true, sucursal: operacion.dato, operacionId: operacion.operacionId });
+    }
     const actualizado = await escribirRegistro(base, tablaSucursales, token, "PATCH", baja.campos, id);
     if (actualizado.fields.ACTIVA !== false) throw new Error("No se pudo confirmar la desactivación");
     return res.status(200).json({ ok: true, sucursal: { id, nombre: actual.nombre, activa: false } });
   } catch (error) {
+    if (error instanceof ErrorAuditoriaCore) {
+      console.error("Core: incidente de auditoría de sucursales", { codigo: error.codigo, operacionId: error.operacionId });
+      return res.status(503).json({ ok: false, operacionId: error.operacionId,
+        puedeEstarAplicado: error.puedeEstarAplicado,
+        error: "La auditoría no se pudo confirmar; verificá el historial antes de reintentar" });
+    }
     console.error("Paso 11B:", error);
     return res.status(503).json({ ok: false, error: "No se pudo gestionar las sucursales" });
   } finally {

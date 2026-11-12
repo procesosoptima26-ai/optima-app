@@ -35,6 +35,13 @@ export type EstadoTecnicoAuditoria = Readonly<{
   MODULOS_CONTRATADOS?: readonly string[];
   ACTIVA?: boolean;
   VERSION?: string;
+  /** Core: snapshots limitados, sin datos personales, credenciales ni tokens. */
+  SUCURSALES?: readonly string[];
+  SUCURSAL_PRINCIPAL?: string;
+  MODULOS_HABILITADOS?: readonly string[];
+  PERMISOS?: readonly string[];
+  NOMBRE_SUCURSAL?: string;
+  SUCURSAL_ID?: string;
 }>;
 
 export type EntradaAuditoria = Readonly<{
@@ -91,7 +98,9 @@ function snapshot(valor: unknown): string {
   if (!valor || typeof valor !== "object" || Array.isArray(valor)) return invalido();
   const campos = valor as Record<string, unknown>;
   const keys = Object.keys(campos);
-  if (!keys.length || keys.some(k => !["MODULOS_CONTRATADOS", "ACTIVA", "VERSION"].includes(k))) return invalido();
+  const aceptados = ["MODULOS_CONTRATADOS", "ACTIVA", "VERSION", "SUCURSALES",
+    "SUCURSAL_PRINCIPAL", "MODULOS_HABILITADOS", "PERMISOS", "NOMBRE_SUCURSAL", "SUCURSAL_ID"];
+  if (!keys.length || keys.some(k => !aceptados.includes(k))) return invalido();
   const limpio: Record<string, unknown> = {};
   for (const key of keys) {
     const v = campos[key];
@@ -99,6 +108,23 @@ function snapshot(valor: unknown): string {
       if (!Array.isArray(v) || v.length > 30 || !v.every(x => typeof x === "string" &&
           x.length >= 2 && x.length <= 80 && ETIQUETAS_MODULOS.has(x))) return invalido();
       limpio[key] = [...v];
+    } else if (key === "SUCURSALES") {
+      if (!Array.isArray(v) || v.length > 100 || !v.every(x => typeof x === "string" && ID_REGISTRO.test(x)) ||
+          new Set(v).size !== v.length) return invalido();
+      limpio[key] = [...v];
+    } else if (key === "SUCURSAL_PRINCIPAL" || key === "SUCURSAL_ID") {
+      if (typeof v !== "string" || !ID_REGISTRO.test(v)) return invalido();
+      limpio[key] = v;
+    } else if (key === "MODULOS_HABILITADOS") {
+      if (!Array.isArray(v) || v.length > 30 || !v.every(x => typeof x === "string" &&
+          x.length <= 80 && ETIQUETAS_MODULOS.has(x)) || new Set(v).size !== v.length) return invalido();
+      limpio[key] = [...v];
+    } else if (key === "PERMISOS") {
+      if (!Array.isArray(v) || v.length > 60 || !v.every(x => typeof x === "string" &&
+          /^[a-z]+\.[a-zA-Z]+$/.test(x) && x.length <= 80) || new Set(v).size !== v.length) return invalido();
+      limpio[key] = [...v];
+    } else if (key === "NOMBRE_SUCURSAL") {
+      limpio[key] = texto(v, 80);
     } else if (key === "ACTIVA") {
       if (typeof v !== "boolean") return invalido();
       limpio[key] = v;

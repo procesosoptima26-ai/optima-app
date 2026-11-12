@@ -6,6 +6,7 @@
  */
 import { crearOperacionAuditoria, registrarEventoAuditoria,
   type ActorAuditoria, type EntradaAuditoria, type EstadoTecnicoAuditoria } from "./auditoria-eventos.js";
+import { ejecutarConPuertaAuditoriaGlobal, type DependenciasPuertaGlobal } from "./puerta-auditoria-core-global.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 export type AccionIdentidad = "USUARIO_INVITAR" | "USUARIO_ACTIVAR" | "USUARIO_RESTABLECER_CLAVE";
@@ -37,6 +38,8 @@ export type OperacionIdentidadAuditada<T> = Readonly<{
   falloSinEfecto?: () => boolean;
   /** Para pruebas sin conexión a proveedores. */
   registrar?: typeof registrarEventoAuditoria;
+  /** Sólo para inyección de proveedores falsos en las pruebas. */
+  controlGlobal?: DependenciasPuertaGlobal;
 }>;
 
 function coincide(observado: EstadoTecnicoAuditoria | null, esperado: EstadoTecnicoAuditoria): boolean {
@@ -56,6 +59,7 @@ export async function ejecutarIdentidadAuditada<T>(p: OperacionIdentidadAuditada
       !p.anterior || !p.propuesto) {
     throw new ErrorAuditoriaIdentidad("AUDITORIA_INICIO", operacionId, false);
   }
+  return ejecutarConPuertaAuditoriaGlobal(p.empresaId, async (renovarAntesDeEscribir) => {
   const registrar = p.registrar ?? registrarEventoAuditoria;
   const comun: Omit<EntradaAuditoria, "resultado" | "detalle" | "anterior" | "nuevo"> = {
     operacionId, actor: p.actor, empresaId: p.empresaId, empresaNombre: p.empresaNombre,
@@ -69,7 +73,7 @@ export async function ejecutarIdentidadAuditada<T>(p: OperacionIdentidadAuditada
     throw new ErrorAuditoriaIdentidad("AUDITORIA_INICIO", operacionId, false);
   }
   let errorEscritura = false;
-  try { await p.escribir(); } catch { errorEscritura = true; }
+  try { await renovarAntesDeEscribir(); await p.escribir(); } catch { errorEscritura = true; }
   let observado: Awaited<ReturnType<typeof p.releer>> | null = null;
   try { observado = await p.releer(); } catch { /* Estado incierto: no se reintenta */ }
   const confirmado = coincide(observado?.estado ?? null, p.propuesto);
@@ -85,6 +89,7 @@ export async function ejecutarIdentidadAuditada<T>(p: OperacionIdentidadAuditada
   if (confirmado && observado) return { operacionId, dato: observado.dato };
   throw new ErrorAuditoriaIdentidad(noAplicado ? "OPERACION_NO_CONFIRMADA" : "OPERACION_INDETERMINADA",
     operacionId, !noAplicado);
+  }, p.controlGlobal);
 }
 
 /** Marcadores de usuario: sólo estado y rec-ID; jamás datos de autenticación. */

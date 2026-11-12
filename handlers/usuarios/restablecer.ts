@@ -5,6 +5,7 @@ import { validarClaveNueva } from "../../lib/invitaciones.js";
 import { leerUsuario, actualizarPasswordUsuario } from "../../lib/usuarios-maestros.js";
 import { consultarRecuperacion, bloquearRecuperacion, liberarRecuperacion, anularRecuperacion, huellaPassword } from "../../lib/recuperacion.js";
 import { revocarSesionesUsuario } from "../../lib/session.js";
+import { ErrorPuertaAuditoriaGlobal } from "../../lib/puerta-auditoria-core-global.js";
 import { auditoriaCoreExigida } from "../../lib/auditoria-core-transversal.js";
 import { ejecutarIdentidadAuditada, snapshotIdentidad, ErrorAuditoriaIdentidad } from "../../lib/auditoria-identidad-core.js";
 
@@ -73,6 +74,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     catch (error) { console.error("No se pudo anular enlace ya usado:", error); }
     return res.status(200).json({ ok: true, mensaje: "Contraseña actualizada. Ya podés iniciar sesión." });
   } catch (error) {
+    if (error instanceof ErrorPuertaAuditoriaGlobal) {
+      const conflicto = error.codigo === "INCIDENCIAS" || error.codigo === "OCUPADA";
+      return res.status(conflicto ? 409 : 503).json({ ok: false,
+        error: conflicto
+          ? "La empresa tiene una operación auditada pendiente o en curso; revisá el historial antes de reintentar"
+          : "No se pudo verificar el bloqueo preventivo de auditoría; no se ejecutaron nuevos cambios" });
+    }
     if (error instanceof ErrorAuditoriaIdentidad) {
       console.error("Auditoría recuperación", { codigo: error.codigo, operacionId: error.operacionId });
       return res.status(503).json({ ok: false, operacionId: error.operacionId,

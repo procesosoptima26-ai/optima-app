@@ -9,6 +9,7 @@ import {
   crearOperacionAuditoria, registrarEventoAuditoria,
   type EstadoTecnicoAuditoria, type EntradaAuditoria,
 } from "./auditoria-eventos.js";
+import { ejecutarConPuertaAuditoriaGlobal, type DependenciasPuertaGlobal } from "./puerta-auditoria-core-global.js";
 
 export type SnapshotCore = EstadoTecnicoAuditoria;
 export type EventoCoreAccion =
@@ -25,7 +26,8 @@ export class ErrorAuditoriaCore extends Error {
 }
 
 export function auditoriaCoreExigida(): boolean {
-  return process.env.OPTIMA_CORE_AUDIT_ENFORCE_ENABLED === "true";
+  return process.env.OPTIMA_CORE_AUDIT_ENFORCE_ENABLED === "true" ||
+    process.env.OPTIMA_CORE_AUDIT_GLOBAL_GATE_ENABLED === "true";
 }
 
 export function motivoAuditoriaCore(valor: unknown): string | null {
@@ -61,6 +63,8 @@ export type OperacionAuditadaCore<T> = Readonly<{
   releer: () => Promise<{ estado: SnapshotCore; dato: T }>;
   /** Únicamente para pruebas aisladas, sin acceder a proveedores. */
   registrar?: typeof registrarEventoAuditoria;
+  /** Inyección de control únicamente para simulaciones aisladas. */
+  controlGlobal?: DependenciasPuertaGlobal;
 }>;
 
 export async function ejecutarOperacionCoreAuditada<T>(p: OperacionAuditadaCore<T>): Promise<{
@@ -72,6 +76,7 @@ export async function ejecutarOperacionCoreAuditada<T>(p: OperacionAuditadaCore<
       !p.anterior || !p.propuesto) {
     throw new ErrorAuditoriaCore("AUDITORIA_INICIO", operacionId, false);
   }
+  return ejecutarConPuertaAuditoriaGlobal(p.empresaId, async (renovarAntesDeEscribir) => {
   const registrar = p.registrar ?? registrarEventoAuditoria;
   const comun: Omit<EntradaAuditoria, "resultado" | "detalle" | "anterior" | "nuevo"> = {
     operacionId,
@@ -93,7 +98,7 @@ export async function ejecutarOperacionCoreAuditada<T>(p: OperacionAuditadaCore<
   }
 
   let falloEscritura = false;
-  try { await p.escribir(); } catch { falloEscritura = true; }
+  try { await renovarAntesDeEscribir(); await p.escribir(); } catch { falloEscritura = true; }
   let observado: Awaited<ReturnType<typeof p.releer>> | null = null;
   try { observado = await p.releer(); } catch { /* incidencia indeterminada */ }
   const confirmado = equivalen(observado?.estado ?? null, p.propuesto);
@@ -109,4 +114,5 @@ export async function ejecutarOperacionCoreAuditada<T>(p: OperacionAuditadaCore<
   if (confirmado && observado) return { operacionId, dato: observado.dato };
   throw new ErrorAuditoriaCore(noAplicado ? "CAMBIO_NO_CONFIRMADO" : "CAMBIO_INDETERMINADO",
     operacionId, !noAplicado);
+  }, p.controlGlobal);
 }

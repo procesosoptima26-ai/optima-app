@@ -5,6 +5,7 @@ import { prepararAltaSucursal, prepararCambioNombreSucursal,
 import { evaluarCambioSucursal } from "../../core/control-cambios-sucursales.js";
 import { bloquearAltaSucursal, liberarAltaSucursal } from "../../lib/bloqueo-sucursales.js";
 import { snapshotSucursal } from "../../core/snapshots-auditoria-core.js";
+import { ErrorPuertaAuditoriaGlobal } from "../../lib/puerta-auditoria-core-global.js";
 import { auditoriaCoreExigida, ejecutarOperacionCoreAuditada,
   motivoAuditoriaCore, ErrorAuditoriaCore } from "../../lib/auditoria-core-transversal.js";
 
@@ -245,6 +246,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (actualizado.fields.ACTIVA !== false) throw new Error("No se pudo confirmar la desactivación");
     return res.status(200).json({ ok: true, sucursal: { id, nombre: actual.nombre, activa: false } });
   } catch (error) {
+    if (error instanceof ErrorPuertaAuditoriaGlobal) {
+      const conflicto = error.codigo === "INCIDENCIAS" || error.codigo === "OCUPADA";
+      return res.status(conflicto ? 409 : 503).json({ ok: false,
+        error: conflicto
+          ? "La empresa tiene una operación auditada pendiente o en curso; revisá el historial antes de reintentar"
+          : "No se pudo verificar el bloqueo preventivo de auditoría; no se ejecutaron nuevos cambios" });
+    }
     if (error instanceof ErrorAuditoriaCore) {
       console.error("Core: incidente de auditoría de sucursales", { codigo: error.codigo, operacionId: error.operacionId });
       return res.status(503).json({ ok: false, operacionId: error.operacionId,

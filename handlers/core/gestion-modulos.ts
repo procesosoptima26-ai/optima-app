@@ -6,6 +6,8 @@ import { leerEstadoModulos, prepararCambioModulo } from "../../core/gestion-modu
 import { bloquearModulos, liberarModulos, renovarBloqueoModulos } from "../../lib/bloqueo-modulos.js";
 import { ejecutarCambioModulosAuditado, ErrorCambioAuditado } from "../../lib/cambio-modulos-auditado.js";
 import { consultarIncidenciasAuditoria, ErrorConsultaAuditoria } from "../../lib/conciliacion-modulos.js";
+import { consultarAuditoriaGlobal } from "../../lib/conciliacion-core-global.js";
+import { puertaGlobalHabilitada, ErrorPuertaAuditoriaGlobal } from "../../lib/puerta-auditoria-core-global.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 type Registro = { id: string; fields: Record<string, unknown> };
@@ -63,16 +65,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ ok: false, error: "Versión de empresa inválida" });
     if (typeof cuerpo.modulo !== "string" || typeof cuerpo.accion !== "string")
       return res.status(400).json({ ok: false, error: "Módulo o acción inválidos" });
+    if (puertaGlobalHabilitada() && process.env.OPTIMA_CORE_AUDIT_ENFORCE_ENABLED !== "true")
+      return res.status(503).json({ ok: false, error: "Bloqueo global sin configuración de auditoría Core; no se modificaron módulos" });
     const cfg = config();
     owner = await bloquearModulos(empresaId);
     if (!owner) return res.status(409).json({ ok: false, error: "Ya existe un cambio de módulos en proceso" });
     // 12B.4.2: bloqueo preventivo bajo el mismo lock por empresa.
     // Si el historial no es íntegro, está pendiente o no puede consultarse,
     // jamás consultar/cambiar módulos ni crear un nuevo evento INTENTO.
-    const historial = await consultarIncidenciasAuditoria(empresaId);
+    const historial = puertaGlobalHabilitada()
+      ? await consultarAuditoriaGlobal(empresaId)
+      : await consultarIncidenciasAuditoria(empresaId);
     if (historial.bloqueada)
       return res.status(409).json({ ok: false,
-        error: "Hay operaciones de módulos pendientes o inconsistentes; deben conciliarse antes de modificar esta empresa",
+        error: "Hay operaciones auditadas pendientes o inconsistentes; revisá el historial antes de modificar esta empresa",
         incidenciasPendientes: historial.incidencias.length });
     const actual = await consultar(empresaId, cfg);
     if (actual.fields.ACTIVA !== true)
@@ -127,6 +133,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       operacionId: resultado.operacionId,
       mensaje: "Habilitaciones técnicas actualizadas y auditadas" });
   } catch (error) {
+    if (error instanceof ErrorPuertaAuditoriaGlobal) return res.status(503).json({ ok: false,
+      error: "Bloqueo global de auditoría no disponible; no se modificaron módulos" });
     if (error instanceof ErrorConsultaAuditoria) {
       console.error("12B.4.2: lectura de auditoría no disponible", { codigo: error.codigo, empresaId });
       return res.status(503).json({ ok: false,

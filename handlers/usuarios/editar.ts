@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { autenticarAdministrador, leerUsuario, airtableUsuarios } from "../../lib/usuarios-maestros.js";
 import { construirCambiosEmpleado, leerEmpleadoEditable } from "../../core/edicion-usuarios.js";
 import { snapshotAccesosEmpleado } from "../../core/snapshots-auditoria-core.js";
+import { ErrorPuertaAuditoriaGlobal } from "../../lib/puerta-auditoria-core-global.js";
 import { auditoriaCoreExigida, ejecutarOperacionCoreAuditada,
   motivoAuditoriaCore, ErrorAuditoriaCore } from "../../lib/auditoria-core-transversal.js";
 
@@ -88,6 +89,13 @@ export async function editarEmpleado(req: VercelRequest, res: VercelResponse) {
     if (!verificado) throw new Error("Airtable devolvió accesos inconsistentes");
     return res.status(200).json({ ok: true, empleado: verificado, mensaje: "Accesos actualizados" });
   } catch (error) {
+    if (error instanceof ErrorPuertaAuditoriaGlobal) {
+      const conflicto = error.codigo === "INCIDENCIAS" || error.codigo === "OCUPADA";
+      return res.status(conflicto ? 409 : 503).json({ ok: false,
+        error: conflicto
+          ? "La empresa tiene una operación auditada pendiente o en curso; revisá el historial antes de reintentar"
+          : "No se pudo verificar el bloqueo preventivo de auditoría; no se ejecutaron nuevos cambios" });
+    }
     if (error instanceof ErrorAuditoriaCore) {
       console.error("Core: incidente de auditoría de accesos", { codigo: error.codigo, operacionId: error.operacionId });
       return res.status(503).json({ ok: false, operacionId: error.operacionId,

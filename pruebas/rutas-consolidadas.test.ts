@@ -28,7 +28,8 @@ test("rutas consolidadas conservan los endpoints y menos de 12 funciones", () =>
     .filter((e) => e.isFile() && e.name.endsWith(".ts")).length;
   const administrativos = readdirSync("api/administracion", {withFileTypes: true})
     .filter((e) => e.isFile() && e.name.endsWith(".ts")).length;
-  assert.equal(ficheros + administrativos, 10);
+  assert.equal(ficheros + administrativos, 11);
+  assert.ok(ficheros + administrativos < 12);
 });
 
 test("routers: rutas inexistentes fallan cerradas y cada accion conserva su metodo", async () => {

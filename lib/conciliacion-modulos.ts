@@ -13,7 +13,7 @@ const FINALES = new Set(["CONFIRMADO", "FALLIDO"]);
 const MAX_PAGINAS = 50;
 const MAX_EVENTOS = 5000;
 const CAMPOS = ["ID_EVENTO", "OPERACION_ID", "EMPRESA_ID", "ACTOR_USUARIO_ID", "MODULO", "ACCION",
-  "RECURSO_TIPO", "RECURSO_ID", "RESULTADO", "ESTADO_ANTERIOR", "ESTADO_NUEVO", "DETALLE", "ESQUEMA_VERSION"] as const;
+  "RECURSO_TIPO", "RECURSO_ID", "RESULTADO", "ESTADO_ANTERIOR", "ESTADO_NUEVO", "DETALLE", "ESQUEMA_VERSION", "ACTOR_TIPO"] as const;
 
 export type RegistroAuditoriaAirtable = Readonly<{ id: string; fields: Record<string, unknown> }>;
 type RegistroAirtable = RegistroAuditoriaAirtable;

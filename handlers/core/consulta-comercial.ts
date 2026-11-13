@@ -70,7 +70,7 @@ export function crearConsultaComercial(deps: DependenciasConsultaComercial) {
         return;
       }
       const lectura = await deps.buscarContrato(empresaId);
-      if (!lectura.ok) {
+      if (lectura.ok === false) {
         if (lectura.motivo === "SIN_CONTRATO" || lectura.motivo === "NO_VIGENTE") {
           res.status(200).json({
             ok: true, soloConsulta: true, accesoOperativoHabilitado: false,

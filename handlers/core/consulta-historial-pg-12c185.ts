@@ -44,7 +44,7 @@ export function crearConsultaHistorialComercial185(deps:DependenciasConsulta185)
         res.status(404).json({ok:false,error:'Empresa no encontrada'});return;
       }
       const result=await leerHistorialComercialPg185(deps.pool,q.empresaId,q.idContrato);
-      if(!result.ok){
+      if(result.ok === false){
         if(result.motivo==='NO_ENCONTRADO'){
           res.status(404).json({ok:false,error:'No se encontró el contrato'});return;
         }

@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const validacion = validarSolicitudEstado(req.body);
-  if (!validacion.ok) return res.status(400).json({ ok: false, error: validacion.error });
+  if (validacion.ok === false) return res.status(400).json({ ok: false, error: validacion.error });
   const { id, activo, version, motivo } = validacion.datos;
   try {
     const registro = await leerUsuario(id);

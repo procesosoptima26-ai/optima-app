@@ -86,7 +86,7 @@ export async function consultarContratacionVigenteAirtable(
   const preliminar = leerContratacionVigente(
     [], consulta.empresaId, consulta.catalogoSubmodulos, consulta.ahoraIso,
   );
-  if (preliminar.ok || preliminar.motivo !== "SIN_CONTRATO" ||
+  if (preliminar.ok === true || (preliminar.ok === false && preliminar.motivo !== "SIN_CONTRATO") ||
       !validarContrataciones([], consulta.catalogoSubmodulos).ok) {
     return { ok: false, motivo: "CONFIGURACION_INVALIDA" };
   }

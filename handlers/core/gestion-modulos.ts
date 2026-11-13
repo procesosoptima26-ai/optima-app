@@ -84,11 +84,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (actual.fields.ACTIVA !== true)
       return res.status(409).json({ ok: false, error: "La empresa está inactiva" });
     const estado = leerEstadoModulos(empresaId, actual.fields.ACTIVA, actual.fields.MODULOS_CONTRATADOS);
-    if (!estado.ok) return res.status(409).json({ ok: false, error: estado.error });
+    if (estado.ok === false) return res.status(409).json({ ok: false, error: estado.error });
     if (cuerpo.version !== estado.estado.version)
       return res.status(409).json({ ok: false, error: "La configuración cambió; actualizá antes de guardar" });
     const cambio = prepararCambioModulo(estado.estado, cuerpo.modulo, cuerpo.accion);
-    if (!cambio.ok) return res.status(409).json({ ok: false, error: cambio.error });
+    if (cambio.ok === false) return res.status(409).json({ ok: false, error: cambio.error });
     // Segunda lectura inmediatamente antes de escribir. El bloqueo es por esta API;
     // no hay transacción atómica con ediciones externas de Airtable.
     const relectura = await consultar(empresaId, cfg);

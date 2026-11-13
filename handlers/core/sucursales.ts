@@ -138,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "POST") {
       const alta = prepararAltaSucursal(req.body.nombre, empresaId, sucursales);
-      if (!alta.ok) return res.status(400).json({ ok: false, error: alta.error });
+      if (alta.ok === false) return res.status(400).json({ ok: false, error: alta.error });
       if (auditoriaCoreExigida() && motivo) {
         let idCreada: string | null = null;
         const operacion = await ejecutarOperacionCoreAuditada({
@@ -188,7 +188,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (req.method === "PATCH") {
       const cambio = prepararCambioNombreSucursal(id, req.body.nombre, sucursales);
-      if (!cambio.ok) return res.status(400).json({ ok: false, error: cambio.error });
+      if (cambio.ok === false) return res.status(400).json({ ok: false, error: cambio.error });
       if (auditoriaCoreExigida() && motivo) {
         const operacion = await ejecutarOperacionCoreAuditada({
           actorId: admin.contexto.usuarioId, empresaId,
@@ -223,7 +223,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ok: false, error: "La sucursal tiene ubicaciones e historial operativo; no se puede desactivar directamente",
       });
     const baja = prepararDesactivacionSucursal(id, sucursales, actual.usuariosAsignados);
-    if (!baja.ok) return res.status(409).json({ ok: false, error: baja.error });
+    if (baja.ok === false) return res.status(409).json({ ok: false, error: baja.error });
     if (auditoriaCoreExigida() && motivo) {
       const operacion = await ejecutarOperacionCoreAuditada({
         actorId: admin.contexto.usuarioId, empresaId,

@@ -44,7 +44,7 @@ export async function editarEmpleado(req: VercelRequest, res: VercelResponse) {
 
   // Nunca se aceptan cambios de empresa, rol, activo, nombre ni contraseña.
   const cambios = construirCambiosEmpleado(req.body, admin.opciones);
-  if (!cambios.ok) return res.status(400).json({ ok: false, error: cambios.error });
+  if (cambios.ok === false) return res.status(400).json({ ok: false, error: cambios.error });
   try {
     const registro = await leerUsuario(id);
     const detalle = leerEmpleadoEditable(registro, admin.contexto.empresa.id,

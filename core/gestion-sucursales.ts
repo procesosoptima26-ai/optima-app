@@ -74,7 +74,7 @@ export function prepararAltaSucursal(
   }
 
   const validacion = validarNombre(nombre, existentes);
-  if (!validacion.ok) return validacion;
+  if (validacion.ok === false) return { ok: false, error: validacion.error };
 
   return {
     ok: true,
@@ -104,7 +104,7 @@ export function prepararCambioNombreSucursal(
     sucursalId
   );
 
-  if (!validacion.ok) return validacion;
+  if (validacion.ok === false) return { ok: false, error: validacion.error };
 
   return {
     ok: true,

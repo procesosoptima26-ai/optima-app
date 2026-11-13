@@ -39,7 +39,7 @@ function esRegistro(valor: unknown): valor is Record<string, unknown> {
 
 function tieneClavesExactas(registro: Record<string, unknown>, esperadas: readonly string[]): boolean {
   const claves = Object.keys(registro);
-  return claves.length === esperadas.length && esperadas.every((clave) => Object.hasOwn(registro, clave));
+  return claves.length === esperadas.length && esperadas.every((clave) => Object.prototype.hasOwnProperty.call(registro, clave));
 }
 
 function esModulo(valor: unknown): valor is ModuloComercial {

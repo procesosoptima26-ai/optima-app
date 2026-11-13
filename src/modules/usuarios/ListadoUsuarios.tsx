@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import EditarAccesos from "./EditarAccesos";
+import GestionEstado from "./GestionEstado";
 
 type Usuario = {
   id: string;
@@ -17,6 +18,7 @@ export default function ListadoUsuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [consulta, setConsulta] = useState("");
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<string | null>(null);
+  const [estadoSeleccionado, setEstadoSeleccionado] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
@@ -49,7 +51,7 @@ export default function ListadoUsuarios() {
   return (
     <section style={{ marginTop: 24, padding: 20, border: "1px solid #ddd", borderRadius: 12 }}>
       <h3>Usuarios de mi empresa</h3>
-      <p style={{ color: "#475569" }}>Consulta de usuarios y accesos. No se realizan modificaciones desde este listado.</p>
+      <p style={{ color: "#475569" }}>Consulta de usuarios y accesos. Los cambios de estado requieren confirmación y auditoría habilitada.</p>
       <div style={{ display: "flex", gap: 12, alignItems: "end", flexWrap: "wrap", marginBottom: 12 }}>
         <label style={{ flex: "1 1 220px" }}>Buscar por usuario, nombre o correo
           <input type="search" value={consulta} onChange={(e) => setConsulta(e.target.value)}
@@ -85,11 +87,15 @@ export default function ListadoUsuarios() {
               <td style={{ padding: "6px 8px", borderBottom: "1px solid #e2e8f0" }}>
                 {u.rol === "USUARIO" && <button type="button" onClick={() => setEmpleadoSeleccionado(u.id)}
                   style={{ fontSize: 12, padding: "5px 8px" }}>Editar accesos</button>}
+                {u.rol === "USUARIO" && <button type="button" onClick={() => setEstadoSeleccionado(u.id)}
+                  style={{ fontSize: 12, padding: "5px 8px", marginLeft: 6 }}>Gestionar estado</button>}
               </td>
             </tr>)}</tbody>
           </table>
         </div>
       ))}
+      {estadoSeleccionado && <GestionEstado key={estadoSeleccionado} id={estadoSeleccionado}
+        onCerrar={() => setEstadoSeleccionado(null)} onGuardado={() => setVersion((n) => n + 1)} />}
       {empleadoSeleccionado && <EditarAccesos key={empleadoSeleccionado} id={empleadoSeleccionado}
         onCerrar={() => setEmpleadoSeleccionado(null)} onGuardado={() => setVersion((n) => n + 1)} />}
     </section>

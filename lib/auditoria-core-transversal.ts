@@ -13,7 +13,7 @@ import { ejecutarConPuertaAuditoriaGlobal, type DependenciasPuertaGlobal } from 
 
 export type SnapshotCore = EstadoTecnicoAuditoria;
 export type EventoCoreAccion =
-  "USUARIO_EDITAR_ACCESOS" | "SUCURSAL_CREAR" | "SUCURSAL_RENOMBRAR" | "SUCURSAL_DESACTIVAR";
+  "USUARIO_EDITAR_ACCESOS" | "USUARIO_ACTIVAR" | "USUARIO_DESACTIVAR" | "SUCURSAL_CREAR" | "SUCURSAL_RENOMBRAR" | "SUCURSAL_DESACTIVAR";
 export type FaseErrorCore = "AUDITORIA_INICIO" | "AUDITORIA_FINAL" |
   "CAMBIO_NO_CONFIRMADO" | "CAMBIO_INDETERMINADO";
 
@@ -37,7 +37,7 @@ export function motivoAuditoriaCore(valor: unknown): string | null {
 }
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
-const ACCIONES: readonly EventoCoreAccion[] = ["USUARIO_EDITAR_ACCESOS", "SUCURSAL_CREAR",
+const ACCIONES: readonly EventoCoreAccion[] = ["USUARIO_EDITAR_ACCESOS", "USUARIO_ACTIVAR", "USUARIO_DESACTIVAR", "SUCURSAL_CREAR",
   "SUCURSAL_RENOMBRAR", "SUCURSAL_DESACTIVAR"];
 
 function equivalen(a: SnapshotCore | null, b: SnapshotCore): boolean {

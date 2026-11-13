@@ -47,9 +47,11 @@ export async function buscarUsuarioParaRecuperacion(usuario: string, email: stri
   const limpio = usuario.trim().toUpperCase();
   if (!/^[A-Z0-9._-]{3,40}$/.test(limpio) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null;
   const seguro = limpio.toLowerCase();
-  const q = new URLSearchParams({ filterByFormula: `LOWER({USUARIO})="${seguro}"`, maxRecords: "1" });
+  const q = new URLSearchParams({ filterByFormula: `LOWER({USUARIO})="${seguro}"`, maxRecords: "2" });
   const r = await airtableUsuarios("GET", `?${q}`);
-  const registro = Array.isArray(r.records) ? r.records[0] as RegistroAirtable | undefined : undefined;
+  // Coherente con login: no elegir arbitrariamente una identidad duplicada.
+  if (!Array.isArray(r.records) || r.records.length !== 1) return null;
+  const registro = r.records[0] as RegistroAirtable | undefined;
   if (!registro || !ID.test(registro.id) || !registro.fields ||
       registro.fields.ACTIVO !== true ||
       typeof registro.fields.Email !== "string" || registro.fields.Email.trim().toLowerCase() !== email ||

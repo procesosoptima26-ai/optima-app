@@ -15,6 +15,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!validarClaveNueva(password)) {
     return res.status(400).json({ ok: false, error: "Usá una contraseña de 8 a 128 caracteres, con al menos una letra, un número y un símbolo" });
   }
+  if (process.env.OPTIMA_INVITES_ENABLED !== "true")
+    return res.status(503).json({ ok: false, error: "Activación de invitaciones todavía no habilitada" });
   let propietario: string | null = null;
   try {
     const invitacion = await consultarInvitacion(token);

@@ -5,6 +5,8 @@ import { leerUsuario } from "../../lib/usuarios-maestros.js";
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader("Cache-Control", "no-store");
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "Método no permitido" });
+  if (process.env.OPTIMA_INVITES_ENABLED !== "true")
+    return res.status(503).json({ ok: false, error: "Invitaciones todavía no habilitadas" });
   const token = typeof req.body?.token === "string" ? req.body.token : "";
   try {
     const invitacion = await consultarInvitacion(token);

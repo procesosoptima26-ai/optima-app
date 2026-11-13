@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import EditarAccesos from "./EditarAccesos";
 import GestionEstado from "./GestionEstado";
+import HistorialAuditoria from "./HistorialAuditoria";
 
 type Usuario = {
   id: string;
@@ -20,6 +21,7 @@ export default function ListadoUsuarios() {
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState<string | null>(null);
   const [estadoSeleccionado, setEstadoSeleccionado] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const [mostrarAuditoria, setMostrarAuditoria] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
@@ -59,6 +61,8 @@ export default function ListadoUsuarios() {
         </label>
         <button type="button" onClick={() => setVersion((n) => n + 1)} disabled={cargando}
           style={{ padding: "10px 14px" }}>{cargando ? "Consultando..." : "Actualizar listado"}</button>
+        <button type="button" onClick={() => setMostrarAuditoria(x => !x)}
+          style={{ padding: "10px 14px" }}>{mostrarAuditoria ? "Ocultar auditoría" : "Ver historial de auditoría"}</button>
       </div>
       {error && <p role="alert" style={{ color: "#a00" }}>{error}</p>}
       {!error && <p role="status" style={{ color: "#475569", fontSize: 14 }}>
@@ -94,6 +98,7 @@ export default function ListadoUsuarios() {
           </table>
         </div>
       ))}
+      {mostrarAuditoria && <HistorialAuditoria onCerrar={() => setMostrarAuditoria(false)} />}
       {estadoSeleccionado && <GestionEstado key={estadoSeleccionado} id={estadoSeleccionado}
         onCerrar={() => setEstadoSeleccionado(null)} onGuardado={() => setVersion((n) => n + 1)} />}
       {empleadoSeleccionado && <EditarAccesos key={empleadoSeleccionado} id={empleadoSeleccionado}

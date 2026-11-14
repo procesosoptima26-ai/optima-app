@@ -18,8 +18,9 @@ import activar from "../handlers/usuarios/activar.js";
 import solicitar_recuperacion from "../handlers/usuarios/solicitar-recuperacion.js";
 import restablecer from "../handlers/usuarios/restablecer.js";
 import { consultaContratoCoreReal195 } from "../handlers/core/consulta-contratos-pg-12c195.js";
+import { contratoBorradorCore197, contratoAprobarCore197, contratoActivarCore197 } from "../handlers/core/escritura-contratos-pg-12c197.js";
 
-const handlers = { empresa, plataforma, consulta_comercial, contratos_core: consultaContratoCoreReal195, gestion_modulos, conciliacion_modulos, conciliacion_core_global, sucursales, opciones, listar, estado, historial_auditoria, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
+const handlers = { empresa, plataforma, consulta_comercial, contratos_core: consultaContratoCoreReal195, contrato_borrador: contratoBorradorCore197, contrato_aprobar: contratoAprobarCore197, contrato_activar: contratoActivarCore197, gestion_modulos, conciliacion_modulos, conciliacion_core_global, sucursales, opciones, listar, estado, historial_auditoria, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
   "solicitar-recuperacion": solicitar_recuperacion, restablecer };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

@@ -65,6 +65,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const autorizado = await exigirAutorizacion(req, res, {
       modulos: ["INVENTARIO"],
       permiso: "inventario.ver",
+      capacidadComercial: "inventario.productos.consultar",
     });
     if (!autorizado) return;
 

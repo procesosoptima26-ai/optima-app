@@ -13,6 +13,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { buscarSesion, leerTokenSesion, borrarCookieSesion } from "./session.js";
 import { sucursalSolicitada as resolverSucursalOperativa } from "./alcance-operativo.js";
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
+import { autorizarCapacidadOperativaReal } from "../core/autorizacion-comercial-operativa-12c19.js";
 import { puedeRealizarAccion, MODULO_DEL_PERMISO,
   type ContextoCore, type Modulo, type Permiso, MODULOS } from "../core/seguridad.js";
 
@@ -35,6 +36,8 @@ type OpcionesAutorizacion = Readonly<{
   permiso: Permiso | readonly Permiso[];
   /** ID de sucursal preferido; se acepta nombre solo en modo piloto. */
   sucursal?: string;
+  /** ID inmutable y revisado de capacidad real: nunca se deriva del navegador. */
+  capacidadComercial?: string;
 }>;
 
 function normalizar(valor: string): string {
@@ -102,10 +105,14 @@ export async function exigirAutorizacion(
     }
 
     const solicitados = opciones.modulos.map(resolverModulo);
+    // Activación controlada: la ruta comercial exige contrato PostgreSQL Y permiso real.
+    // Si el modo se habilita, los endpoints no mapeados se bloquean, jamás se liberan.
+    const exigeComercial = process.env.OPTIMA_COMERCIAL_ENFORCE_ENABLED === "true" &&
+      solicitados.some((modulo) => modulo !== "CORE");
     if (solicitados.some((modulo) => !modulo) ||
-        !solicitados.some((modulo) => modulo &&
+        (!exigeComercial && !solicitados.some((modulo) => modulo &&
           contexto.modulosUsuario.includes(modulo) &&
-          (modulo === "CORE" || contexto.modulosEmpresa.includes(modulo)))) {
+          (modulo === "CORE" || contexto.modulosEmpresa.includes(modulo))))) {
       res.status(403).json({ ok: false, error: "No tenés acceso a este módulo" });
       return null;
     }
@@ -125,9 +132,10 @@ export async function exigirAutorizacion(
       return null;
     }
 
-    const permisosNecesarios = Array.isArray(opciones.permiso)
-      ? opciones.permiso : [opciones.permiso];
-    if (!permisosNecesarios.length || permisosNecesarios.some((permiso) => {
+    // Convertir la unión a permisos concretos antes de validarlos.
+    const permisosNecesarios: Permiso[] = typeof opciones.permiso === "string"
+      ? [opciones.permiso] : [...opciones.permiso];
+    if (!permisosNecesarios.length || (!exigeComercial && permisosNecesarios.some((permiso) => {
       const modulo = MODULO_DEL_PERMISO[permiso];
       if (!modulo || !solicitados.includes(modulo)) return true;
       // Consultas generales comprueban un ID real de sucursal autorizada.
@@ -137,9 +145,29 @@ export async function exigirAutorizacion(
         empresaId: contexto.empresa.id,
         ...(sucursalId ? { sucursalId } : {}),
       });
-    })) {
+    }))) {
       res.status(403).json({ ok: false, error: "No tenés permiso para esta acción" });
       return null;
+    }
+
+    if (exigeComercial) {
+      // Un endpoint debe declarar una sola capacidad pública, módulo y permiso.
+      // Alcance de sucursal ya verificado y reevaluado en el motor comercial.
+      const unico = solicitados.length === 1 && permisosNecesarios.length === 1 &&
+        solicitados[0] !== null && MODULO_DEL_PERMISO[permisosNecesarios[0]] === solicitados[0] &&
+        typeof opciones.capacidadComercial === "string";
+      const sucursalId = sucursalSolicitada?.id ?? sucursales[0]?.id;
+      const permitido = unico && await autorizarCapacidadOperativaReal({
+        contexto,
+        capacidad: opciones.capacidadComercial!,
+        modulo: solicitados[0]!,
+        permiso: permisosNecesarios[0],
+        recurso: { empresaId: contexto.empresa.id, ...(sucursalId ? { sucursalId } : {}) },
+      });
+      if (!permitido) {
+        res.status(403).json({ ok: false, error: "La operación no está habilitada por el contrato y los permisos" });
+        return null;
+      }
     }
 
     return {

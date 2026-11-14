@@ -1,0 +1,138 @@
+/** OPTIMA 12C.19: pruebas del guard comercial y de la consulta PostgreSQL RLS. */
+import test from "node:test";
+import assert from "node:assert/strict";
+import { autorizarCapacidadOperativa } from "../core/autorizacion-comercial-operativa-12c19.js";
+import { leerContratoOperativoPg } from "../core/contrato-vigente-pg-12c19.js";
+import type { PoolPgNode183 } from "../core/adaptador-pg-node-12c183.js";
+import type { ContextoCore } from "../core/seguridad.js";
+
+const E = "rec" + "E".repeat(14);
+const U = "rec" + "U".repeat(14);
+const S = "rec" + "S".repeat(14);
+const OTRA = "rec" + "O".repeat(14);
+const F = "2026-11-13T18:00:00.000Z";
+const activo = [{ modalidad: "MODULO_PRINCIPAL", modulo: "INVENTARIO", nivel: "ESENCIAL" }] as const;
+const individual = [{ modalidad: "SUBMODULO_INDEPENDIENTE", submodulo: "INV_PRODUCTOS", nivel: "ESTANDAR" }] as const;
+const contexto = (principal = true): ContextoCore => ({
+  usuarioId: U, activo: true,
+  empresa: { id: E, clave: "TEST", activa: true },
+  sucursalesAutorizadas: [{ id: S, nombre: "PRUEBA", activa: true, empresaId: E }],
+  modulosEmpresa: principal ? ["INVENTARIO"] : [],
+  modulosUsuario: principal ? ["INVENTARIO"] : [],
+  permisos: principal ? ["inventario.ver"] : [],
+});
+const peticion = (ctx = contexto()) => ({
+  contexto: ctx, capacidad: "inventario.productos.consultar", modulo: "INVENTARIO" as const,
+  permiso: "inventario.ver" as const, recurso: { empresaId: E, sucursalId: S },
+});
+function deps(contrato: unknown = activo, permisos: string[] = ["inventario.ver"], submodulos: string[] = []) {
+  return {
+    async consultarContrato() { return { ok: true as const, contrato: { empresaId: E, idContrato: "OPT-TEST", idVersion: "VER-TEST01", numero: 1, servicios: contrato } } as any; },
+    async consultarAsignaciones() { return { ok: true as const, usuarioId: U, empresaId: E, permisosAsignadosUsuario: permisos, submodulosHabilitadosUsuario: submodulos } as any; },
+  };
+}
+
+test("12C19: módulo principal ESENCIAL + permiso servidor -> permite consulta publicada", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(), deps()), true);
+});
+test("12C19: no concede prestaciones individuales sin permiso expreso", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(contexto(false)), deps(individual)), false);
+});
+test("12C19: submódulo independiente y asignación expresa sí funciona", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(contexto(false)), deps(individual, ["inventario.ver"], ["INV_PRODUCTOS"])), true);
+});
+test("12C19: contrato y usuario son restricciones acumulativas", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(), deps(activo, [])), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), deps([])), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), deps([{ modalidad: "MODULO_PRINCIPAL", modulo: "INVENTARIO", nivel: "NO_EXISTE" }])), false);
+});
+test("12C19: empresa, sucursal, módulo, permiso y capacidad ajenos no habilitan", async () => {
+  assert.equal(await autorizarCapacidadOperativa({ ...peticion(), recurso: { empresaId: OTRA, sucursalId: S } }, deps()), false);
+  assert.equal(await autorizarCapacidadOperativa({ ...peticion(), recurso: { empresaId: E, sucursalId: OTRA } }, deps()), false);
+  assert.equal(await autorizarCapacidadOperativa({ ...peticion(), capacidad: "inventario.inventado" }, deps()), false);
+  assert.equal(await autorizarCapacidadOperativa({ ...peticion(), permiso: "inventario.crear" }, deps()), false);
+  assert.equal(await autorizarCapacidadOperativa({ ...peticion(), modulo: "MOVIMIENTOS" }, deps()), false);
+});
+test("12C19: contrato ajeno o respuesta Airtable incoherente falla cerrado", async () => {
+  const d = deps();
+  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => ({ ok: true, contrato: { empresaId: OTRA, servicios: activo } } as any) }), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarAsignaciones: async () => ({ ok: true, usuarioId: U, empresaId: OTRA, permisosAsignadosUsuario: ["inventario.ver"], submodulosHabilitadosUsuario: [] } as any) }), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => { throw Error("BD caída"); } }), false);
+});
+
+type Simulador = { pool: PoolPgNode183; sql: string[]; liberadas: () => number };
+function simularPg(filas: readonly Record<string, unknown>[], fallo = false): Simulador {
+  const sql: string[] = [];
+  let liberadas = 0;
+  const pool: PoolPgNode183 = { async connect() { return {
+    async query(q: string, p?: unknown[]) {
+      sql.push(q);
+      if (fallo && q.includes("JOIN optima_comercial.versiones")) throw Error("BD no disponible");
+      if (q.includes("set_config")) {
+        assert.deepEqual(p, [E]);
+        return { rows: [{ empresa_id: E }], rowCount: 1 };
+      }
+      if (q.includes("JOIN optima_comercial.versiones")) {
+        assert.deepEqual(p, [E]);
+        return { rows: [...filas], rowCount: filas.length };
+      }
+      return { rows: [], rowCount: 0 };
+    },
+    release() { liberadas++; },
+  }; } };
+  return { pool, sql, liberadas: () => liberadas };
+}
+const fila = {
+  empresa_id: E, id_contrato: "OPT-TEST", revision: "2", id_version: "VER-TEST01",
+  numero: 1, estado: "VIGENTE", servicios: activo,
+  vigente_desde: "2026-11-12T15:00:00.000Z", vigente_hasta: null,
+  aprobado_por_id: U, aprobado_en: "2026-11-11T15:00:00.000Z",
+};
+test("12C19: PostgreSQL lee una foto, parametrizada, con SET LOCAL + RLS", async () => {
+  const s = simularPg([fila]);
+  const r = await leerContratoOperativoPg(s.pool, E, F);
+  assert.equal(r.ok, true);
+  assert.equal(s.sql[0], "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+  assert.equal(s.sql.some(q => q.includes("set_config('optima.empresa_id', $1, true)")), true);
+  assert.equal(s.sql.some(q => q.includes("LIMIT 2")), true);
+  assert.equal(s.sql.at(-1), "ROLLBACK");
+  assert.equal(s.liberadas(), 1);
+});
+test("12C19: cero o múltiples versiones vigentes niegan todo", async () => {
+  assert.equal((await leerContratoOperativoPg(simularPg([]).pool, E, F)).ok, false);
+  assert.equal((await leerContratoOperativoPg(simularPg([fila, { ...fila, id_contrato: "OTRO" }]).pool, E, F)).ok, false);
+});
+test("12C19: contrato futuro, vencido, empresa falsa, servicios inválidos bloquean", async () => {
+  const malos = [
+    { ...fila, vigente_desde: "2026-11-14T00:00:00.000Z" },
+    { ...fila, vigente_hasta: "2026-11-13T17:00:00.000Z" },
+    { ...fila, empresa_id: OTRA },
+    { ...fila, servicios: ["invalido"] },
+  ];
+  for (const f of malos) assert.equal((await leerContratoOperativoPg(simularPg([f]).pool, E, F)).ok, false);
+});
+test("12C19: PG caído devuelve NO_DISPONIBLE y libera conexión", async () => {
+  const s = simularPg([fila], true);
+  const r = await leerContratoOperativoPg(s.pool, E, F);
+  assert.deepEqual(r, { ok: false, motivo: "NO_DISPONIBLE" });
+  assert.equal(s.sql.at(-1), "ROLLBACK");
+  assert.equal(s.liberadas(), 1);
+});
+test("12C19: un empresaId inválido se bloquea SIN consultar base", async () => {
+  const s = simularPg([fila]);
+  assert.equal((await leerContratoOperativoPg(s.pool, "otro", F)).ok, false);
+  assert.equal(s.sql.length, 0);
+});
+
+test("12C19: si falla el ROLLBACK, nunca concede acceso", async () => {
+  const s = simularPg([fila]);
+  const pool: PoolPgNode183 = { async connect() {
+    const real = await s.pool.connect();
+    return { ...real, async query(sql: string, parametros?: unknown[]) {
+      if (sql === "ROLLBACK") throw Error("fin de transacción incierto");
+      return real.query(sql, parametros);
+    } };
+  } };
+  assert.deepEqual(await leerContratoOperativoPg(pool, E, F), { ok: false, motivo: "NO_DISPONIBLE" });
+  assert.equal(s.liberadas(), 1);
+});

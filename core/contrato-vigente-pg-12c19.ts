@@ -71,6 +71,38 @@ function interpretarFila(f: Fila, empresaId: string, ahora: number): LecturaCont
  * Si hay dos contratos vigentes para la empresa, nunca elige silenciosamente.
  * No es posible otorgar acceso a través de datos de la request HTTP.
  */
+/**
+ * DIAGNÓSTICO SEGURO: solo registra el TIPO de fallo (etapa, código técnico y
+ * clasificación). Nunca registra el mensaje original, hosts, usuarios,
+ * contraseñas ni la cadena de conexión.
+ */
+const CODIGO_SEGURO = /^[A-Z0-9_]{3,32}$/;
+export function describirFalloSeguro(error: unknown): { nombre: string; codigo: string; tipo: string } {
+  const e = (error && typeof error === "object" ? error : {}) as { name?: unknown; code?: unknown; message?: unknown };
+  const nombre = typeof e.name === "string" && /^[A-Za-z]{1,40}$/.test(e.name) ? e.name : "Desconocido";
+  const codigo = typeof e.code === "string" && CODIGO_SEGURO.test(e.code) ? e.code : "SIN_CODIGO";
+  const m = typeof e.message === "string" ? e.message : "";
+  let tipo = "OTRO";
+  if (/timeout|timed out/i.test(m)) tipo = "TIMEOUT";
+  else if (/password authentication|authentication failed|SASL|no pg_hba/i.test(m)) tipo = "AUTENTICACION";
+  else if (/ssl|tls|certificate/i.test(m)) tipo = "SSL";
+  else if (/cannot find module|MODULE_NOT_FOUND|ERR_MODULE_NOT_FOUND|require is not|Driver PostgreSQL/i.test(m)) tipo = "MODULO_NO_ENCONTRADO";
+  else if (/permission denied/i.test(m)) tipo = "PERMISO_DENEGADO";
+  else if (/does not exist/i.test(m)) tipo = "NO_EXISTE";
+  else if (/Lector comercial no configurado/.test(m)) tipo = "CONFIG_URL_O_ROL_INVALIDA";
+  else if (/Rol PostgreSQL no es de solo lectura/.test(m)) tipo = "ROL_NO_ES_SOLO_LECTURA";
+  return { nombre, codigo, tipo };
+}
+function registrarFallo(etapa: string, error: unknown): void {
+  try {
+    const d = describirFalloSeguro(error);
+    console.error(`[contrato-pg] fallo etapa=${etapa} tipo=${d.tipo} codigo=${d.codigo} nombre=${d.nombre}`);
+  } catch { /* el diagnóstico nunca debe romper la lectura */ }
+}
+function registrarEstado(etapa: string, detalle: string): void {
+  try { console.error(`[contrato-pg] estado etapa=${etapa} detalle=${detalle}`); } catch { /* idem */ }
+}
+
 export async function leerContratoOperativoPg(
   pool: PoolPgNode183, empresaId: string, ahoraIso: string,
 ): Promise<LecturaContratoOperativo> {
@@ -80,16 +112,20 @@ export async function leerContratoOperativoPg(
   let transaccion = false;
   let lectura: LecturaContratoOperativo = { ok: false, motivo: "NO_DISPONIBLE" };
   let limpiezaCorrecta = true;
+  let etapa = "conectar";
   try {
     conexion = await pool.connect();
     await conexion.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
     transaccion = true;
+    etapa = "alcance-empresa";
     const alcance = await conexion.query(
       "SELECT set_config('optima.empresa_id', $1, true) AS empresa_id", [empresaId],
     );
     if (alcance.rows.length !== 1 || alcance.rows[0].empresa_id !== empresaId) {
+      registrarEstado("alcance-empresa", "set_config no devolvio la empresa pedida");
       lectura = { ok: false, motivo: "INCONSISTENTE" };
     } else {
+      etapa = "consulta";
       const r = await conexion.query(
         `SELECT c.empresa_id, c.id_contrato, c.revision, v.id_version, v.numero,
            v.estado, v.servicios, v.vigente_desde, v.vigente_hasta,
@@ -102,18 +138,22 @@ export async function leerContratoOperativoPg(
         [empresaId],
       );
       if (r.rows.length === 0) lectura = { ok: false, motivo: "NO_VIGENTE" };
-      else if (r.rows.length !== 1) lectura = { ok: false, motivo: "INCONSISTENTE" };
+      else if (r.rows.length !== 1) {
+        registrarEstado("consulta", "mas de una version VIGENTE");
+        lectura = { ok: false, motivo: "INCONSISTENTE" };
+      }
       else lectura = interpretarFila(r.rows[0], empresaId, ahora);
     }
-  } catch {
+  } catch (error) {
+    registrarFallo(etapa, error);
     lectura = { ok: false, motivo: "NO_DISPONIBLE" };
   } finally {
     if (conexion) {
       if (transaccion) {
         try { await conexion.query("ROLLBACK"); }
-        catch { limpiezaCorrecta = false; }
+        catch (error) { registrarFallo("rollback", error); limpiezaCorrecta = false; }
       }
-      try { conexion.release(); } catch { limpiezaCorrecta = false; }
+      try { conexion.release(); } catch (error) { registrarFallo("liberar", error); limpiezaCorrecta = false; }
     }
   }
   // Un fallo al terminar la transacción también prohíbe otorgar acceso.

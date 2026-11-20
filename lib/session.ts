@@ -17,7 +17,7 @@ export type DatosSesion = {
 
 // CONEXIÓN CON REDIS
 
-async function ejecutarComandoRedis<T>(
+export async function ejecutarComandoRedis<T>(
   comando: Array<string | number>
 ): Promise<T> {
   const url = process.env.UPSTASH_REDIS_KV_REST_API_URL;

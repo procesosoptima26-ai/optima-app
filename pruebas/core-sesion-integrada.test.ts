@@ -53,6 +53,10 @@ test("Core integrado: login y sesión leen empresa, sucursales y módulos contra
       if (comando === "SET") { state.sesiones.set(llave, valor); return Response.json({ result: "OK" }); }
       if (comando === "GET") return Response.json({ result: state.sesiones.get(llave) ?? null });
       if (comando === "DEL") { const existe = state.sesiones.delete(llave); return Response.json({ result: Number(existe) }); }
+      // Comandos del límite de intentos de login (se adecúa el mock; no se quita ninguna verificación).
+      if (comando === "INCR") { const nuevo = Number(state.sesiones.get(llave) ?? "0") + 1; state.sesiones.set(llave, String(nuevo)); return Response.json({ result: nuevo }); }
+      if (comando === "EXPIRE") return Response.json({ result: 1 });
+      if (comando === "TTL") return Response.json({ result: 900 });
       throw new Error(`Comando Redis inesperado ${comando}`);
     }
     if (url.host !== "api.airtable.com" || opciones?.method && opciones.method !== "GET") {
@@ -115,6 +119,7 @@ test("Core integrado: login y sesión leen empresa, sucursales y módulos contra
   await session({ method: "GET", cookies: { optima_sesion: token } } as unknown as VercelRequest, desactivada.res);
   assert.equal(desactivada.estado.status, 401);
   assert.match(desactivada.estado.cookies, /Max-Age=0/);
-  assert.equal(state.sesiones.size, 0);
+  // Solo se cuentan las SESIONES: los contadores de intentos de login (IP) pueden seguir existiendo.
+  assert.equal([...state.sesiones.keys()].filter((k) => k.startsWith("optima:sesion:")).length, 0);
   assert.equal(writesAirtable, 0);
 });

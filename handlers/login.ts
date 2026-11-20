@@ -9,6 +9,13 @@ import {
 import { leerAccesoCoreDesdeAirtable } from "../core/airtable.js";
 import { leerAccesoPlataforma, presentarUsuarioPlataforma } from "../core/acceso-plataforma.js";
 import { presentarUsuarioCore } from "../core/usuario-publico.js";
+import {
+  clavesIntentosLogin,
+  obtenerIpCliente,
+  verificarBloqueo,
+  registrarFallo,
+  limpiarIntentosUsuario,
+} from "../lib/limite-intentos-login.js";
 
 dotenv.config({ path: ".env.local" });
 
@@ -62,16 +69,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const password = typeof req.body?.password === "string" ? req.body.password : "";
     if (!usuario || !password) return res.status(400).json({ ok: false, error: "Faltan usuario y contraseña" });
 
+    // Límite de intentos: se consulta antes de tocar Airtable o verificar la contraseña.
+    const claves = clavesIntentosLogin(usuario, obtenerIpCliente(req));
+    const bloqueo = await verificarBloqueo(claves);
+    if (bloqueo.bloqueado) {
+      res.setHeader("Retry-After", String(bloqueo.esperarSegundos));
+      return res.status(429).json({
+        ok: false,
+        error: "Demasiados intentos fallidos. Esperá unos minutos antes de volver a intentar.",
+      });
+    }
+
     const registro = await buscarUsuarioPorNombre(usuario);
-    if (!registro) return res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
+    if (!registro) {
+      await registrarFallo(claves);
+      return res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
+    }
 
     const hash = registro.fields.PASSWORD_HASH;
     if (typeof hash !== "string" || !hash.startsWith("$argon2id$")) {
       return res.status(403).json({ ok: false, error: "La cuenta requiere actualización de seguridad" });
     }
     if (!(await argon2.verify(hash, password))) {
+      await registrarFallo(claves);
       return res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
     }
+    // Contraseña correcta: se reinicia el contador de este usuario.
+    await limpiarIntentosUsuario(claves);
 
     // Identidad global por ID explícito y empresa de plataforma por ID (no por ROL solo).
     // Un candidato inválido NO puede entrar por la ruta de un cliente.

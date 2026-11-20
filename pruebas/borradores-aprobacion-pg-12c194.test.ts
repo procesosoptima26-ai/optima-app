@@ -8,7 +8,7 @@ import {
 } from '../core/borradores-aprobacion-pg-12c194.js';
 import {iniciarHistorialComercialLocal} from '../core/historial-contratacion-comercial-12c173.js';
 
-const EMP='rec'+'E'.repeat(14),AJENA='rec'+'X'.repeat(14),ADMIN='rec'+'A'.repeat(14);
+const EMP='emp_'+'e'.repeat(12),AJENA='emp_'+'x'.repeat(12),ADMIN='rec'+'A'.repeat(14);
 const CONTRATO='CORE-PRUEBA-01', BOR='BOR-P3D0001', VER='VER-P3D0001';
 const T0='2026-11-13T18:00:00.000Z',T1='2026-11-13T19:00:00.000Z';
 const S=[{modalidad:'MODULO_PRINCIPAL',modulo:'INVENTARIO',nivel:'ESENCIAL'}];

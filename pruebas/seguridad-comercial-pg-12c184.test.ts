@@ -9,8 +9,8 @@ import { persistirConAutorizacionComercial184, poolLimitadoAEmpresa184,
 } from '../core/seguridad-comercial-pg-12c184.js';
 import type { PoolPgNode183 } from '../core/adaptador-pg-node-12c183.js';
 
-const EMP = 'rec' + 'A'.repeat(14);
-const OTRA = 'rec' + 'Z'.repeat(14);
+const EMP = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'z'.repeat(12);
 const APR = 'rec' + 'B'.repeat(14);
 const ACT = 'rec' + 'C'.repeat(14);
 const FECHAS = ['2026-11-11T10:00:00.000Z', '2026-11-11T11:00:00.000Z', '2026-11-11T12:00:00.000Z'];

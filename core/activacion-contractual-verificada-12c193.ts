@@ -19,6 +19,7 @@ import {
   type ResultadoEscrituraVerificada192,
 } from './escritura-comercial-verificada-12c192.js';
 import type { FuenteSesionServidor184, IdentidadServidorComercial184 } from './seguridad-comercial-pg-12c184.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const CONTRATO = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -57,7 +58,7 @@ function solicitudValida(v: unknown): v is IntencionActivacion193 {
 function sesionValida(v: unknown): v is IdentidadServidorComercial184 {
   return objeto(v) && Object.keys(v).length===4 &&
     v.verificadaEnServidor===true && typeof v.usuarioId==='string' && ID.test(v.usuarioId) &&
-    typeof v.empresaId==='string' && ID.test(v.empresaId) &&
+    typeof v.empresaId==='string' && esIdEmpresaEstable(v.empresaId) &&
     Array.isArray(v.permisos) && v.permisos.length<=2 &&
     v.permisos.every(p=>p==='APROBAR_CONTRATO'||p==='ACTIVAR_CONTRATO') &&
     new Set(v.permisos).size===v.permisos.length;

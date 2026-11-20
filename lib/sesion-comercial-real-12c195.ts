@@ -137,10 +137,16 @@ export function crearFuenteContratoReal195(
     if (!resultado.ok || resultado.acceso.permiso !== permiso) {
       throw new Error('No se verificó el permiso contractual en servidor');
     }
+    // El motor y PostgreSQL identifican a la empresa por su ID ESTABLE (emp_...).
+    // Sin él no hay forma segura de ubicar el contrato: no se emite identidad.
+    const empresaEstableId = resultado.acceso.empresaEstableId;
+    if (!esIdEmpresaEstable(empresaEstableId)) {
+      throw new Error('La empresa no tiene ID estable verificado');
+    }
     // Las capas P3C/P3D consumen esta identidad, no una identidad del navegador.
     return {verificadaEnServidor: true as const,
       usuarioId: resultado.acceso.usuarioId,
-      empresaId: resultado.acceso.empresaId,
+      empresaId: empresaEstableId,
       permisos: [permiso]};
   };
 }

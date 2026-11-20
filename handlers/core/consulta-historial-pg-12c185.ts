@@ -6,7 +6,7 @@
  */
 import type { PoolPgNode183 } from '../../core/adaptador-pg-node-12c183.js';
 import {leerHistorialComercialPg185} from '../../core/lectura-historial-pg-12c185.js';
-import {leerIdEmpresaEstable} from '../../lib/empresa-estable.js';
+import {leerIdEmpresaEstable,esIdEmpresaEstable} from '../../lib/empresa-estable.js';
 
 const ID=/^rec[A-Za-z0-9]{14}$/;
 const CONTRATO=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -19,6 +19,8 @@ export type DependenciasConsulta185=Readonly<{
   pool:PoolPgNode183;
   autenticar(req:Request185):Promise<EstadoSesion185>;
   empresaClienteValida(empresaId:string):Promise<boolean>;
+  /** Opcional: si existe reemplaza a empresaClienteValida e informa el ID estable (clave en Neon). */
+  resolverEmpresaCliente?(empresaId:string):Promise<EmpresaClienteMaestra185>;
 }>;
 
 /** El llamador no puede insertar funciones por HTTP: deps se registran en servidor.
@@ -41,17 +43,28 @@ export function crearConsultaHistorialComercial185(deps:DependenciasConsulta185)
         q.empresaId===sesion.empresaPlataformaId){
         res.status(400).json({ok:false,error:'Parámetros inválidos'});return;
       }
-      if(!await deps.empresaClienteValida(q.empresaId)){
+      let claveNeon:string=q.empresaId;
+      if(deps.resolverEmpresaCliente){
+        const empresa=await deps.resolverEmpresaCliente(q.empresaId);
+        if(!empresa.activa){
+          res.status(404).json({ok:false,error:'Empresa no encontrada'});return;
+        }
+        // Neon identifica a la empresa por su ID estable, nunca por el código de Airtable.
+        if(!esIdEmpresaEstable(empresa.idEstable)){
+          res.status(503).json({ok:false,error:'Consulta comercial temporalmente no disponible'});return;
+        }
+        claveNeon=empresa.idEstable;
+      }else if(!await deps.empresaClienteValida(q.empresaId)){
         res.status(404).json({ok:false,error:'Empresa no encontrada'});return;
       }
-      const result=await leerHistorialComercialPg185(deps.pool,q.empresaId,q.idContrato);
+      const result=await leerHistorialComercialPg185(deps.pool,claveNeon,q.idContrato);
       if(result.ok === false){
         if(result.motivo==='NO_ENCONTRADO'){
           res.status(404).json({ok:false,error:'No se encontró el contrato'});return;
         }
         res.status(503).json({ok:false,error:'No se pudo verificar el historial comercial'});return;
       }
-      if(result.historial.empresaId!==q.empresaId||result.historial.idContrato!==q.idContrato){
+      if(result.historial.empresaId!==claveNeon||result.historial.idContrato!==q.idContrato){
         res.status(503).json({ok:false,error:'Historial inconsistente'});return;
       }
       res.status(200).json({ok:true,soloConsulta:true,accesoOperativoHabilitado:false,
@@ -116,5 +129,6 @@ export async function empresaClienteMaestra185(empresaId:string):Promise<boolean
  */
 export function prepararHandlerReal185(pool:PoolPgNode183){
   return crearConsultaHistorialComercial185({pool,autenticar:autenticarPlataformaReal185,
-    empresaClienteValida:empresaClienteMaestra185});
+    empresaClienteValida:empresaClienteMaestra185,
+    resolverEmpresaCliente:resolverEmpresaClienteMaestra185});
 }

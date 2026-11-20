@@ -11,8 +11,8 @@ import {
   type MotivoErrorBorrador,
 } from "../core/borradores-contratacion-comercial-12c172.js";
 
-const EMP = `rec${"A".repeat(14)}`;
-const OTRA = `rec${"B".repeat(14)}`;
+const EMP = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'b'.repeat(12);
 const T0 = "2026-11-10T13:00:00.000Z";
 const T1 = "2026-11-10T14:00:00.000Z";
 const T2 = "2026-11-10T15:00:00.000Z";

@@ -15,6 +15,7 @@ import { persistirConPoolPgNode12C183, type PoolPgNode183 } from './adaptador-pg
 import type { HistorialContratacionSimulado } from './historial-contratacion-comercial-12c173.js';
 import { esHistorialComercialLocalValido } from './historial-contratacion-comercial-12c173.js';
 import type { SolicitudGuardadoComercialPg, ResultadoGuardadoComercialPg } from './repositorio-comercial-pg-12c181.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type PermisoComercial184 = 'APROBAR_CONTRATO' | 'ACTIVAR_CONTRATO';
 /** ÚNICAMENTE datos devueltos por la capa confiable de autenticación. */
@@ -48,7 +49,7 @@ function identidadValida(valor: unknown): valor is IdentidadServidorComercial184
   const v = valor as Record<string, unknown>;
   return Object.keys(v).length === 4 && v.verificadaEnServidor === true &&
     typeof v.usuarioId === 'string' && ID.test(v.usuarioId) &&
-    typeof v.empresaId === 'string' && ID.test(v.empresaId) &&
+    typeof v.empresaId === 'string' && esIdEmpresaEstable(v.empresaId) &&
     Array.isArray(v.permisos) && v.permisos.length <= PERMISOS.length &&
     v.permisos.every(p => typeof p === 'string' && PERMISOS.includes(p as PermisoComercial184)) &&
     new Set(v.permisos).size === v.permisos.length;
@@ -61,7 +62,7 @@ function identidadValida(valor: unknown): valor is IdentidadServidorComercial184
  * El rol SQL tiene que estar configurado SIN SUPERUSER ni BYPASSRLS.
  */
 export function poolLimitadoAEmpresa184(pool: PoolPgNode183, empresaId: string): PoolPgNode183 {
-  if (!ID.test(empresaId)) throw Error('Empresa inválida');
+  if (!esIdEmpresaEstable(empresaId)) throw Error('Empresa inválida');
   return {
     connect: async () => {
       const conexion = await pool.connect();

@@ -21,6 +21,7 @@ import {
 } from './seguridad-comercial-pg-12c184.js';
 import { reconstruirHistorialComercialPg192 } from './reconstruccion-historial-pg-12c192.js';
 import { compararTransicionDeHistorialLocal } from './proyeccion-persistencia-comercial-12c175.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type ResultadoEscrituraVerificada192 = ResultadoSeguroComercial184 |
   Readonly<{ ok: false; motivo: 'SESION_NO_VERIFICADA' | 'HISTORIAL_NO_VERIFICADO' |
@@ -34,7 +35,7 @@ function sesionApta(v: unknown): v is IdentidadServidorComercial184 {
   const s = v as Record<string, unknown>;
   return Object.keys(s).length === 4 && s.verificadaEnServidor === true &&
     typeof s.usuarioId === 'string' && ID.test(s.usuarioId) &&
-    typeof s.empresaId === 'string' && ID.test(s.empresaId) &&
+    typeof s.empresaId === 'string' && esIdEmpresaEstable(s.empresaId) &&
     Array.isArray(s.permisos) && s.permisos.length > 0 && s.permisos.length <= 2 &&
     s.permisos.every(p => p === 'APROBAR_CONTRATO' || p === 'ACTIVAR_CONTRATO') &&
     new Set(s.permisos).size === s.permisos.length;

@@ -19,6 +19,7 @@ import {
   compararPropuestasComerciales,
   simularPropuestaComercial,
 } from "./simulador-contratacion-comercial-12c17.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type EstadoVersionSimulada = "APROBADA" | "VIGENTE" | "HISTORICA";
 export type VersionContratacionSimulada = Readonly<{
@@ -125,7 +126,7 @@ function serviciosValidos(v: unknown): v is readonly ContratacionComercial[] {
 /** Comprueba invariantes de historial, sin conferir identidad ni autenticidad. */
 export function esHistorialComercialLocalValido(valor: unknown): valor is HistorialContratacionSimulado {
   if (!objeto(valor) || !claves(valor, CLAVES_HISTORIAL) ||
-      typeof valor.empresaId !== "string" || !ID_EMPRESA.test(valor.empresaId) ||
+      typeof valor.empresaId !== "string" || !esIdEmpresaEstable(valor.empresaId) ||
       typeof valor.idContrato !== "string" || !ID_CONTRATO.test(valor.idContrato) ||
       typeof valor.revisionHistorial !== "number" || !Number.isSafeInteger(valor.revisionHistorial) ||
       valor.revisionHistorial < 0 || !Array.isArray(valor.versiones) ||
@@ -219,7 +220,7 @@ export function esHistorialComercialLocalValido(valor: unknown): valor is Histor
 /** Crea un registro de simulación vacío: no crea filas reales en Airtable. */
 export function iniciarHistorialComercialLocal(entrada: unknown): ResultadoHistorialSimulado {
   if (!objeto(entrada) || !claves(entrada, ["empresaId", "idContrato"]) ||
-      typeof entrada.empresaId !== "string" || !ID_EMPRESA.test(entrada.empresaId) ||
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId) ||
       typeof entrada.idContrato !== "string" || !ID_CONTRATO.test(entrada.idContrato))
     return fallo("DATOS_INVALIDOS");
   const historial: HistorialContratacionSimulado = Object.freeze({
@@ -252,7 +253,7 @@ function borradorValido(v: unknown): v is BorradorContratacionLocal {
 export function aprobarBorradorComercialLocal(entrada: unknown): ResultadoHistorialSimulado {
   const REQUERIDAS = ["historial", "borrador", "empresaId", "actorUsuarioId", "idVersion", "revisionHistorialEsperada", "ahoraIso"];
   if (!objeto(entrada) || !claves(entrada, REQUERIDAS) ||
-      typeof entrada.empresaId !== "string" || !ID_EMPRESA.test(entrada.empresaId) ||
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId) ||
       typeof entrada.actorUsuarioId !== "string" || !ID_EMPRESA.test(entrada.actorUsuarioId) ||
       typeof entrada.idVersion !== "string" || !ID_VERSION.test(entrada.idVersion) ||
       typeof entrada.revisionHistorialEsperada !== "number" || !Number.isSafeInteger(entrada.revisionHistorialEsperada) ||
@@ -298,7 +299,7 @@ export function aprobarBorradorComercialLocal(entrada: unknown): ResultadoHistor
 export function activarVersionComercialLocal(entrada: unknown): ResultadoHistorialSimulado {
   const REQUERIDAS = ["historial", "empresaId", "actorUsuarioId", "idVersion", "revisionHistorialEsperada", "ahoraIso"];
   if (!objeto(entrada) || !claves(entrada, REQUERIDAS) ||
-      typeof entrada.empresaId !== "string" || !ID_EMPRESA.test(entrada.empresaId) ||
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId) ||
       typeof entrada.actorUsuarioId !== "string" || !ID_EMPRESA.test(entrada.actorUsuarioId) ||
       typeof entrada.idVersion !== "string" || !ID_VERSION.test(entrada.idVersion) ||
       typeof entrada.revisionHistorialEsperada !== "number" || !Number.isSafeInteger(entrada.revisionHistorialEsperada) ||
@@ -331,7 +332,7 @@ export function activarVersionComercialLocal(entrada: unknown): ResultadoHistori
 /** Lectura local para presentar el estado; jamás es un guard de API. */
 export function consultarVersionVigenteLocal(entrada: unknown): ResultadoVigenciaSimulada {
   if (!objeto(entrada) || !claves(entrada, ["historial", "empresaId"]) ||
-      typeof entrada.empresaId !== "string" || !ID_EMPRESA.test(entrada.empresaId))
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId))
     return falloLectura("DATOS_INVALIDOS");
   if (!esHistorialComercialLocalValido(entrada.historial)) return falloLectura("HISTORIAL_INVALIDO");
   const h = entrada.historial;

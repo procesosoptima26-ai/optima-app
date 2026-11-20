@@ -5,6 +5,7 @@
  * NO modifica habilitaciones técnicas de OPTIMA.
  */
 import type { PoolPgNode183 } from './adaptador-pg-node-12c183.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const CONTRATO = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -97,7 +98,7 @@ function borradoresValidos(rows:readonly Record<string,unknown>[]):BorradorVista
 export async function leerHistorialComercialPg185(
   pool:PoolPgNode183, empresaId:string, idContrato:string,
 ):Promise<ResultadoLecturaHistorial185> {
-  if(!ID.test(empresaId)||!CONTRATO.test(idContrato))return fallo('DATOS_INVALIDOS');
+  if(!esIdEmpresaEstable(empresaId)||!CONTRATO.test(idContrato))return fallo('DATOS_INVALIDOS');
   let conexion:Awaited<ReturnType<PoolPgNode183['connect']>>|undefined;
   let transaccion=false;
   let inconsistente=false;

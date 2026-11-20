@@ -17,8 +17,8 @@ import {
   type ResultadoOperacionCoordinadaLocal,
 } from "../core/coordinador-concurrencia-comercial-12c176.js";
 
-const EMP = `rec${"A".repeat(14)}`;
-const OTRA = `rec${"B".repeat(14)}`;
+const EMP = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'b'.repeat(12);
 const APR = `rec${"C".repeat(14)}`;
 const ACT = `rec${"D".repeat(14)}`;
 const CTR = "CTR-OPTIMA-001";

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {crearEndpointHistorialComercial186} from '../lib/endpoint-historial-comercial-12c186.js';
 import type {PoolPgNode183} from '../core/adaptador-pg-node-12c183.js';
 import type {EstadoSesion185} from '../handlers/core/consulta-historial-pg-12c185.js';
-const EMP='rec'+'A'.repeat(14),PLAT='rec'+'P'.repeat(14),USR='rec'+'B'.repeat(14);
+const EMP='rec'+'A'.repeat(14),EST='emp_'+'a'.repeat(12),PLAT='rec'+'P'.repeat(14),USR='rec'+'B'.repeat(14);
 const F='2026-11-11T15:00:00.000Z';
 const SES:EstadoSesion185={estado:'OK',usuarioId:USR,empresaPlataformaId:PLAT};
 function armar(opts:{activo?:boolean;sesion?:EstadoSesion185;empresa?:boolean;falla?:string}={}){
@@ -14,7 +14,7 @@ function armar(opts:{activo?:boolean;sesion?:EstadoSesion185;empresa?:boolean;fa
     if(a.falla==='pool')throw Error('dsn confidencial');
     return {query:async(sql:string)=>{
       const rows=sql.includes('FROM optima_comercial.contratos')?
-        [{empresa_id:EMP,id_contrato:'CTR-READ185',revision:'1'}]:
+        [{empresa_id:EST,id_contrato:'CTR-READ185',revision:'1'}]:
         sql.includes('FROM optima_comercial.versiones')?
         [{id_version:'VER-READ185',numero:1,estado:'APROBADA',aprobado_por_id:USR,
           aprobado_en_iso:F,vigente_desde_iso:null,vigente_hasta_iso:null,cantidad_servicios:1}]:
@@ -28,6 +28,7 @@ function armar(opts:{activo?:boolean;sesion?:EstadoSesion185;empresa?:boolean;fa
     crearPool:()=>{pools++;return pool;},
     autenticar:async()=>{sesiones++;if(a.falla==='auth')throw Error('redis confidencial');return a.sesion;},
     empresaClienteValida:async()=>{validaciones++;if(a.falla==='empresa')throw Error('airtable confidencial');return a.empresa;},
+    resolverEmpresaCliente:async()=>{validaciones++;if(a.falla==='empresa')throw Error('airtable confidencial');return {activa:a.empresa,idEstable:EST};},
   });
   async function llamar(req:Record<string,unknown>={method:'GET',query:{empresaId:EMP,idContrato:'CTR-READ185'}}){
     let status=0,datos:unknown;

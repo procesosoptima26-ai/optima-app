@@ -18,6 +18,7 @@ import {
   type HistorialContratacionSimulado,
   type ResultadoHistorialSimulado,
 } from "./historial-contratacion-comercial-12c173.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type OperacionComercialSimulada = "APROBACION" | "ACTIVACION";
 export type ActorComercialSimulado = Readonly<{
@@ -106,7 +107,7 @@ function actorValido(v: unknown): v is ActorComercialSimulado {
 function solicitudValida(v: unknown): v is SolicitudCambioComercialLocal {
   if (!esObjeto(v) || (v.tipo !== "APROBACION" && v.tipo !== "ACTIVACION") ||
       !clavesExactas(v, v.tipo === "APROBACION" ? [...BASE, "borrador"] : BASE) ||
-      typeof v.empresaId !== "string" || !ID.test(v.empresaId) ||
+      typeof v.empresaId !== "string" || !esIdEmpresaEstable(v.empresaId) ||
       !actorValido(v.actor) || typeof v.idVersion !== "string" || !ID_VERSION.test(v.idVersion) ||
       typeof v.revisionHistorialEsperada !== "number" ||
       !Number.isSafeInteger(v.revisionHistorialEsperada) || v.revisionHistorialEsperada < 0 ||

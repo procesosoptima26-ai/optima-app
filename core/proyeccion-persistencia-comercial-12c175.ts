@@ -17,6 +17,7 @@ import {
   type HistorialContratacionSimulado,
   type VersionContratacionSimulada,
 } from "./historial-contratacion-comercial-12c173.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 /** Nombre actual constatado en el esquema de Base Maestra. */
 export const TABLA_PROYECCION_COMERCIAL = "CONTRATACIONES_OPTIMA" as const;
@@ -131,7 +132,7 @@ function camposVersion(v: VersionContratacionSimulada): CamposContratacionProyec
  */
 export function proyectarHistorialComercialParaPersistenciaLocal(entrada: unknown): ResultadoProyeccion {
   if (!esObjeto(entrada) || !clavesExactas(entrada, ["historial", "empresaId", "revisionEsperada"]) ||
-      typeof entrada.empresaId !== "string" || !/^rec[A-Za-z0-9]{14}$/.test(entrada.empresaId) ||
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId) ||
       !numeroRevision(entrada.revisionEsperada)) return fallar("SOLICITUD_INVALIDA");
   if (!esHistorialComercialLocalValido(entrada.historial)) return fallar("HISTORIAL_INVALIDO");
   const historial = entrada.historial;
@@ -179,7 +180,7 @@ export function proyectarHistorialComercialParaPersistenciaLocal(entrada: unknow
 export function compararTransicionDeHistorialLocal(entrada: unknown): ResultadoComparacionProyeccion {
   if (!esObjeto(entrada) || !clavesExactas(entrada,
       ["anterior", "siguiente", "empresaId", "revisionAnteriorEsperada"]) ||
-      typeof entrada.empresaId !== "string" || !/^rec[A-Za-z0-9]{14}$/.test(entrada.empresaId) ||
+      typeof entrada.empresaId !== "string" || !esIdEmpresaEstable(entrada.empresaId) ||
       !numeroRevision(entrada.revisionAnteriorEsperada)) return fallarComparacion("SOLICITUD_INVALIDA");
   if (!esHistorialComercialLocalValido(entrada.anterior) ||
       !esHistorialComercialLocalValido(entrada.siguiente)) return fallarComparacion("HISTORIAL_INVALIDO");

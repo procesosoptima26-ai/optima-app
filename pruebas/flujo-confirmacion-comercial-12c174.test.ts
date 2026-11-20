@@ -14,8 +14,8 @@ import {
   type VistaPreviaComercialLocal, type MotivoFlujoComercialLocal,
 } from "../core/flujo-confirmacion-comercial-12c174.js";
 
-const EMP = `rec${"A".repeat(14)}`;
-const OTRA = `rec${"B".repeat(14)}`;
+const EMP = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'b'.repeat(12);
 const APR = `rec${"C".repeat(14)}`;
 const ACT = `rec${"D".repeat(14)}`;
 const V1 = "VER-OPTIMA-0001", V2 = "VER-OPTIMA-0002";

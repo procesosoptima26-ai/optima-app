@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {leerHistorialComercialPg185} from '../core/lectura-historial-pg-12c185.js';
 import type {PoolPgNode183} from '../core/adaptador-pg-node-12c183.js';
-const EMP='rec'+'A'.repeat(14), OTRA='rec'+'Z'.repeat(14),USR='rec'+'B'.repeat(14);
+const EMP='emp_'+'a'.repeat(12), OTRA='emp_'+'z'.repeat(12),USR='rec'+'B'.repeat(14);
 const FECHA='2026-11-11T15:00:00.000Z';
 type Row=Record<string,unknown>;
 function datos(){return {

@@ -17,6 +17,7 @@ import {
 } from './historial-contratacion-comercial-12c173.js';
 import { validarContrataciones } from './reglas-comerciales.js';
 import { CATALOGO_SUBMODULOS_CONTRATACION } from './catalogo-comercial-jerarquico.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 const EMPRESA = /^rec[A-Za-z0-9]{14}$/;
 const CONTRATO = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -99,7 +100,7 @@ function leerEvento(f: Fila, empresaId: string, idContrato: string, indice: numb
 export async function reconstruirHistorialComercialPg192(
   pool: PoolPgNode183, empresaId: string, idContrato: string,
 ): Promise<ResultadoReconstruccionPg> {
-  if (!EMPRESA.test(empresaId) || !CONTRATO.test(idContrato)) return fallo('DATOS_INVALIDOS');
+  if (!esIdEmpresaEstable(empresaId) || !CONTRATO.test(idContrato)) return fallo('DATOS_INVALIDOS');
   let conexion: Awaited<ReturnType<PoolPgNode183['connect']>> | undefined;
   let transaccion = false;
   let cierreValido = true;

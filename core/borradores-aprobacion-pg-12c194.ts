@@ -21,6 +21,7 @@ import {
 import { crearBorradorComercialLocal } from './borradores-contratacion-comercial-12c172.js';
 import { reconstruirHistorialComercialPg192 } from './reconstruccion-historial-pg-12c192.js';
 import { simularPropuestaComercial } from './simulador-contratacion-comercial-12c17.js';
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 const ID=/^rec[A-Za-z0-9]{14}$/;
 const CONTRATO=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -67,7 +68,7 @@ function entero(v:unknown):number|null{
 function sesionValida(v:unknown):v is Identidad194{
   if(!objeto(v)||!claves(v,['verificadaEnServidor','usuarioId','empresaId','permisos']))return false;
   return v.verificadaEnServidor===true&&typeof v.usuarioId==='string'&&ID.test(v.usuarioId)&&
-    typeof v.empresaId==='string'&&ID.test(v.empresaId)&&Array.isArray(v.permisos)&&
+    typeof v.empresaId==='string'&&esIdEmpresaEstable(v.empresaId)&&Array.isArray(v.permisos)&&
     v.permisos.length>=1&&v.permisos.length<=2&&
     v.permisos.every(p=>p==='GESTIONAR_BORRADORES'||p==='APROBAR_CONTRATO')&&
     new Set(v.permisos).size===v.permisos.length;

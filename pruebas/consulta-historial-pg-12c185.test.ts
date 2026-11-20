@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import {crearConsultaHistorialComercial185} from '../handlers/core/consulta-historial-pg-12c185.js';
 import type {EstadoSesion185} from '../handlers/core/consulta-historial-pg-12c185.js';
 import type {PoolPgNode183} from '../core/adaptador-pg-node-12c183.js';
-const EMP='rec'+'A'.repeat(14),PLAT='rec'+'P'.repeat(14),USR='rec'+'C'.repeat(14);
+const EMP='rec'+'A'.repeat(14),EST='emp_'+'a'.repeat(12),PLAT='rec'+'P'.repeat(14),USR='rec'+'C'.repeat(14);
 const FECHA='2026-11-11T15:00:00.000Z';
 function montar(estado:EstadoSesion185={estado:'OK',usuarioId:USR,empresaPlataformaId:PLAT},
-    existe=true, falla='') {
+    existe=true, falla='', idEstable:string|null=EST) {
   let conexiones=0,validaciones=0,autenticaciones=0;
   const pool:PoolPgNode183={connect:async()=>{
     conexiones++;
     return {query:async(sql:string)=>{
       if(falla==='base')throw Error('CLAVE_DE_BASE_SECRETA');
       const rows=sql.includes('FROM optima_comercial.contratos')?
-        [{empresa_id:EMP,id_contrato:'CTR-READ185',revision:'1'}]:
+        [{empresa_id:EST,id_contrato:'CTR-READ185',revision:'1'}]:
         sql.includes('FROM optima_comercial.versiones')?
         [{id_version:'VER-READ185',numero:1,estado:'APROBADA',aprobado_por_id:USR,
           aprobado_en_iso:FECHA,vigente_desde_iso:null,vigente_hasta_iso:null,cantidad_servicios:1}]:
@@ -25,6 +25,7 @@ function montar(estado:EstadoSesion185={estado:'OK',usuarioId:USR,empresaPlatafo
   const handler=crearConsultaHistorialComercial185({pool,
     autenticar:async()=>{autenticaciones++;if(falla==='auth')throw Error('token sensible');return estado;},
     empresaClienteValida:async()=>{validaciones++;if(falla==='empresa')throw Error('token airtable');return existe;},
+    resolverEmpresaCliente:async()=>{validaciones++;if(falla==='empresa')throw Error('token airtable');return {activa:existe,idEstable};},
   });
   const responder=async(req:Record<string,unknown>)=>{
     const h:Record<string,string>={};let codigo=0,datos:unknown;
@@ -95,4 +96,13 @@ test('la solicitud no admite usuarioId desde el navegador',async()=>{
 });
 test('no permite método DELETE',async()=>{
   const s=montar();assert.equal((await s.responder({...s.req(),method:'DELETE'})).codigo,405);assert.equal(s.conexiones(),0);
+});
+
+test('ID estable: Neon se consulta con emp_..., y la empresa sin ID estable no abre PostgreSQL',async()=>{
+  const ok=montar();const r=await ok.responder(ok.req());
+  assert.equal(r.codigo,200);assert.equal(ok.conexiones(),1);
+  for(const malo of [null,EMP,'EMP_MAYUSCULAS1']){
+    const s=montar(undefined,true,'',malo);const x=await s.responder(s.req());
+    assert.equal(x.codigo,503);assert.equal(s.conexiones(),0);
+  }
 });

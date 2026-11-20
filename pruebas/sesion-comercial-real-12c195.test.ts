@@ -93,12 +93,23 @@ test('P3E: consulta permitida identifica solo actor y empresa destino verificado
 test('P3E: fuente para P3C y P3D revalida sesión y emite solo permiso exigido',async()=>{
   let veces=0;
   const f=fixture();
+  const verificar=crearVerificadorAccesoComercialReal195({...f.deps,
+    async resolverEmpresaCliente(){return {activa:true,idEstable:'emp_xngaq4y32jji'};}});
   const fuente=crearFuenteContratoReal195(req,C,'ACTIVAR_CONTRATO',async(r,e,p)=>{
-    veces++;return f.verificar(r,e,p);
+    veces++;return verificar(r,e,p);
   });
   const uno=await fuente(),dos=await fuente();
-  const esperado={verificadaEnServidor:true,usuarioId:A,empresaId:C,permisos:['ACTIVAR_CONTRATO']};
+  // El motor y PostgreSQL reciben el ID ESTABLE, nunca el código de Airtable.
+  const esperado={verificadaEnServidor:true,usuarioId:A,empresaId:'emp_xngaq4y32jji',permisos:['ACTIVAR_CONTRATO']};
   assert.deepEqual(uno,esperado);assert.deepEqual(dos,esperado);assert.equal(veces,2);
+});
+test('ID estable: la fuente NO emite identidad si la empresa no tiene ID estable verificado',async()=>{
+  const f=fixture();
+  const sinId=crearVerificadorAccesoComercialReal195({...f.deps,
+    async resolverEmpresaCliente(){return {activa:true,idEstable:null};}});
+  await assert.rejects(crearFuenteContratoReal195(req,C,'ACTIVAR_CONTRATO',sinId)(),/ID estable/);
+  // Sin resolver (modo antiguo) tampoco se emite: el motor exige clave estable.
+  await assert.rejects(crearFuenteContratoReal195(req,C,'ACTIVAR_CONTRATO',f.verificar)(),/ID estable/);
 });
 test('P3E: fuente no devuelve identidad cuando sesión perdió autorización',async()=>{
   const fuente=crearFuenteContratoReal195(req,C,'GESTIONAR_BORRADORES',

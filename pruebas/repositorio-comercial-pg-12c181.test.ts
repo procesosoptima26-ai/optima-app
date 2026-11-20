@@ -9,10 +9,10 @@ import { persistirPasoComercialPg12C181,
   type ClientePostgresDedicado, type SolicitudGuardadoComercialPg,
   type RespuestaSql } from "../core/repositorio-comercial-pg-12c181.js";
 
-const EMP = `rec${"A".repeat(14)}`;
+const EMP = 'emp_'+'a'.repeat(12);
 const APR = `rec${"B".repeat(14)}`;
 const ACT = `rec${"C".repeat(14)}`;
-const OTR = `rec${"D".repeat(14)}`;
+const OTR = `rec${"D".repeat(14)}`; // OTRO USUARIO (actor), no empresa
 const CTR = "CTR-OPTIMA-0001";
 const V1 = "VER-OPTIMA-0001";
 const V2 = "VER-OPTIMA-0002";

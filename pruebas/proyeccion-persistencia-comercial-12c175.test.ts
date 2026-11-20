@@ -13,8 +13,9 @@ import { crearBorradorComercialLocal } from "../core/borradores-contratacion-com
 import { iniciarHistorialComercialLocal, aprobarBorradorComercialLocal,
   activarVersionComercialLocal } from "../core/historial-contratacion-comercial-12c173.js";
 
-const EMPRESA = "rec" + "A".repeat(14);
-const OTRA = "rec" + "B".repeat(14);
+const EMPRESA = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'b'.repeat(12);
+const OTRO_USUARIO = "rec" + "Z".repeat(14);
 const APROBADOR = "rec" + "C".repeat(14);
 const ACTIVADOR = "rec" + "D".repeat(14);
 const FIJO = "2026-11-10T13:00:00.000Z";
@@ -281,8 +282,8 @@ test("12C.17.5: rechaza una transición que modifica el motivo aprobado", () => 
 test("12C.17.5: rechaza alterar un evento de aprobación anterior", () => {
   const h = preparar();
   const mutada = JSON.parse(JSON.stringify(h.activa));
-  mutada.versiones[0].aprobadoPorId = OTRA;
-  mutada.eventos[0].actorUsuarioId = OTRA;
+  mutada.versiones[0].aprobadoPorId = OTRO_USUARIO;
+  mutada.eventos[0].actorUsuarioId = OTRO_USUARIO;
   const r = comparar(h.aprobada, mutada, EMPRESA, 1);
   assert.equal(r.ok, false);
   if (!r.ok) assert.equal(r.motivo, "HISTORIAL_REESCRITO");

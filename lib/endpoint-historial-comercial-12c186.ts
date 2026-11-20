@@ -5,6 +5,8 @@
 import {
   autenticarPlataformaReal185,
   empresaClienteMaestra185,
+  resolverEmpresaClienteMaestra185,
+  type EmpresaClienteMaestra185,
   crearConsultaHistorialComercial185,
   type EstadoSesion185,
 } from '../handlers/core/consulta-historial-pg-12c185.js';
@@ -18,6 +20,8 @@ export type DependenciasEndpoint186 = Readonly<{
   crearPool():PoolPgNode183;
   autenticar(req:Peticion):Promise<EstadoSesion185>;
   empresaClienteValida(empresaId:string):Promise<boolean>;
+  /** Opcional: informa además el ID estable de la empresa (clave en PostgreSQL). */
+  resolverEmpresaCliente?(empresaId:string):Promise<EmpresaClienteMaestra185>;
 }>;
 
 /** El pool se crea SOLO cuando el handler autenticado llega a la lectura.
@@ -26,7 +30,8 @@ export type DependenciasEndpoint186 = Readonly<{
 export function crearEndpointHistorialComercial186(deps:DependenciasEndpoint186){
   const conexionDiferida:PoolPgNode183={connect:async()=>deps.crearPool().connect()};
   const leer=crearConsultaHistorialComercial185({pool:conexionDiferida,
-    autenticar:deps.autenticar,empresaClienteValida:deps.empresaClienteValida});
+    autenticar:deps.autenticar,empresaClienteValida:deps.empresaClienteValida,
+    ...(deps.resolverEmpresaCliente?{resolverEmpresaCliente:deps.resolverEmpresaCliente}:{})});
   return async(req:Peticion,res:Respuesta):Promise<void>=>{
     res.setHeader('Cache-Control','no-store, max-age=0');
     res.setHeader('X-Content-Type-Options','nosniff');
@@ -57,4 +62,5 @@ export const endpointHistorialComercial186=crearEndpointHistorialComercial186({
   crearPool:()=>crearPoolComercialLectura186(),
   autenticar:autenticarPlataformaReal185,
   empresaClienteValida:empresaClienteMaestra185,
+  resolverEmpresaCliente:resolverEmpresaClienteMaestra185,
 });

@@ -15,6 +15,7 @@ import {
   simularPropuestaComercial,
   type CambioCobertura,
 } from "./simulador-contratacion-comercial-12c17.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type EstadoBorradorLocal = "BORRADOR" | "DESCARTADO_LOCAL";
 export type BorradorContratacionLocal = Readonly<{
@@ -58,7 +59,7 @@ function clavesExactas(v: Record<string, unknown>, claves: readonly string[]): b
   return Object.keys(v).length === claves.length && claves.every(k => Object.hasOwn(v, k));
 }
 function empresaValida(v: unknown): v is string {
-  return typeof v === "string" && /^rec[A-Za-z0-9]{14}$/.test(v);
+  return esIdEmpresaEstable(v);
 }
 function idBorradorValido(v: unknown): v is string {
   return typeof v === "string" && /^BOR-[A-Za-z0-9_-]{4,60}$/.test(v);

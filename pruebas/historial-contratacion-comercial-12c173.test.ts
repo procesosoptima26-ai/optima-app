@@ -12,8 +12,8 @@ import {
   type ErrorHistorialSimulado,
 } from "../core/historial-contratacion-comercial-12c173.js";
 
-const EMP = `rec${"A".repeat(14)}`;
-const OTRA = `rec${"B".repeat(14)}`;
+const EMP = 'emp_'+'a'.repeat(12);
+const OTRA = 'emp_'+'b'.repeat(12);
 const ADMIN = `rec${"C".repeat(14)}`;
 const OTRO_ADMIN = `rec${"D".repeat(14)}`;
 const CTR = "CTR-OPTIMA-001";

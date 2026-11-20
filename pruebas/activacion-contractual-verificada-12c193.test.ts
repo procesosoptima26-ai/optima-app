@@ -9,8 +9,8 @@ import {
 } from '../core/historial-contratacion-comercial-12c173.js';
 import {crearBorradorComercialLocal} from '../core/borradores-contratacion-comercial-12c172.js';
 
-const EMPRESA='rec'+'E'.repeat(14);
-const OTRA='rec'+'O'.repeat(14);
+const EMPRESA='emp_'+'e'.repeat(12);
+const OTRA='emp_'+'o'.repeat(12);
 const APROBADOR='rec'+'A'.repeat(14);
 const ACTIVADOR='rec'+'B'.repeat(14);
 const CONTRATO='CONTRATO-CORE-01';

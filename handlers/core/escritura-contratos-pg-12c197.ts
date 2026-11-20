@@ -3,6 +3,7 @@
  * SOLO Preview y SOLO bajo habilitación explícita. Ninguna llamada concede módulos.
  * Actor/empresa autorizada se obtienen del servidor; nunca desde el body.
  */
+import {crearAlmacenDerechosRedis} from '../../lib/almacen-derechos-redis.js';
 import type {PoolPgNode183} from '../../core/adaptador-pg-node-12c183.js';
 import {crearBorradorContractualPg194,aprobarBorradorContractualPg194} from
   '../../core/borradores-aprobacion-pg-12c194.js';
@@ -39,6 +40,8 @@ export type DependenciasContrato197=Readonly<{
     Promise<ResultadoOperacion197>;
   activar(pool:PoolPgNode183,fuente:()=>Promise<unknown>,solicitud:unknown):
     Promise<ResultadoOperacion197>;
+  /** Mejor esfuerzo: descarta derechos en caché de la empresa tras aprobar/activar. */
+  invalidarDerechos?(empresaEstableId:string):Promise<void>;
 }>;
 
 const REQUERIDOS:Readonly<Record<AccionContrato197,readonly string[]>>={
@@ -126,6 +129,10 @@ export function crearOperacionContrato197(accion:AccionContrato197,deps:Dependen
         await deps.crear(pool,fuente,req.body):accion==='contrato_aprobar'?
         await deps.aprobar(pool,fuente,req.body):await deps.activar(pool,fuente,req.body);
       if(!resultado.ok){errorHttp(res,statusResultado(resultado));return;}
+      if(accion!=='contrato_borrador'&&deps.invalidarDerechos&&acceso.acceso.empresaEstableId){
+        try{await deps.invalidarDerechos(acceso.acceso.empresaEstableId);}
+        catch{console.error('[contratos] no se pudo invalidar la caché de derechos');}
+      }
       // Mantener respuesta del motor: idempotencia/revisión. Nunca habilitar módulos por HTTP.
       res.status(200).json({...resultado,accesoOperativoHabilitado:false});
     }catch{
@@ -146,6 +153,7 @@ const reales:DependenciasContrato197={
   crear:crearBorradorContractualPg194,
   aprobar:aprobarBorradorContractualPg194,
   activar:activarContratoDesdeServidor193,
+  invalidarDerechos:(emp)=>crearAlmacenDerechosRedis().invalidarEmpresa(emp),
 };
 export const contratoBorradorCore197=crearOperacionContrato197('contrato_borrador',reales);
 export const contratoAprobarCore197=crearOperacionContrato197('contrato_aprobar',reales);

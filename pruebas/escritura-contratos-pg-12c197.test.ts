@@ -137,3 +137,34 @@ test('P3G: fábrica del pool diferida y rechazo sin abrir conexiones',async()=>{
   await assert.rejects(pool.connect());
   assert.equal(instancias,0);assert.equal(conexiones,0);assert.equal(liberadas,0);
 });
+
+// 7.3: tras aprobar/activar se invalida la caché de derechos (mejor esfuerzo).
+function conInvalidacion(accion:AccionContrato197,falla:boolean,ok=true){
+  const llamadas:string[]=[];
+  const EMP='emp_abcdefghij12';
+  const deps:DependenciasContrato197={
+    habilitada:()=>true,origenPermitido:()=>ORIGEN,
+    verificar:async(_r,_e,p)=>({ok:true,acceso:{usuarioId:U,empresaId:E,empresaEstableId:EMP,permiso:p}}),
+    fuente:()=>async()=>({}),pool:()=>({} as PoolPgNode183),
+    crear:async()=>({ok,accesoOperativoHabilitado:false}),
+    aprobar:async()=>({ok,accesoOperativoHabilitado:false}),
+    activar:async()=>({ok,accesoOperativoHabilitado:false}),
+    invalidarDerechos:async(e)=>{llamadas.push(e);if(falla)throw Error('redis caído');},
+  };
+  let codigo=0;
+  const res={setHeader(){return this;},status(n:number){codigo=n;return this;},json(){return this;}};
+  const req={method:'POST',query:{accion,empresaId:E},
+    headers:{origin:ORIGEN,'content-type':'application/json'},body:solicitudes[accion]};
+  return {llamadas,run:async()=>{await crearOperacionContrato197(accion,deps)(req,res);return codigo;}};
+}
+test('7.3 aprobar y activar invalidan la caché; borrador no',async()=>{
+  for(const [a,n] of [['contrato_aprobar',1],['contrato_activar',1],['contrato_borrador',0]] as const){
+    const f=conInvalidacion(a,false);assert.equal(await f.run(),200);
+    assert.equal(f.llamadas.length,n);
+  }
+});
+test('7.3 si falla la invalidación igual responde 200; si la operación falla no invalida',async()=>{
+  const f=conInvalidacion('contrato_activar',true);assert.equal(await f.run(),200);
+  const g=conInvalidacion('contrato_activar',false,false);assert.notEqual(await g.run(),200);
+  assert.equal(g.llamadas.length,0);
+});

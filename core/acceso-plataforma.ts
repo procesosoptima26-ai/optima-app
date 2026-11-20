@@ -21,9 +21,26 @@ function exigirEnv(nombre: string): string {
   return valor;
 }
 
+export const MAX_CUENTAS_PLATAFORMA = 3;
+
+/**
+ * Lee OPTIMA_PLATFORM_ADMIN_USER_ID: un ID, o hasta 3 separados por coma.
+ * Falla cerrado: si CUALQUIER elemento es inválido, vacío o repetido, o hay
+ * más de 3, devuelve [] (nadie es administrador de plataforma).
+ */
+export function listarCuentasPlataforma(
+  bruto: string | undefined = process.env.OPTIMA_PLATFORM_ADMIN_USER_ID,
+): readonly string[] {
+  if (typeof bruto !== "string" || !bruto.trim()) return [];
+  const partes = bruto.split(",").map((p) => p.trim());
+  if (partes.length > MAX_CUENTAS_PLATAFORMA) return [];
+  if (!partes.every((p) => ID.test(p))) return [];
+  if (new Set(partes).size !== partes.length) return [];
+  return partes;
+}
+
 export function esCuentaPlataformaConfigurada(usuarioId: string): boolean {
-  const elegido = process.env.OPTIMA_PLATFORM_ADMIN_USER_ID?.trim();
-  return ID.test(usuarioId) && elegido === usuarioId;
+  return ID.test(usuarioId) && listarCuentasPlataforma().includes(usuarioId);
 }
 
 async function registro(base: string, tabla: string, id: string, token: string): Promise<Registro | null> {

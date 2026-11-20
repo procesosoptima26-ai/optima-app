@@ -2,6 +2,7 @@
  * No abre conexión, no revela secretos y JAMÁS habilita el endpoint.
  * Un conjunto de variables presentes NO equivale a aprobación de despliegue.
  */
+import {listarCuentasPlataforma} from '../core/acceso-plataforma.js';
 import {validarConfigLectura186} from './pool-lectura-comercial-12c186.js';
 
 export type EstadoDiagnostico187 = 'APAGADO'|'CONFIG_INCOMPLETA'|'REVISION_OBLIGATORIA';
@@ -52,7 +53,9 @@ export function diagnosticarEndpointComercial187(
    ['AIRTABLE_USERS_BASE_ID',BASE],['AIRTABLE_USERS_TABLE_ID',TABLA],
    ['AIRTABLE_COMPANIES_TABLE_ID',TABLA],
  ] as const){
-   if(!re.test(variables[nombre]??'')&&!faltantes.includes(nombre))faltantes.push(nombre);
+   const valido=nombre==='OPTIMA_PLATFORM_ADMIN_USER_ID'
+     ?listarCuentasPlataforma(variables[nombre]).length>0:re.test(variables[nombre]??'');
+   if(!valido&&!faltantes.includes(nombre))faltantes.push(nombre);
  }
  const estado:EstadoDiagnostico187=!habilitado?'APAGADO':
    faltantes.length?'CONFIG_INCOMPLETA':'REVISION_OBLIGATORIA';

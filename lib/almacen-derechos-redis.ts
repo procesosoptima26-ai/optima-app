@@ -8,7 +8,7 @@ import { esIdEmpresaEstable } from "./empresa-estable.js";
 
 type Ejecutar = (comando: Array<string | number>) => Promise<unknown>;
 
-async function ejecutarRedis(comando: Array<string | number>): Promise<unknown> {
+export async function ejecutarRedis(comando: Array<string | number>): Promise<unknown> {
   const url = process.env.UPSTASH_REDIS_KV_REST_API_URL;
   const token = process.env.UPSTASH_REDIS_KV_REST_API_TOKEN;
   if (!url || !token) throw new Error("Redis no está configurado");

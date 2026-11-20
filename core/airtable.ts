@@ -13,6 +13,7 @@ import {
   type Modulo,
   type SucursalCore,
 } from "./seguridad.js";
+import { leerIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 type RegistroAirtable = {
   id: string;
@@ -150,6 +151,7 @@ export async function leerAccesoCoreDesdeAirtable(usuarioId: string): Promise<Re
 
   const modulosEmpresa = leerModulos(empresa.fields.MODULOS_CONTRATADOS);
   const claveEmpresa = texto(empresa.fields.CLAVE_EMPRESA);
+  const idEstableEmpresa = leerIdEmpresaEstable(empresa.fields);
   if (!modulosEmpresa || !claveEmpresa || modulosEmpresa.length === 0) {
     return { ok: false, motivo: "DATOS_INCOMPLETOS" };
   }
@@ -182,6 +184,7 @@ export async function leerAccesoCoreDesdeAirtable(usuarioId: string): Promise<Re
       clave: claveEmpresa,
       activa: true,
       modulosContratados: modulosEmpresa,
+      ...(idEstableEmpresa ? { idEstable: idEstableEmpresa } : {}),
     },
     usuario: {
       id: usuarioId,

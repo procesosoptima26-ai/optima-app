@@ -17,7 +17,7 @@ const activo = [{ modalidad: "MODULO_PRINCIPAL", modulo: "INVENTARIO", nivel: "E
 const individual = [{ modalidad: "SUBMODULO_INDEPENDIENTE", submodulo: "INV_PRODUCTOS", nivel: "ESTANDAR" }] as const;
 const contexto = (principal = true): ContextoCore => ({
   usuarioId: U, activo: true,
-  empresa: { id: E, clave: "TEST", activa: true },
+  empresa: { id: E, clave: "TEST", activa: true, idEstable: EK },
   sucursalesAutorizadas: [{ id: S, nombre: "PRUEBA", activa: true, empresaId: E }],
   modulosEmpresa: principal ? ["INVENTARIO"] : [],
   modulosUsuario: principal ? ["INVENTARIO"] : [],
@@ -29,7 +29,7 @@ const peticion = (ctx = contexto()) => ({
 });
 function deps(contrato: unknown = activo, permisos: string[] = ["inventario.ver"], submodulos: string[] = []) {
   return {
-    async consultarContrato() { return { ok: true as const, contrato: { empresaId: E, idContrato: "OPT-TEST", idVersion: "VER-TEST01", numero: 1, servicios: contrato } } as any; },
+    async consultarContrato() { return { ok: true as const, contrato: { empresaId: EK, idContrato: "OPT-TEST", idVersion: "VER-TEST01", numero: 1, servicios: contrato } } as any; },
     async consultarAsignaciones() { return { ok: true as const, usuarioId: U, empresaId: E, permisosAsignadosUsuario: permisos, submodulosHabilitadosUsuario: submodulos } as any; },
   };
 }
@@ -42,6 +42,28 @@ test("12C19: no concede prestaciones individuales sin permiso expreso", async ()
 });
 test("12C19: submódulo independiente y asignación expresa sí funciona", async () => {
   assert.equal(await autorizarCapacidadOperativa(peticion(contexto(false)), deps(individual, ["inventario.ver"], ["INV_PRODUCTOS"])), true);
+});
+test("12C19: la consulta de contrato usa el ID ESTABLE, no el código de Airtable", async () => {
+  const pedidos: string[] = [];
+  const d = deps();
+  const ok = await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async (id: string) => { pedidos.push(id); return d.consultarContrato(); } });
+  assert.equal(ok, true);
+  assert.deepEqual(pedidos, [EK]);
+});
+test("12C19: empresa SIN ID estable válido deniega y NO consulta el contrato", async () => {
+  for (const idEstable of [undefined, E, "emp_MAYUSCULAS1", ""]) {
+    let consultas = 0;
+    const d = deps();
+    const ctx = { ...contexto(), empresa: { id: E, clave: "TEST", activa: true, ...(idEstable === undefined ? {} : { idEstable }) } } as ContextoCore;
+    const ok = await autorizarCapacidadOperativa(peticion(ctx), { ...d, consultarContrato: async () => { consultas++; return d.consultarContrato(); } });
+    assert.equal(ok, false);
+    assert.equal(consultas, 0);
+  }
+});
+test("12C19: contrato de OTRA empresa estable no habilita aunque el resto coincida", async () => {
+  const d = deps();
+  const ok = await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => ({ ok: true, contrato: { empresaId: OTRAK, idContrato: "OPT-X", idVersion: "VER-X00001", numero: 1, servicios: activo } } as any) });
+  assert.equal(ok, false);
 });
 test("12C19: contrato y usuario son restricciones acumulativas", async () => {
   assert.equal(await autorizarCapacidadOperativa(peticion(), deps(activo, [])), false);
@@ -57,7 +79,7 @@ test("12C19: empresa, sucursal, módulo, permiso y capacidad ajenos no habilitan
 });
 test("12C19: contrato ajeno o respuesta Airtable incoherente falla cerrado", async () => {
   const d = deps();
-  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => ({ ok: true, contrato: { empresaId: OTRA, servicios: activo } } as any) }), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => ({ ok: true, contrato: { empresaId: OTRAK, servicios: activo } } as any) }), false);
   assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarAsignaciones: async () => ({ ok: true, usuarioId: U, empresaId: OTRA, permisosAsignadosUsuario: ["inventario.ver"], submodulosHabilitadosUsuario: [] } as any) }), false);
   assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarContrato: async () => { throw Error("BD caída"); } }), false);
 });

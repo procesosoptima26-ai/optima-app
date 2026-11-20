@@ -109,3 +109,15 @@ test("Core: configuración inválida no se interpreta como acceso libre", () => 
     ok: false, motivo: "REGISTROS_INVALIDOS",
   });
 });
+
+test("Core: el ID estable de la empresa llega al contexto solo si es válido", () => {
+  const con = contexto({ ...base, empresa: { ...base.empresa, idEstable: "emp_s84ng12hqeq1" } });
+  assert.equal(con.ok && con.contexto.empresa.idEstable, "emp_s84ng12hqeq1");
+  for (const malo of ["rec" + "A".repeat(14), "EMP_S84NG12HQEQ1", "", "emp_corto"]) {
+    const r = contexto({ ...base, empresa: { ...base.empresa, idEstable: malo } });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal("idEstable" in r.contexto.empresa, false);
+  }
+  const sin = contexto();
+  if (sin.ok) assert.deepEqual(sin.contexto.empresa, { id: "empresa-1", clave: "E1", activa: true });
+});

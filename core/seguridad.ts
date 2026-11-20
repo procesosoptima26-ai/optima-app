@@ -140,6 +140,11 @@ export type EmpresaCore = Readonly<{
   id: string;
   clave: string;
   activa: boolean;
+  /**
+   * ID ESTABLE de OPTIMA (emp_...), clave de la empresa en PostgreSQL.
+   * Opcional: si falta, las capacidades que dependen de un contrato se deniegan.
+   */
+  idEstable?: string;
 }>;
 
 export type SucursalCore = Readonly<{

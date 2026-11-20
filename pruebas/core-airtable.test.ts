@@ -67,6 +67,16 @@ test("Core desde Airtable: valida los vínculos reales sin hacer escrituras", as
   assert.deepEqual(valido.contexto.permisos, []);
   assert.equal(solicitudes.length, 4);
 
+  // ID estable: sin el campo no se inventa uno; con el campo llega al contexto.
+  assert.equal("idEstable" in valido.contexto.empresa, false);
+  datos[E].fields.ID_EMPRESA_ESTABLE = "emp_s84ng12hqeq1";
+  const conEstable = await leerAccesoCoreDesdeAirtable(U);
+  assert.equal(conEstable.ok && conEstable.contexto.empresa.idEstable, "emp_s84ng12hqeq1");
+  datos[E].fields.ID_EMPRESA_ESTABLE = "valor-invalido";
+  const invalido = await leerAccesoCoreDesdeAirtable(U);
+  assert.equal(invalido.ok && "idEstable" in invalido.contexto.empresa, false);
+  delete datos[E].fields.ID_EMPRESA_ESTABLE;
+
   // Nunca dejar entrar por una sucursal con el mismo nombre pero otra empresa.
   datos[S2].fields.EMPRESA = [E_AJENA];
   assert.deepEqual(await leerAccesoCoreDesdeAirtable(U), {

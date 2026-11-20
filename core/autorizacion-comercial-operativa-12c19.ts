@@ -14,6 +14,7 @@ import { consultarAsignacionesUsuarioVerificado,
 import { leerContratoOperativoPg,
   type LecturaContratoOperativo } from "./contrato-vigente-pg-12c19.js";
 import { crearPoolComercialLectura186 } from "../lib/pool-lectura-comercial-12c186.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type PeticionCapacidadVerificada = Readonly<{
   contexto: ContextoCore;
@@ -23,7 +24,8 @@ export type PeticionCapacidadVerificada = Readonly<{
   recurso: RecursoCore;
 }>;
 export type DependenciasCapacidad = Readonly<{
-  consultarContrato(empresaId: string): Promise<LecturaContratoOperativo>;
+  /** Recibe el ID ESTABLE de la empresa (clave en PostgreSQL), no el código de Airtable. */
+  consultarContrato(idEmpresaEstable: string): Promise<LecturaContratoOperativo>;
   consultarAsignaciones(contexto: ContextoCore): Promise<ResultadoAsignacionesUsuario>;
 }>;
 
@@ -39,15 +41,19 @@ export async function autorizarCapacidadOperativa(
   if (!definicion || definicion.modulo !== modulo || definicion.permiso !== permiso) return false;
   try {
     // Ante cualquier fallo no se salta la verificación ni se presume contratación.
-    const contrato = await dependencias.consultarContrato(contexto.empresa.id);
-    if (!contrato.ok || contrato.contrato.empresaId !== contexto.empresa.id) return false;
+    // Sin ID estable válido no hay forma segura de ubicar el contrato: se deniega.
+    const idEstable = contexto.empresa.idEstable;
+    if (!esIdEmpresaEstable(idEstable)) return false;
+    const contrato = await dependencias.consultarContrato(idEstable);
+    if (!contrato.ok || contrato.contrato.empresaId !== idEstable) return false;
     const usuario = await dependencias.consultarAsignaciones(contexto);
     if (!usuario.ok || usuario.usuarioId !== contexto.usuarioId ||
         usuario.empresaId !== contexto.empresa.id ||
         !usuario.permisosAsignadosUsuario.includes(permiso)) return false;
     return puedeUsarCapacidadComercial({
       contexto,
-      empresaContratacionId: contrato.contrato.empresaId,
+      // Ya se comprobó que el contrato pertenece al ID estable de ESTA empresa.
+      empresaContratacionId: contexto.empresa.id,
       contrataciones: contrato.contrato.servicios,
       catalogoSubmodulos: CATALOGO_SUBMODULOS_CONTRATACION,
       catalogoCapacidades: CAPACIDADES_OPERATIVAS_12C19,

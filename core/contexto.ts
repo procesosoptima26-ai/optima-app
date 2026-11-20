@@ -17,6 +17,7 @@ import {
   type Permiso,
   type SucursalCore,
 } from "./seguridad.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type EmpresaConfigurada = EmpresaCore & Readonly<{
   /** Habilitaciones reales verificadas en el registro de la empresa. */
@@ -143,7 +144,10 @@ export function construirContextoCore(
     contexto: {
       usuarioId: usuario.id,
       activo: usuario.activo,
-      empresa: { id: empresa.id, clave: empresa.clave, activa: empresa.activa },
+      empresa: {
+        id: empresa.id, clave: empresa.clave, activa: empresa.activa,
+        ...(esIdEmpresaEstable(empresa.idEstable) ? { idEstable: empresa.idEstable } : {}),
+      },
       sucursalesAutorizadas: sucursalesPermitidas,
       modulosEmpresa,
       modulosUsuario,

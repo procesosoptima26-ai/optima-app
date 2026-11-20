@@ -31,6 +31,8 @@ function deps(contrato: unknown = activo, permisos: string[] = ["inventario.ver"
   return {
     async consultarContrato() { return { ok: true as const, contrato: { empresaId: EK, idContrato: "OPT-TEST", idVersion: "VER-TEST01", numero: 1, servicios: contrato } } as any; },
     async consultarAsignaciones() { return { ok: true as const, usuarioId: U, empresaId: E, permisosAsignadosUsuario: permisos, submodulosHabilitadosUsuario: submodulos } as any; },
+    async consultarCicloVida() { return { ok: true as const, hechos: { periodoHasta: "2027-01-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null } }; },
+    ahoraIso: () => F,
   };
 }
 
@@ -164,4 +166,39 @@ test("12C19: si falla el ROLLBACK, nunca concede acceso", async () => {
   } };
   assert.deepEqual(await leerContratoOperativoPg(pool, EK, F), { ok: false, motivo: "NO_DISPONIBLE" });
   assert.equal(s.liberadas(), 1);
+});
+
+// ---- Tarea 5.3: el ciclo de vida de la empresa condiciona el acceso ----
+const conCiclo = (hechos: { periodoHasta: string | null; suspendidoDesde: string | null; canceladoDesde: string | null }) =>
+  ({ ...deps(), consultarCicloVida: async () => ({ ok: true as const, hechos }) });
+const SIN = { suspendidoDesde: null, canceladoDesde: null };
+test("ciclo: ACTIVO y GRACIA permiten consultar", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2026-12-01T00:00:00.000Z", ...SIN })), true);
+  // vencido hace 5 días (gracia = 10): sigue permitiendo
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2026-11-08T18:00:00.000Z", ...SIN })), true);
+});
+test("ciclo: SOLO_LECTURA permite ver (las acciones que modifican se deniegan en estadoPermiteAccion; hoy no existe ninguna capacidad operativa de escritura)", async () => {
+  const solo = conCiclo({ periodoHasta: "2026-10-20T18:00:00.000Z", ...SIN }); // vencido hace 24 días: pasó la gracia
+  assert.equal(await autorizarCapacidadOperativa(peticion(), solo), true); // inventario.ver
+});
+test("ciclo: CERRADA deniega incluso consultar", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2026-01-01T00:00:00.000Z", ...SIN })), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2027-01-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: "2026-01-01T00:00:00.000Z" })), false);
+});
+test("ciclo: suspendida por OPTIMA = solo lectura (consultar sí)", async () => {
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2027-01-01T00:00:00.000Z", suspendidoDesde: "2026-11-10T00:00:00.000Z", canceladoDesde: null })), true);
+});
+test("ciclo: sin registro, inconsistente, error o datos inválidos deniegan", async () => {
+  const d = deps();
+  for (const motivo of ["SIN_REGISTRO", "INCONSISTENTE", "NO_DISPONIBLE"] as const) {
+    assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarCicloVida: async () => ({ ok: false as const, motivo }) }), false);
+  }
+  assert.equal(await autorizarCapacidadOperativa(peticion(), { ...d, consultarCicloVida: async () => { throw Error("BD caída"); } }), false);
+  assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "mañana", ...SIN })), false);
+});
+test("ciclo: el ciclo se consulta con el ID ESTABLE", async () => {
+  const pedidos: string[] = [];
+  const d = deps();
+  await autorizarCapacidadOperativa(peticion(), { ...d, consultarCicloVida: async (id: string) => { pedidos.push(id); return d.consultarCicloVida(); } });
+  assert.deepEqual(pedidos, [EK]);
 });

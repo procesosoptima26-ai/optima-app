@@ -15,6 +15,9 @@ import { leerContratoOperativoPg,
   type LecturaContratoOperativo } from "./contrato-vigente-pg-12c19.js";
 import { crearPoolComercialLectura186 } from "../lib/pool-lectura-comercial-12c186.js";
 import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
+import { evaluarCicloVida, estadoPermiteAccion,
+  type HechosCicloVida } from "./ciclo-vida-contrato.js";
+import { leerCicloVidaPg, type LecturaCicloVida } from "./ciclo-vida-pg.js";
 
 export type PeticionCapacidadVerificada = Readonly<{
   contexto: ContextoCore;
@@ -27,6 +30,10 @@ export type DependenciasCapacidad = Readonly<{
   /** Recibe el ID ESTABLE de la empresa (clave en PostgreSQL), no el código de Airtable. */
   consultarContrato(idEmpresaEstable: string): Promise<LecturaContratoOperativo>;
   consultarAsignaciones(contexto: ContextoCore): Promise<ResultadoAsignacionesUsuario>;
+  /** Hechos del ciclo de vida (pago, suspensión, cancelación) de la empresa, por ID estable. */
+  consultarCicloVida(idEmpresaEstable: string): Promise<LecturaCicloVida>;
+  /** Reloj inyectable para pruebas; en producción se usa la hora del servidor. */
+  ahoraIso?(): string;
 }>;
 
 /** Pureza de integración: dependencias inyectables en laboratorio, sin fallbacks. */
@@ -46,6 +53,13 @@ export async function autorizarCapacidadOperativa(
     if (!esIdEmpresaEstable(idEstable)) return false;
     const contrato = await dependencias.consultarContrato(idEstable);
     if (!contrato.ok || contrato.contrato.empresaId !== idEstable) return false;
+    // Ciclo de vida: sin registro, con datos inválidos o con estado que no permite
+    // esta acción (p. ej. escribir en SOLO_LECTURA, cualquier cosa en CERRADA) -> deniega.
+    const ciclo = await dependencias.consultarCicloVida(idEstable);
+    if (!ciclo.ok) return false;
+    const evaluacion = evaluarCicloVida(ciclo.hechos as HechosCicloVida,
+      dependencias.ahoraIso ? dependencias.ahoraIso() : new Date().toISOString());
+    if (!evaluacion.ok || !estadoPermiteAccion(evaluacion.estado, permiso)) return false;
     const usuario = await dependencias.consultarAsignaciones(contexto);
     if (!usuario.ok || usuario.usuarioId !== contexto.usuarioId ||
         usuario.empresaId !== contexto.empresa.id ||
@@ -78,6 +92,7 @@ export async function autorizarCapacidadOperativaReal(
   const pool = crearPoolComercialLectura186();
   return autorizarCapacidadOperativa(peticion, {
     consultarContrato: (empresaId) => leerContratoOperativoPg(pool, empresaId, new Date().toISOString()),
+    consultarCicloVida: (empresaId) => leerCicloVidaPg(pool, empresaId),
     consultarAsignaciones: (contexto) => consultarAsignacionesUsuarioVerificado(contexto, {
       baseId, tablaUsuariosId, token,
     }),

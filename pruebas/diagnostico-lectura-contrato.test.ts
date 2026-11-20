@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { leerContratoOperativoPg, describirFalloSeguro } from '../core/contrato-vigente-pg-12c19.js';
 
-const EMPRESA = 'rec4tLlE2dddN2SPL';
+const EMPRESA = 'emp_s84ng12hqeq1';
 const AHORA = '2026-11-20T12:00:00.000Z';
 
 async function capturar(fn: () => Promise<unknown>): Promise<string> {

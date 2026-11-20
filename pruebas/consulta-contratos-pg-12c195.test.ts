@@ -8,10 +8,11 @@ import type {VercelRequest,VercelResponse} from '@vercel/node';
 
 const U='rec'+'U'.repeat(14);
 const E='rec'+'E'.repeat(14);
+const EST='emp_'+'e'.repeat(12); // ID estable: clave de la empresa en Neon
 const OTRO='rec'+'O'.repeat(14);
 const fecha='2026-11-13T10:00:00.000Z';
 type Opciones={habilitada?:boolean;permiso?:boolean;sesion?:boolean;noVigente?:boolean;
-  baseCaida?:boolean;duplicado?:boolean;alterarEmpresa?:boolean;usuarioAjeno?:boolean};
+  baseCaida?:boolean;duplicado?:boolean;alterarEmpresa?:boolean;usuarioAjeno?:boolean;sinEstable?:boolean};
 function fixture(opts:Opciones={}){
   const headers:Record<string,string>={};let status=0;let cuerpo:unknown=null;
   let autorizaciones=0,conexiones=0,liberadas=0,consultas=0;
@@ -19,10 +20,10 @@ function fixture(opts:Opciones={}){
     async query(sql:string,param?:unknown[]){
       consultas++;
       if(opts.baseCaida && sql.includes('FROM optima_comercial.contratos'))throw Error('no disponible');
-      if(sql.includes('set_config')){assert.deepEqual(param,[E]);return {rows:[{empresa_id:E}],rowCount:1};}
+      if(sql.includes('set_config')){assert.deepEqual(param,[EST]);return {rows:[{empresa_id:EST}],rowCount:1};}
       if(sql.includes('FROM optima_comercial.contratos')){
         const rows=opts.noVigente?[]:[{
-          empresa_id:opts.alterarEmpresa?OTRO:E,id_contrato:'CTO-PRUEBA',revision:'1',
+          empresa_id:opts.alterarEmpresa?OTRO:EST,id_contrato:'CTO-PRUEBA',revision:'1',
           id_version:'VER-C1CLIENTE',numero:1,estado:'VIGENTE',
           servicios:[{modalidad:'MODULO_PRINCIPAL',modulo:'INVENTARIO',nivel:'ESENCIAL'}],
           vigente_desde:'2026-11-12T10:00:00.000Z',vigente_hasta:null,
@@ -38,6 +39,7 @@ function fixture(opts:Opciones={}){
     if(opts.sesion===false)return {ok:false,motivo:'SIN_SESION'} as ResultadoAccesoReal195;
     if(opts.permiso===false)return {ok:false,motivo:'SIN_PERMISO'} as ResultadoAccesoReal195;
     return {ok:true,acceso:{usuarioId:opts.usuarioAjeno?OTRO:U,empresaId:E,
+      ...(opts.sinEstable?{}:{empresaEstableId:EST}),
       permiso:'CONSULTAR_CONTRATOS'}} as const;
   };
   const handler=crearConsultaContratoCore195({
@@ -91,6 +93,16 @@ test('P3E: contratos múltiples, empresa ajena y caída de BD cierran acceso',as
   }
 });
 
+
+test('ID estable: Neon se consulta con emp_..., nunca con el código rec de Airtable',async()=>{
+  const r=await fixture().ejecutar(solicitud);
+  assert.equal(r.status,200); // el pool simulado exige param [EST] en set_config
+});
+test('ID estable: empresa sin ID estable válido cierra acceso y NO abre PG',async()=>{
+  const r=await fixture({sinEstable:true}).ejecutar(solicitud);
+  assert.equal(r.status,503);assert.equal(r.conexiones,0);
+  assert.deepEqual(r.cuerpo,{ok:false,error:'No se pudo verificar el contrato comercial'});
+});
 
 test('P3E v2: admite acción consolidada exacta y no admite otros parámetros',async()=>{
   const permitido=await fixture().ejecutar({method:'GET',query:{accion:'contratos_core',empresaId:E}});

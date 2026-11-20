@@ -10,6 +10,8 @@ const E = "rec" + "E".repeat(14);
 const U = "rec" + "U".repeat(14);
 const S = "rec" + "S".repeat(14);
 const OTRA = "rec" + "O".repeat(14);
+const EK = "emp_" + "e".repeat(12); // clave estable de empresa en Neon
+const OTRAK = "emp_" + "o".repeat(12);
 const F = "2026-11-13T18:00:00.000Z";
 const activo = [{ modalidad: "MODULO_PRINCIPAL", modulo: "INVENTARIO", nivel: "ESENCIAL" }] as const;
 const individual = [{ modalidad: "SUBMODULO_INDEPENDIENTE", submodulo: "INV_PRODUCTOS", nivel: "ESTANDAR" }] as const;
@@ -69,11 +71,11 @@ function simularPg(filas: readonly Record<string, unknown>[], fallo = false): Si
       sql.push(q);
       if (fallo && q.includes("JOIN optima_comercial.versiones")) throw Error("BD no disponible");
       if (q.includes("set_config")) {
-        assert.deepEqual(p, [E]);
-        return { rows: [{ empresa_id: E }], rowCount: 1 };
+        assert.deepEqual(p, [EK]);
+        return { rows: [{ empresa_id: EK }], rowCount: 1 };
       }
       if (q.includes("JOIN optima_comercial.versiones")) {
-        assert.deepEqual(p, [E]);
+        assert.deepEqual(p, [EK]);
         return { rows: [...filas], rowCount: filas.length };
       }
       return { rows: [], rowCount: 0 };
@@ -83,14 +85,14 @@ function simularPg(filas: readonly Record<string, unknown>[], fallo = false): Si
   return { pool, sql, liberadas: () => liberadas };
 }
 const fila = {
-  empresa_id: E, id_contrato: "OPT-TEST", revision: "2", id_version: "VER-TEST01",
+  empresa_id: EK, id_contrato: "OPT-TEST", revision: "2", id_version: "VER-TEST01",
   numero: 1, estado: "VIGENTE", servicios: activo,
   vigente_desde: "2026-11-12T15:00:00.000Z", vigente_hasta: null,
   aprobado_por_id: U, aprobado_en: "2026-11-11T15:00:00.000Z",
 };
 test("12C19: PostgreSQL lee una foto, parametrizada, con SET LOCAL + RLS", async () => {
   const s = simularPg([fila]);
-  const r = await leerContratoOperativoPg(s.pool, E, F);
+  const r = await leerContratoOperativoPg(s.pool, EK, F);
   assert.equal(r.ok, true);
   assert.equal(s.sql[0], "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   assert.equal(s.sql.some(q => q.includes("set_config('optima.empresa_id', $1, true)")), true);
@@ -99,21 +101,21 @@ test("12C19: PostgreSQL lee una foto, parametrizada, con SET LOCAL + RLS", async
   assert.equal(s.liberadas(), 1);
 });
 test("12C19: cero o múltiples versiones vigentes niegan todo", async () => {
-  assert.equal((await leerContratoOperativoPg(simularPg([]).pool, E, F)).ok, false);
+  assert.equal((await leerContratoOperativoPg(simularPg([]).pool, EK, F)).ok, false);
   assert.equal((await leerContratoOperativoPg(simularPg([fila, { ...fila, id_contrato: "OTRO" }]).pool, E, F)).ok, false);
 });
 test("12C19: contrato futuro, vencido, empresa falsa, servicios inválidos bloquean", async () => {
   const malos = [
     { ...fila, vigente_desde: "2026-11-14T00:00:00.000Z" },
     { ...fila, vigente_hasta: "2026-11-13T17:00:00.000Z" },
-    { ...fila, empresa_id: OTRA },
+    { ...fila, empresa_id: OTRAK },
     { ...fila, servicios: ["invalido"] },
   ];
-  for (const f of malos) assert.equal((await leerContratoOperativoPg(simularPg([f]).pool, E, F)).ok, false);
+  for (const f of malos) assert.equal((await leerContratoOperativoPg(simularPg([f]).pool, EK, F)).ok, false);
 });
 test("12C19: PG caído devuelve NO_DISPONIBLE y libera conexión", async () => {
   const s = simularPg([fila], true);
-  const r = await leerContratoOperativoPg(s.pool, E, F);
+  const r = await leerContratoOperativoPg(s.pool, EK, F);
   assert.deepEqual(r, { ok: false, motivo: "NO_DISPONIBLE" });
   assert.equal(s.sql.at(-1), "ROLLBACK");
   assert.equal(s.liberadas(), 1);
@@ -121,6 +123,11 @@ test("12C19: PG caído devuelve NO_DISPONIBLE y libera conexión", async () => {
 test("12C19: un empresaId inválido se bloquea SIN consultar base", async () => {
   const s = simularPg([fila]);
   assert.equal((await leerContratoOperativoPg(s.pool, "otro", F)).ok, false);
+  assert.equal(s.sql.length, 0);
+});
+test("12C19: el código interno de Airtable (rec...) ya no es clave válida en Neon", async () => {
+  const s = simularPg([fila]);
+  assert.deepEqual(await leerContratoOperativoPg(s.pool, E, F), { ok: false, motivo: "INCONSISTENTE" });
   assert.equal(s.sql.length, 0);
 });
 
@@ -133,6 +140,6 @@ test("12C19: si falla el ROLLBACK, nunca concede acceso", async () => {
       return real.query(sql, parametros);
     } };
   } };
-  assert.deepEqual(await leerContratoOperativoPg(pool, E, F), { ok: false, motivo: "NO_DISPONIBLE" });
+  assert.deepEqual(await leerContratoOperativoPg(pool, EK, F), { ok: false, motivo: "NO_DISPONIBLE" });
   assert.equal(s.liberadas(), 1);
 });

@@ -8,6 +8,8 @@
  * Requiere campo Airtable USUARIOS.PERMISOS_CONTRATOS de selección múltiple;
  * mientras ese campo no exista, DENIEGA todo. No se modifica Airtable aquí.
  */
+import {esIdEmpresaEstable} from './empresa-estable.js';
+
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const PERMISOS = [
   'CONSULTAR_CONTRATOS',
@@ -27,10 +29,14 @@ export type DependenciasSesionComercial195 = Readonly<{
   leerPlataforma(usuarioId: string): Promise<Plataforma195 | null | false>;
   leerUsuario(usuarioId: string): Promise<Usuario195 | null>;
   empresaClienteActiva(empresaId: string): Promise<boolean>;
+  /** Opcional: si existe, reemplaza a empresaClienteActiva y además informa el ID estable. */
+  resolverEmpresaCliente?(empresaId: string): Promise<{activa: boolean; idEstable: string | null}>;
 }>;
 export type AccesoComercialReal195 = Readonly<{
   usuarioId: string;
   empresaId: string;
+  /** ID estable (emp_...) de la empresa objetivo; solo si la dependencia lo resolvió. */
+  empresaEstableId?: string;
   permiso: PermisoContrato195;
 }>;
 export type ResultadoAccesoReal195 =
@@ -78,10 +84,19 @@ export function crearVerificadorAccesoComercialReal195(deps: DependenciasSesionC
       }
       const asignados = listaPermisos(usuario.fields.PERMISOS_CONTRATOS);
       if (!asignados?.has(permiso)) return {ok: false, motivo: 'SIN_PERMISO'};
-      if (!await deps.empresaClienteActiva(empresaObjetivoId)) {
+      let empresaEstableId: string | undefined;
+      if (deps.resolverEmpresaCliente) {
+        const empresa = await deps.resolverEmpresaCliente(empresaObjetivoId);
+        if (!empresa || empresa.activa !== true) return {ok: false, motivo: 'EMPRESA_INVALIDA'};
+        if (empresa.idEstable !== null && esIdEmpresaEstable(empresa.idEstable)) {
+          empresaEstableId = empresa.idEstable;
+        }
+      } else if (!await deps.empresaClienteActiva(empresaObjetivoId)) {
         return {ok: false, motivo: 'EMPRESA_INVALIDA'};
       }
-      return {ok: true, acceso: {usuarioId: sesion.usuarioId, empresaId: empresaObjetivoId, permiso}};
+      return {ok: true, acceso: empresaEstableId
+        ? {usuarioId: sesion.usuarioId, empresaId: empresaObjetivoId, empresaEstableId, permiso}
+        : {usuarioId: sesion.usuarioId, empresaId: empresaObjetivoId, permiso}};
     } catch {
       return {ok: false, motivo: 'FUENTE_NO_DISPONIBLE'};
     }
@@ -93,7 +108,7 @@ export async function verificarAccesoComercialReal195(
   req: PeticionSesion195, empresaObjetivoId: string, permiso: PermisoContrato195,
 ): Promise<ResultadoAccesoReal195> {
   const [{leerTokenSesion, buscarSesion}, {leerAccesoPlataforma}, {leerUsuario},
-    {empresaClienteMaestra185}] = await Promise.all([
+    {empresaClienteMaestra185, resolverEmpresaClienteMaestra185}] = await Promise.all([
       import('./session.js'), import('../core/acceso-plataforma.js'),
       import('./usuarios-maestros.js'), import('../handlers/core/consulta-historial-pg-12c185.js'),
     ]);
@@ -103,6 +118,7 @@ export async function verificarAccesoComercialReal195(
     leerPlataforma: leerAccesoPlataforma,
     leerUsuario,
     empresaClienteActiva: empresaClienteMaestra185,
+    resolverEmpresaCliente: resolverEmpresaClienteMaestra185,
   })(req, empresaObjetivoId, permiso);
 }
 

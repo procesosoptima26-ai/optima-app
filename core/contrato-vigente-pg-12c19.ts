@@ -6,6 +6,7 @@
 import type { PoolPgNode183 } from "./adaptador-pg-node-12c183.js";
 import { validarContrataciones, type ContratacionComercial } from "./reglas-comerciales.js";
 import { CATALOGO_SUBMODULOS_CONTRATACION } from "./catalogo-comercial-jerarquico.js";
+import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const CONTRATO_ID = /^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -107,7 +108,7 @@ export async function leerContratoOperativoPg(
   pool: PoolPgNode183, empresaId: string, ahoraIso: string,
 ): Promise<LecturaContratoOperativo> {
   const ahora = instante(ahoraIso);
-  if (!ID.test(empresaId) || ahora === null) return { ok: false, motivo: "INCONSISTENTE" };
+  if (!esIdEmpresaEstable(empresaId) || ahora === null) return { ok: false, motivo: "INCONSISTENTE" };
   let conexion: Awaited<ReturnType<PoolPgNode183["connect"]>> | undefined;
   let transaccion = false;
   let lectura: LecturaContratoOperativo = { ok: false, motivo: "NO_DISPONIBLE" };

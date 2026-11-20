@@ -105,3 +105,31 @@ test('P3E: fuente no devuelve identidad cuando sesión perdió autorización',as
     fixture({sinCampo:true}).verificar);
   await assert.rejects(fuente(),/No se verificó/);
 });
+
+test('ID estable: resolverEmpresaCliente devuelve el ID estable en el acceso',async()=>{
+  const f=fixture();
+  const verificar=crearVerificadorAccesoComercialReal195({...f.deps,
+    async resolverEmpresaCliente(){return {activa:true,idEstable:'emp_xngaq4y32jji'};}});
+  const r=await verificar(req,C,'CONSULTAR_CONTRATOS');
+  assert.deepEqual(r,{ok:true,acceso:{usuarioId:A,empresaId:C,empresaEstableId:'emp_xngaq4y32jji',permiso:'CONSULTAR_CONTRATOS'}});
+  assert.equal(f.llamadas.empresa,0); // no se consulta dos veces a Airtable
+});
+test('ID estable: ID faltante o inválido NO inventa uno (el acceso sale sin él)',async()=>{
+  for(const idEstable of [null,'rec'+'C'.repeat(14),'EMP_XNGAQ4Y32JJI','']){
+    const f=fixture();
+    const verificar=crearVerificadorAccesoComercialReal195({...f.deps,
+      async resolverEmpresaCliente(){return {activa:true,idEstable};}});
+    const r=await verificar(req,C,'CONSULTAR_CONTRATOS');
+    assert.equal(r.ok,true);
+    assert.equal('empresaEstableId' in (r as {acceso:object}).acceso,false);
+  }
+});
+test('ID estable: empresa inactiva o caída de Airtable siguen negando',async()=>{
+  const f=fixture();
+  const inactiva=crearVerificadorAccesoComercialReal195({...f.deps,
+    async resolverEmpresaCliente(){return {activa:false,idEstable:'emp_xngaq4y32jji'};}});
+  assert.deepEqual(await inactiva(req,C,'CONSULTAR_CONTRATOS'),{ok:false,motivo:'EMPRESA_INVALIDA'});
+  const caida=crearVerificadorAccesoComercialReal195({...f.deps,
+    async resolverEmpresaCliente(){throw Error('Airtable');}});
+  assert.deepEqual(await caida(req,C,'CONSULTAR_CONTRATOS'),{ok:false,motivo:'FUENTE_NO_DISPONIBLE'});
+});

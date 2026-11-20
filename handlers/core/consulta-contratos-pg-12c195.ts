@@ -6,6 +6,7 @@ import type {PoolPgNode183} from '../../core/adaptador-pg-node-12c183.js';
 import type {ResultadoAccesoReal195, PeticionSesion195} from '../../lib/sesion-comercial-real-12c195.js';
 import {verificarAccesoComercialReal195} from '../../lib/sesion-comercial-real-12c195.js';
 import {leerContratoOperativoPg} from '../../core/contrato-vigente-pg-12c19.js';
+import {esIdEmpresaEstable} from '../../lib/empresa-estable.js';
 import {crearPoolComercialLectura186} from '../../lib/pool-lectura-comercial-12c186.js';
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
@@ -68,7 +69,14 @@ export function crearConsultaContratoCore195(deps: DependenciasConsulta195) {
         res.status(403).json({ok: false, error: 'Acceso contractual no autorizado'});
         return;
       }
-      const r = await leerContratoOperativoPg(deps.crearPool(), acceso.acceso.empresaId, deps.ahora());
+      // Neon identifica a la empresa por su ID ESTABLE, no por el código interno de Airtable.
+      const claveNeon = acceso.acceso.empresaEstableId;
+      if (!esIdEmpresaEstable(claveNeon)) {
+        console.error('[contrato-pg] estado etapa=empresa detalle=empresa sin ID_EMPRESA_ESTABLE valido');
+        res.status(503).json({ok: false, error: 'No se pudo verificar el contrato comercial'});
+        return;
+      }
+      const r = await leerContratoOperativoPg(deps.crearPool(), claveNeon, deps.ahora());
       if (!r.ok) {
         if (r.motivo === 'NO_VIGENTE') {
           res.status(200).json({ok: true, soloConsulta: true,

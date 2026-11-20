@@ -6,6 +6,7 @@
  */
 import type { PoolPgNode183 } from '../../core/adaptador-pg-node-12c183.js';
 import {leerHistorialComercialPg185} from '../../core/lectura-historial-pg-12c185.js';
+import {leerIdEmpresaEstable} from '../../lib/empresa-estable.js';
 
 const ID=/^rec[A-Za-z0-9]{14}$/;
 const CONTRATO=/^[A-Za-z0-9][A-Za-z0-9._/-]{0,119}$/;
@@ -82,8 +83,11 @@ export async function autenticarPlataformaReal185(req:Request185):Promise<Estado
 /** Validación contra fuente canónica (Base Maestra), sin escribir. Es obligatorio
  * que la empresa esté activa. Solo ejecutarla tras autenticar a PLATAFORMA.
  */
-export async function empresaClienteMaestra185(empresaId:string):Promise<boolean>{
-  if(!ID.test(empresaId))return false;
+export type EmpresaClienteMaestra185=Readonly<{activa:boolean;idEstable:string|null}>;
+
+/** Lee UNA vez la empresa cliente en la Base Maestra: si está activa y su ID estable. */
+export async function resolverEmpresaClienteMaestra185(empresaId:string):Promise<EmpresaClienteMaestra185>{
+  if(!ID.test(empresaId))return {activa:false,idEstable:null};
   const base=process.env.AIRTABLE_USERS_BASE_ID?.trim()??'';
   const tabla=process.env.AIRTABLE_COMPANIES_TABLE_ID?.trim()??'';
   const token=process.env.AIRTABLE_TOKEN?.trim()??'';
@@ -93,12 +97,18 @@ export async function empresaClienteMaestra185(empresaId:string):Promise<boolean
     method:'GET',headers:{Authorization:`Bearer ${token}`},redirect:'error',cache:'no-store',
     signal:AbortSignal.timeout(10000),
   });
-  if(r.status===404)return false;
+  if(r.status===404)return {activa:false,idEstable:null};
   if(!r.ok)throw Error('No se pudo verificar empresa');
   const valor:unknown=await r.json();
   if(!valor||typeof valor!=='object'||Array.isArray(valor))throw Error('Empresa inválida');
-  const reg=valor as {id?:unknown;fields?:{ACTIVA?:unknown}};
-  return reg.id===empresaId&&reg.fields?.ACTIVA===true;
+  const reg=valor as {id?:unknown;fields?:unknown};
+  const activa=reg.id===empresaId&&
+    (reg.fields as {ACTIVA?:unknown}|undefined)?.ACTIVA===true;
+  return {activa,idEstable:activa?leerIdEmpresaEstable(reg.fields):null};
+}
+
+export async function empresaClienteMaestra185(empresaId:string):Promise<boolean>{
+  return (await resolverEmpresaClienteMaestra185(empresaId)).activa;
 }
 
 /** Preparado para un futuro router: las dependencias de BD se suministran

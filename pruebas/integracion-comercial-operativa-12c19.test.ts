@@ -31,7 +31,7 @@ function deps(contrato: unknown = activo, permisos: string[] = ["inventario.ver"
   return {
     async consultarContrato() { return { ok: true as const, contrato: { empresaId: EK, idContrato: "OPT-TEST", idVersion: "VER-TEST01", numero: 1, servicios: contrato } } as any; },
     async consultarAsignaciones() { return { ok: true as const, usuarioId: U, empresaId: E, permisosAsignadosUsuario: permisos, submodulosHabilitadosUsuario: submodulos } as any; },
-    async consultarCicloVida() { return { ok: true as const, hechos: { periodoHasta: "2027-01-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null } }; },
+    async consultarCicloVida() { return { ok: true as const, hechos: { periodoHasta: "2027-01-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null }, revision: 1 }; },
     ahoraIso: () => F,
   };
 }
@@ -170,7 +170,7 @@ test("12C19: si falla el ROLLBACK, nunca concede acceso", async () => {
 
 // ---- Tarea 5.3: el ciclo de vida de la empresa condiciona el acceso ----
 const conCiclo = (hechos: { periodoHasta: string | null; suspendidoDesde: string | null; canceladoDesde: string | null }) =>
-  ({ ...deps(), consultarCicloVida: async () => ({ ok: true as const, hechos }) });
+  ({ ...deps(), consultarCicloVida: async () => ({ ok: true as const, hechos, revision: 1 }) });
 const SIN = { suspendidoDesde: null, canceladoDesde: null };
 test("ciclo: ACTIVO y GRACIA permiten consultar", async () => {
   assert.equal(await autorizarCapacidadOperativa(peticion(), conCiclo({ periodoHasta: "2026-12-01T00:00:00.000Z", ...SIN })), true);

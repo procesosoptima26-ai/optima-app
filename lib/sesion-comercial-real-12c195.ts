@@ -16,6 +16,7 @@ const PERMISOS = [
   'GESTIONAR_BORRADORES',
   'APROBAR_CONTRATO',
   'ACTIVAR_CONTRATO',
+  'GESTIONAR_CICLO_VIDA',
 ] as const;
 export type PermisoContrato195 = (typeof PERMISOS)[number];
 export type PeticionSesion195 = Readonly<{cookies?: Record<string, unknown>}>;

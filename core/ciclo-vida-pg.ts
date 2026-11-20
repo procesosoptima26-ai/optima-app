@@ -10,7 +10,7 @@ import type { HechosCicloVida } from "./ciclo-vida-contrato.js";
 import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 
 export type LecturaCicloVida =
-  | Readonly<{ ok: true; hechos: HechosCicloVida }>
+  | Readonly<{ ok: true; hechos: HechosCicloVida; revision: number }>
   | Readonly<{ ok: false; motivo: "SIN_REGISTRO" | "INCONSISTENTE" | "NO_DISPONIBLE" }>;
 
 /** null se conserva como null; una fecha válida pasa a ISO UTC; cualquier otra cosa es inválida. */
@@ -41,7 +41,7 @@ export async function leerCicloVidaPg(pool: PoolPgNode183, empresaId: string): P
       lectura = { ok: false, motivo: "INCONSISTENTE" };
     } else {
       const r = await conexion.query(
-        `SELECT empresa_id, periodo_hasta, suspendido_desde, cancelado_desde
+        `SELECT empresa_id, periodo_hasta, suspendido_desde, cancelado_desde, revision
          FROM optima_comercial.ciclo_vida WHERE empresa_id = $1 LIMIT 2`,
         [empresaId],
       );
@@ -53,9 +53,11 @@ export async function leerCicloVidaPg(pool: PoolPgNode183, empresaId: string): P
         const periodoHasta = aIso(f.periodo_hasta);
         const suspendidoDesde = aIso(f.suspendido_desde);
         const canceladoDesde = aIso(f.cancelado_desde);
-        lectura = periodoHasta === undefined || suspendidoDesde === undefined || canceladoDesde === undefined
+        const rev = typeof f.revision === "string" && /^\d{1,15}$/.test(f.revision) ? Number(f.revision)
+          : typeof f.revision === "number" && Number.isSafeInteger(f.revision) && f.revision >= 0 ? f.revision : null;
+        lectura = periodoHasta === undefined || suspendidoDesde === undefined || canceladoDesde === undefined || rev === null
           ? { ok: false, motivo: "INCONSISTENTE" }
-          : { ok: true, hechos: { periodoHasta, suspendidoDesde, canceladoDesde } };
+          : { ok: true, hechos: { periodoHasta, suspendidoDesde, canceladoDesde }, revision: rev };
       }
     }
   } catch {

@@ -20,12 +20,12 @@ function simular(filas: readonly Record<string, unknown>[], fallo = false) {
   }; } };
   return { pool, sql, liberadas: () => liberadas };
 }
-const fila = { empresa_id: EK, periodo_hasta: new Date("2026-12-01T00:00:00.000Z"), suspendido_desde: null, cancelado_desde: null };
+const fila = { empresa_id: EK, revision: "4", periodo_hasta: new Date("2026-12-01T00:00:00.000Z"), suspendido_desde: null, cancelado_desde: null };
 
 test("ciclo-vida-pg: lee los tres hechos en ISO, en transacción de solo lectura con RLS", async () => {
   const s = simular([fila]);
   const r = await leerCicloVidaPg(s.pool, EK);
-  assert.deepEqual(r, { ok: true, hechos: { periodoHasta: "2026-12-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null } });
+  assert.deepEqual(r, { ok: true, hechos: { periodoHasta: "2026-12-01T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null }, revision: 4 });
   assert.equal(s.sql[0], "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
   assert.equal(s.sql.some(q => q.includes("set_config('optima.empresa_id', $1, true)")), true);
   assert.equal(s.sql.at(-1), "ROLLBACK");
@@ -39,6 +39,7 @@ test("ciclo-vida-pg: dos filas, empresa ajena o fecha inválida -> INCONSISTENTE
   assert.equal((await leerCicloVidaPg(simular([{ ...fila, empresa_id: "emp_otraotraotr1" }]).pool, EK)).ok, false);
   assert.equal((await leerCicloVidaPg(simular([{ ...fila, periodo_hasta: "no-es-fecha" }]).pool, EK)).ok, false);
   assert.equal((await leerCicloVidaPg(simular([{ ...fila, cancelado_desde: 123 }]).pool, EK)).ok, false);
+  assert.equal((await leerCicloVidaPg(simular([{ ...fila, revision: "-1" }]).pool, EK)).ok, false);
 });
 test("ciclo-vida-pg: ID de empresa inválido no consulta nada", async () => {
   const s = simular([fila]);

@@ -16,6 +16,7 @@ import type { PeticionSesion195, ResultadoAccesoReal195 } from "../../lib/sesion
 import { esIdEmpresaEstable } from "../../lib/empresa-estable.js";
 import { crearPoolCicloVidaEscritura } from "../../lib/pool-escritura-ciclo-vida.js";
 import { crearPoolComercialLectura186 } from "../../lib/pool-lectura-comercial-12c186.js";
+import { crearAlmacenDerechosRedis } from "../../lib/almacen-derechos-redis.js";
 
 const ID = /^rec[A-Za-z0-9]{14}$/;
 const MAX_BYTES = 4096;
@@ -37,6 +38,8 @@ export type DependenciasCicloVida = Readonly<{
   aplicar(pool: PoolPgNode183, actor: string, solicitud: SolicitudCicloVida): Promise<ResultadoAccionCicloVida>;
   leer(pool: PoolPgNode183, empresaEstableId: string): Promise<LecturaCicloVida>;
   ahora(): string;
+  /** Invalida la caché de derechos de la empresa tras un cambio de ciclo de vida (mejor esfuerzo). */
+  invalidarDerechos(empresaEstableId: string): Promise<void>;
 }>;
 
 function origenValido(req: PeticionCicloVida, esperado: string): boolean {
@@ -113,6 +116,8 @@ export function crearOperacionCicloVida(operacion: "ciclo_vida_estado" | "ciclo_
         empresaId: a.empresaEstableId, accion: b.tipo, motivo: b.motivo, revisionEsperada: b.revisionEsperada,
         ...(b.nuevoPeriodoHasta === undefined ? {} : { nuevoPeriodoHasta: b.nuevoPeriodoHasta }) });
       if (!r.ok) { error(res, statusAccion(r)); return; }
+      // El cambio ya está confirmado en Neon. Si Redis falla, los apuntes vencen solos en 60 s.
+      try { await deps.invalidarDerechos(a.empresaEstableId); } catch { console.error("[ciclo-vida] no se pudo invalidar la caché de derechos"); }
       res.status(200).json({ ok: true, revision: r.revision, estado: r.estado, hechos: r.hechos });
     } catch { error(res, 503); }
   };
@@ -130,6 +135,7 @@ const reales: DependenciasCicloVida = {
   aplicar: aplicarAccionCicloVidaPg,
   leer: leerCicloVidaPg,
   ahora: () => new Date().toISOString(),
+  invalidarDerechos: (empresaEstableId) => crearAlmacenDerechosRedis().invalidarEmpresa(empresaEstableId),
 };
 export const cicloVidaEstadoCore = crearOperacionCicloVida("ciclo_vida_estado", reales);
 export const cicloVidaAccionCore = crearOperacionCicloVida("ciclo_vida_accion", reales);

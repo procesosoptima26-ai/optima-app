@@ -17,7 +17,8 @@ function entorno(cambios: Partial<DependenciasCicloVida> = {}) {
     poolLectura: () => { llamadas.push("poolLectura"); return {} as any; },
     aplicar: async (_p, actor, sol) => { llamadas.push(`aplicar:${actor}:${sol.empresaId}:${sol.accion}`); return { ok: true, revision: 1, estado: "ACTIVO", hechos: { periodoHasta: "2026-12-20T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null } }; },
     leer: async () => ({ ok: true, revision: 3, hechos: { periodoHasta: "2026-12-20T00:00:00.000Z", suspendidoDesde: null, canceladoDesde: null } }),
-    ahora: () => AHORA, ...cambios };
+    ahora: () => AHORA,
+    invalidarDerechos: async (id) => { llamadas.push(`invalidar:${id}`); }, ...cambios };
   return { deps, llamadas };
 }
 function responder() {
@@ -39,6 +40,15 @@ test("accion: camino feliz usa el ACTOR de la sesión y el ID ESTABLE, nunca dat
   assert.equal(r.codigo, 200);
   assert.deepEqual(r.llamadas.filter(l => l.startsWith("aplicar")), [`aplicar:${ACTOR}:${EK}:RENOVACION`]);
   assert.equal(r.cabeceras["Cache-Control"], "no-store, max-age=0");
+  assert.deepEqual(r.llamadas.filter(l => l.startsWith("invalidar")), [`invalidar:${EK}`]);
+});
+test("accion: si Redis falla al invalidar, la acción igual se confirma (los apuntes vencen en 60 s)", async () => {
+  const r = await correr("ciclo_vida_accion", post(BODY), { invalidarDerechos: async () => { throw Error("redis caído"); } });
+  assert.equal(r.codigo, 200);
+});
+test("accion: un rechazo del motor NO invalida la caché", async () => {
+  const r = await correr("ciclo_vida_accion", post(BODY), { aplicar: async () => ({ ok: false as const, motivo: "TRANSICION_INVALIDA" as const }) });
+  assert.equal(r.llamadas.some(l => l.startsWith("invalidar")), false);
 });
 test("accion: apagada (flag) -> 404 y no abre ninguna conexión", async () => {
   const r = await correr("ciclo_vida_accion", post(BODY), { habilitada: () => false });

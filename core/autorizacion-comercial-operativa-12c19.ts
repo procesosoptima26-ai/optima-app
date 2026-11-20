@@ -18,6 +18,8 @@ import { esIdEmpresaEstable } from "../lib/empresa-estable.js";
 import { evaluarCicloVida, estadoPermiteAccion,
   type HechosCicloVida } from "./ciclo-vida-contrato.js";
 import { leerCicloVidaPg, type LecturaCicloVida } from "./ciclo-vida-pg.js";
+import { autorizarConCache } from "./cache-derechos.js";
+import { crearAlmacenDerechosRedis, ambienteActual } from "../lib/almacen-derechos-redis.js";
 
 export type PeticionCapacidadVerificada = Readonly<{
   contexto: ContextoCore;
@@ -90,11 +92,13 @@ export async function autorizarCapacidadOperativaReal(
   const tablaUsuariosId = process.env.AIRTABLE_USERS_TABLE_ID?.trim() ?? "";
   const token = process.env.AIRTABLE_TOKEN?.trim() ?? "";
   const pool = crearPoolComercialLectura186();
-  return autorizarCapacidadOperativa(peticion, {
+  // Caché de derechos resueltos (Tarea 6): solo guarda "sí" por 60 s y se invalida al cambiar el
+  // ciclo de vida de la empresa. Si la caché falla, se evalúa todo como siempre.
+  return autorizarConCache(peticion, crearAlmacenDerechosRedis(), ambienteActual(), () => autorizarCapacidadOperativa(peticion, {
     consultarContrato: (empresaId) => leerContratoOperativoPg(pool, empresaId, new Date().toISOString()),
     consultarCicloVida: (empresaId) => leerCicloVidaPg(pool, empresaId),
     consultarAsignaciones: (contexto) => consultarAsignacionesUsuarioVerificado(contexto, {
       baseId, tablaUsuariosId, token,
     }),
-  });
+  }));
 }

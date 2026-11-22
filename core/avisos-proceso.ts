@@ -34,6 +34,8 @@ export type DependenciasAvisos = Readonly<{
   /** true si el correo fue aceptado para envío. */
   enviar(correo: CorreoAviso): Promise<boolean>;
   ambiente(): string;
+  /** WhatsApp de OPTIMA para renovar (de la configuración); opcional. */
+  contacto?(): string | undefined;
 }>;
 
 export type ResultadoAvisoEmpresa = Readonly<{
@@ -93,7 +95,7 @@ export async function procesarAvisosEmpresa(
   catch { return { ...base, resultado: "NO_DISPONIBLE" }; }
   if (!nueva) return { ...base, resultado: "YA_ENVIADO" };
 
-  const { asunto, texto } = redactarAviso(aviso, nombre);
+  const { asunto, texto } = redactarAviso(aviso, nombre, { contacto: deps.contacto?.() });
   let enviados = 0;
   let fallidos = 0;
   for (const para of destinatarios) {

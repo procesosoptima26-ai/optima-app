@@ -86,27 +86,46 @@ function fechaLarga(iso: string): string {
     day: "numeric", month: "long", year: "numeric" }).format(new Date(iso));
 }
 
-/** Texto del correo. No incluye datos sensibles ni enlaces; solo nombre de empresa y fechas. */
-export function redactarAviso(aviso: AvisoVencimiento, nombreEmpresa: string): { asunto: string; texto: string } {
+/** Opciones de redacción: el contacto sale de la configuración (nunca fijo en el código). */
+export type OpcionesRedaccion = Readonly<{ contacto?: string; diasGracia?: number }>;
+
+const CONTACTO_VALIDO = /^[0-9+()\-\s]{8,25}$/;
+/** Solo se acepta un número de teléfono (dígitos, +, espacios, guiones, paréntesis); si no, se ignora. */
+export function normalizarContacto(bruto: unknown): string | null {
+  if (typeof bruto !== "string") return null;
+  const limpio = bruto.trim();
+  return CONTACTO_VALIDO.test(limpio) && /[0-9]{8,}/.test(limpio.replace(/\D/g, "")) ? limpio : null;
+}
+
+/** Texto del correo. No incluye enlaces; solo nombre de empresa, fechas y (si está configurado) el WhatsApp de OPTIMA. */
+export function redactarAviso(
+  aviso: AvisoVencimiento, nombreEmpresa: string, opciones: OpcionesRedaccion = {},
+): { asunto: string; texto: string } {
   const nombre = nombreEmpresa.replace(/[\r\n]+/g, " ").trim().slice(0, 120) || "tu empresa";
   const limite = fechaLarga(aviso.fechaLimite);
-  const cierre = "\n\nPara renovar o consultar tu plan, comunicate con OPTIMA.\n\nEquipo OPTIMA";
+  const gracia = Number.isInteger(opciones.diasGracia) && (opciones.diasGracia as number) > 0
+    ? (opciones.diasGracia as number) : PARAMETROS_CICLO_VIDA_POR_DEFECTO.diasGracia;
+  const contacto = normalizarContacto(opciones.contacto);
+  const renovar = contacto === null
+    ? "Para renovar el plan, comunicate con OPTIMA."
+    : `Para renovar el plan, escribinos por WhatsApp al ${contacto}.`;
+  const cierre = `\n\n${renovar}\n\nEquipo OPTIMA\nOptimizamos hoy. Impulsamos el mañana.`;
   switch (aviso.tipo) {
     case "VENCE_15":
     case "VENCE_7":
     case "VENCE_1": {
-      const cuando = aviso.tipo === "VENCE_1" ? "en las próximas 24 horas" : `en ${aviso.diasRestantes} días`;
-      return { asunto: `OPTIMA: el período de ${nombre} vence ${cuando}`,
-        texto: `Hola. El período contratado de ${nombre} en OPTIMA vence el ${limite}.\n` +
-          "Si no se renueva, tendrás unos días de gracia con acceso completo y luego solo podrás consultar y exportar tu información." + cierre };
+      const cuando = aviso.tipo === "VENCE_1" ? "mañana" : `el ${limite}`;
+      return { asunto: `El plan de ${nombre} en OPTIMA vence ${aviso.tipo === "VENCE_1" ? "mañana" : "el " + limite}`,
+        texto: `Hola, equipo de ${nombre}.\n\nEl plan de ${nombre} en OPTIMA vence ${cuando === "mañana" ? "en las próximas 24 horas (" + limite + ")" : cuando}.\n` +
+          `Si no se renueva, tendrán ${gracia} días de gracia con acceso completo. Pasado ese tiempo podrán consultar y exportar su información, pero no cargar ni modificar datos. Sus datos se conservan.` + cierre };
     }
     case "EN_GRACIA":
-      return { asunto: `OPTIMA: el período de ${nombre} venció (días de gracia)`,
-        texto: `Hola. El período contratado de ${nombre} en OPTIMA venció. Seguís teniendo acceso completo hasta el ${limite}.\n` +
-          "Después de esa fecha solo podrás consultar y exportar tu información; no podrás cargar ni modificar datos." + cierre };
+      return { asunto: `El plan de ${nombre} en OPTIMA venció: tienen días de gracia`,
+        texto: `Hola, equipo de ${nombre}.\n\nEl plan de ${nombre} en OPTIMA venció, pero siguen teniendo acceso completo hasta el ${limite}.\n` +
+          "Después de esa fecha solo podrán consultar y exportar su información; no podrán cargar ni modificar datos. Sus datos se conservan." + cierre };
     case "SOLO_LECTURA":
-      return { asunto: `OPTIMA: ${nombre} está en modo solo lectura`,
-        texto: `Hola. Terminó la gracia del período de ${nombre} en OPTIMA. Por ahora solo podés consultar y exportar tu información; no podés cargar ni modificar datos.\n` +
-          `Si no se renueva, el acceso se cerrará el ${limite}. Tus datos se conservan.` + cierre };
+      return { asunto: `${nombre} está en modo solo lectura en OPTIMA`,
+        texto: `Hola, equipo de ${nombre}.\n\nTerminó la gracia del plan de ${nombre} en OPTIMA. Por ahora solo pueden consultar y exportar su información; no pueden cargar ni modificar datos.\n` +
+          `Si no se renueva, el acceso se cerrará el ${limite}. Sus datos se conservan.` + cierre };
   }
 }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calcularAviso, claveAviso, redactarAviso } from "../core/avisos-vencimiento.js";
+import { calcularAviso, claveAviso, normalizarContacto, redactarAviso } from "../core/avisos-vencimiento.js";
 
 const HASTA = "2026-12-20T12:00:00.000Z";
 const DIA = 24 * 60 * 60 * 1000;
@@ -61,4 +61,19 @@ test("redacción: nombre y fecha, sin enlaces; el nombre no puede inyectar salto
     assert.ok(/diciembre de 2026/.test(m.texto), t);
     assert.ok(!/https?:\/\//.test(m.texto), t);
   }
+});
+
+test("contacto: solo teléfonos válidos; se muestra el WhatsApp y el eslogan; sin contacto usa la frase genérica", () => {
+  const av = { tipo: "VENCE_7" as const, periodoHasta: HASTA, diasRestantes: 7, fechaLimite: HASTA };
+  assert.equal(normalizarContacto("+54 9 11 1234-5678"), "+54 9 11 1234-5678");
+  assert.equal(normalizarContacto("hola@x.com"), null);
+  assert.equal(normalizarContacto("<script>12345678"), null);
+  assert.equal(normalizarContacto(undefined), null);
+  const con = redactarAviso(av, "MORELLIS", { contacto: "+54 9 11 1234-5678" });
+  assert.ok(con.texto.includes("WhatsApp al +54 9 11 1234-5678"));
+  assert.ok(con.texto.includes("Optimizamos hoy. Impulsamos el mañana."));
+  assert.ok(con.texto.includes("10 días de gracia"));
+  assert.ok(redactarAviso(av, "MORELLIS", { diasGracia: 5 }).texto.includes("5 días de gracia"));
+  const sin = redactarAviso(av, "MORELLIS", { contacto: "malo@x.com" });
+  assert.ok(sin.texto.includes("comunicate con OPTIMA") && !sin.texto.includes("WhatsApp"));
 });

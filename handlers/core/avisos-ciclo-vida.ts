@@ -146,6 +146,7 @@ const reales: DependenciasAvisosHttp = {
     liberar: liberarAvisoRedis,
     enviar: enviarCorreoResend,
     ambiente: () => ambienteActual(),
+    contacto: () => process.env.OPTIMA_AVISOS_CONTACTO_WHATSAPP,
   },
   ahora: () => new Date().toISOString(),
 };

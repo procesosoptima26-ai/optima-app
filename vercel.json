@@ -29,6 +29,29 @@
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     }
   },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), microphone=(), geolocation=(), payment=()"
+        }
+      ]
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/login",

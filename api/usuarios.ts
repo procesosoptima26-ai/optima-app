@@ -22,8 +22,9 @@ import { contratoBorradorCore197, contratoAprobarCore197, contratoActivarCore197
 import { cicloVidaEstadoCore, cicloVidaAccionCore } from "../handlers/core/escritura-ciclo-vida.js";
 import { cicloVidaAvisosCore, cicloVidaAvisosCronCore } from "../handlers/core/avisos-ciclo-vida.js";
 import { conciliacionContratoModulosReal } from "../handlers/core/conciliacion-contrato-modulos.js";
+import { empresaListaReal } from "../handlers/core/empresa-lista.js";
 
-const handlers = { empresa, plataforma, consulta_comercial, contratos_core: consultaContratoCoreReal195, contrato_borrador: contratoBorradorCore197, contrato_aprobar: contratoAprobarCore197, contrato_activar: contratoActivarCore197, ciclo_vida_estado: cicloVidaEstadoCore, ciclo_vida_accion: cicloVidaAccionCore, ciclo_vida_avisos: cicloVidaAvisosCore, ciclo_vida_avisos_cron: cicloVidaAvisosCronCore, modulos_vs_contrato: conciliacionContratoModulosReal, gestion_modulos, conciliacion_modulos, conciliacion_core_global, sucursales, opciones, listar, estado, historial_auditoria, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
+const handlers = { empresa, plataforma, consulta_comercial, contratos_core: consultaContratoCoreReal195, contrato_borrador: contratoBorradorCore197, contrato_aprobar: contratoAprobarCore197, contrato_activar: contratoActivarCore197, ciclo_vida_estado: cicloVidaEstadoCore, ciclo_vida_accion: cicloVidaAccionCore, ciclo_vida_avisos: cicloVidaAvisosCore, ciclo_vida_avisos_cron: cicloVidaAvisosCronCore, modulos_vs_contrato: conciliacionContratoModulosReal, empresa_lista: empresaListaReal, gestion_modulos, conciliacion_modulos, conciliacion_core_global, sucursales, opciones, listar, estado, historial_auditoria, detalle: detalleEmpleado, editar: editarEmpleado, invitar, "validar-invitacion": validar_invitacion, activar,
   "solicitar-recuperacion": solicitar_recuperacion, restablecer };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

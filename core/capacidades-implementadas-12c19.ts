@@ -13,4 +13,14 @@ export const CAPACIDADES_OPERATIVAS_12C19: readonly DefinicionCapacidadComercial
     nivelMinimoModulo: "ESENCIAL",
     nivelMinimoSubmodulo: "ESTANDAR",
   },
+  // Tarea 11: pantallas heredadas que ESCRIBEN. Son reglas a nivel MÓDULO (sin submódulo):
+  // exigen el módulo contratado (cualquier nivel), ciclo de vida que permita escribir y permiso real.
+  { id: "movimientos.registro.crear", modulo: "MOVIMIENTOS", submodulo: null,
+    permiso: "movimientos.crear", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
+  { id: "movimientos.registro.ajustar", modulo: "MOVIMIENTOS", submodulo: null,
+    permiso: "movimientos.ajustar", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
+  { id: "inventario.stock.crear", modulo: "INVENTARIO", submodulo: null,
+    permiso: "inventario.crear", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
+  { id: "inventario.stock.editar", modulo: "INVENTARIO", submodulo: null,
+    permiso: "inventario.editarGuardado", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
 ]);

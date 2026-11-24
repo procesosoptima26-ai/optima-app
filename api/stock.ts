@@ -530,6 +530,10 @@ export default async function handler(
       modulos: ["INVENTARIO"],
       permiso: req.method === "POST" ? "inventario.crear" : "inventario.editarGuardado",
       sucursal: payload.sucursal,
+      capacidadesPorPermiso: {
+        "inventario.crear": "inventario.stock.crear",
+        "inventario.editarGuardado": "inventario.stock.editar",
+      },
     });
     if (!usuarioAutorizado) return;
 

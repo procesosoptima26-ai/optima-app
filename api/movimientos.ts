@@ -627,6 +627,10 @@ export default async function handler(
         modulos: ["MOVIMIENTOS"],
         permiso: [...new Set(acciones)],
         sucursal,
+        capacidadesPorPermiso: {
+          "movimientos.crear": "movimientos.registro.crear",
+          "movimientos.ajustar": "movimientos.registro.ajustar",
+        },
       });
       if (!autorizado) return;
 

@@ -38,6 +38,8 @@ type OpcionesAutorizacion = Readonly<{
   sucursal?: string;
   /** ID inmutable y revisado de capacidad real: nunca se deriva del navegador. */
   capacidadComercial?: string;
+  /** Una capacidad por cada permiso exigido (endpoints con varias acciones). Todas deben autorizarse. */
+  capacidadesPorPermiso?: Readonly<Partial<Record<Permiso, string>>>;
 }>;
 
 function normalizar(valor: string): string {
@@ -112,7 +114,7 @@ export async function exigirAutorizacion(
     // exactamente como con el control apagado: este modo no libera nada que antes estuviera
     // cerrado. A medida que cada endpoint declare su capacidad, pasa a exigir contrato.
     const exigeComercial = process.env.OPTIMA_COMERCIAL_ENFORCE_ENABLED === "true" &&
-      typeof opciones.capacidadComercial === "string" &&
+      (typeof opciones.capacidadComercial === "string" || opciones.capacidadesPorPermiso !== undefined) &&
       solicitados.some((modulo) => modulo !== "CORE");
     if (solicitados.some((modulo) => !modulo) ||
         (!exigeComercial && !solicitados.some((modulo) => modulo &&
@@ -156,19 +158,26 @@ export async function exigirAutorizacion(
     }
 
     if (exigeComercial) {
-      // Un endpoint debe declarar una sola capacidad pública, módulo y permiso.
+      // Un endpoint debe declarar una capacidad pública por cada permiso que exige, y un solo módulo.
       // Alcance de sucursal ya verificado y reevaluado en el motor comercial.
-      const unico = solicitados.length === 1 && permisosNecesarios.length === 1 &&
-        solicitados[0] !== null && MODULO_DEL_PERMISO[permisosNecesarios[0]] === solicitados[0] &&
-        typeof opciones.capacidadComercial === "string";
+      // Si falta la capacidad de CUALQUIER permiso, se deniega (nunca se libera por omisión).
+      const capacidades = permisosNecesarios.map((permiso) =>
+        opciones.capacidadesPorPermiso?.[permiso] ??
+        (permisosNecesarios.length === 1 ? opciones.capacidadComercial : undefined));
+      const completo = solicitados.length === 1 && solicitados[0] !== null &&
+        permisosNecesarios.every((permiso, i) => MODULO_DEL_PERMISO[permiso] === solicitados[0] &&
+          typeof capacidades[i] === "string");
       const sucursalId = sucursalSolicitada?.id ?? sucursales[0]?.id;
-      const permitido = unico && await autorizarCapacidadOperativaReal({
-        contexto,
-        capacidad: opciones.capacidadComercial!,
-        modulo: solicitados[0]!,
-        permiso: permisosNecesarios[0],
-        recurso: { empresaId: contexto.empresa.id, ...(sucursalId ? { sucursalId } : {}) },
-      });
+      let permitido = completo;
+      for (let i = 0; permitido && i < permisosNecesarios.length; i++) {
+        permitido = await autorizarCapacidadOperativaReal({
+          contexto,
+          capacidad: capacidades[i]!,
+          modulo: solicitados[0]!,
+          permiso: permisosNecesarios[i],
+          recurso: { empresaId: contexto.empresa.id, ...(sucursalId ? { sucursalId } : {}) },
+        });
+      }
       if (!permitido) {
         res.status(403).json({ ok: false, error: "La operación no está habilitada por el contrato y los permisos" });
         return null;

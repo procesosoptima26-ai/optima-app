@@ -87,6 +87,22 @@ test("Modo transitorio: con el control comercial encendido, el contrato se exige
   assert.equal(conCapacidad.status, 403);
   assert.equal(conCapacidad.acceso, null);
 
+  // 3b) Varias acciones: si falta la capacidad de CUALQUIERA, deniega (nunca se libera por omisión).
+  estado.permisos = { PERMISOS_MOVIMIENTOS: ["VER", "CREAR", "AJUSTAR"] };
+  async function varias(capacidadesPorPermiso: Record<string, string>) {
+    const { res, estado: r } = respuesta();
+    const req = { cookies: { optima_sesion: "a".repeat(43) } } as unknown as VercelRequest;
+    const acceso = await exigirAutorizacion(req, res, {
+      modulos: ["MOVIMIENTOS"], permiso: ["movimientos.crear", "movimientos.ajustar"], sucursal: "GOYA",
+      capacidadesPorPermiso,
+    });
+    return { status: r.codigo, acceso };
+  }
+  assert.equal((await varias({ "movimientos.crear": "movimientos.registro.crear" })).status, 403, "falta la capacidad de ajustar");
+  assert.equal((await varias({})).status, 403);
+  // Con ambas declaradas se evalúa el contrato (sin base de contratos en la prueba: falla cerrado).
+  assert.equal((await varias({ "movimientos.crear": "movimientos.registro.crear", "movimientos.ajustar": "movimientos.registro.ajustar" })).status, 403);
+
   // 4) Con el control comercial APAGADO, la capacidad declarada no cambia nada (reglas heredadas).
   process.env.OPTIMA_COMERCIAL_ENFORCE_ENABLED = "false";
   assert.equal((await verificar({ capacidadComercial: "movimientos.ejemplo.consultar" })).status, 200);

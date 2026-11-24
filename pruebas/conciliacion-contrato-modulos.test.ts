@@ -93,3 +93,12 @@ test("sin contrato vigente: 200 con acciones vacías; fuente caída: 503", async
   m = montar({ contrato: "falla" }); await m.llamar({}); assert.equal(m.cap.status, 503);
   m = montar({ legacy: false }); await m.llamar({}); assert.equal(m.cap.status, 503);
 });
+
+import { modulosDesdeCampoViejo } from "../lib/conciliacion-contrato-adaptadores.js";
+test("campo viejo: no exige CORE/USUARIO, normaliza nombres y rechaza opciones desconocidas", () => {
+  assert.deepEqual(modulosDesdeCampoViejo(["INVENTARIO", "MOVIMIENTOS"]), ["INVENTARIO", "MOVIMIENTOS"]);
+  assert.deepEqual(modulosDesdeCampoViejo(["USUARIO", "CUENTAS CORRIENTES", "CUENTAS_CORRIENTES"]), ["CUENTAS_CORRIENTES"]);
+  assert.deepEqual(modulosDesdeCampoViejo(undefined), []);
+  assert.equal(modulosDesdeCampoViejo(["INVENTARIO", "COSA_RARA"]), null);
+  assert.equal(modulosDesdeCampoViejo("INVENTARIO"), null);
+});

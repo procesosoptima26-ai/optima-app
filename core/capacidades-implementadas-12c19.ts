@@ -23,4 +23,9 @@ export const CAPACIDADES_OPERATIVAS_12C19: readonly DefinicionCapacidadComercial
     permiso: "inventario.crear", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
   { id: "inventario.stock.editar", modulo: "INVENTARIO", submodulo: null,
     permiso: "inventario.editarGuardado", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
+  // Tarea 11 (lecturas): pantallas heredadas que SOLO LEEN. Siguen funcionando en SOLO_LECTURA.
+  { id: "movimientos.registro.consultar", modulo: "MOVIMIENTOS", submodulo: null,
+    permiso: "movimientos.ver", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
+  { id: "administracion.terceros.consultar", modulo: "ADMINISTRACION", submodulo: null,
+    permiso: "administracion.ver", nivelMinimoModulo: "ESENCIAL", nivelMinimoSubmodulo: null },
 ]);

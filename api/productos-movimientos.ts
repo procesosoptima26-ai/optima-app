@@ -266,6 +266,10 @@ export default async function handler(
     const autorizado = await exigirAutorizacion(req, res, {
       modulos: ["MOVIMIENTOS"],
       permiso: req.method === "GET" ? "movimientos.ver" : "movimientos.crear",
+      capacidadesPorPermiso: {
+        "movimientos.ver": "movimientos.registro.consultar",
+        "movimientos.crear": "movimientos.registro.crear",
+      },
     });
     if (!autorizado) return;
 

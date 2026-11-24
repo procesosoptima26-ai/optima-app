@@ -858,6 +858,7 @@ export default async function handler(
       const autorizado = await exigirAutorizacion(req, res, {
         modulos: ["MOVIMIENTOS"],
         permiso: "movimientos.ver",
+        capacidadComercial: "movimientos.registro.consultar",
         sucursal: sucursalSolicitadaNombre,
       });
       if (!autorizado) return;
@@ -875,6 +876,7 @@ export default async function handler(
     const autorizado = await exigirAutorizacion(req, res, {
       modulos: ["MOVIMIENTOS"],
       permiso: "movimientos.ver",
+      capacidadComercial: "movimientos.registro.consultar",
     });
     if (!autorizado) return;
 

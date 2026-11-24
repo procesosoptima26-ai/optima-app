@@ -253,6 +253,7 @@ export default async function handler(
     const autorizado = await exigirAutorizacion(req, res, {
       modulos: ["ADMINISTRACION"],
       permiso: "administracion.ver",
+      capacidadComercial: "administracion.terceros.consultar",
     });
     if (!autorizado) return;
 

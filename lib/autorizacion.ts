@@ -106,8 +106,13 @@ export async function exigirAutorizacion(
 
     const solicitados = opciones.modulos.map(resolverModulo);
     // Activación controlada: la ruta comercial exige contrato PostgreSQL Y permiso real.
-    // Si el modo se habilita, los endpoints no mapeados se bloquean, jamás se liberan.
+    // MODO TRANSITORIO: el contrato se exige SOLO en los endpoints que ya declaran su
+    // `capacidadComercial`. Los endpoints heredados que todavía no la declaran siguen con
+    // las reglas heredadas (módulos de la empresa + permisos del usuario + empresa piloto),
+    // exactamente como con el control apagado: este modo no libera nada que antes estuviera
+    // cerrado. A medida que cada endpoint declare su capacidad, pasa a exigir contrato.
     const exigeComercial = process.env.OPTIMA_COMERCIAL_ENFORCE_ENABLED === "true" &&
+      typeof opciones.capacidadComercial === "string" &&
       solicitados.some((modulo) => modulo !== "CORE");
     if (solicitados.some((modulo) => !modulo) ||
         (!exigeComercial && !solicitados.some((modulo) => modulo &&

@@ -126,7 +126,7 @@ export function crearOperacionCicloVida(operacion: "ciclo_vida_estado" | "ciclo_
 const poolEscritura = crearPoolCicloVidaEscritura();
 const poolLectura = crearPoolComercialLectura186();
 const reales: DependenciasCicloVida = {
-  habilitada: () => process.env.VERCEL_ENV === "preview" &&
+  habilitada: () => (process.env.VERCEL_ENV === "preview" || process.env.VERCEL_ENV === "production") &&
     process.env.OPTIMA_COMERCIAL_CICLO_VIDA_WRITE_ENABLED === "true",
   origenPermitido: () => process.env.OPTIMA_COMERCIAL_WRITE_ORIGIN ?? "",
   verificar: (req, empresaId) => verificarAccesoComercialReal195(req, empresaId, PERMISO),

@@ -144,7 +144,7 @@ export function crearOperacionContrato197(accion:AccionContrato197,deps:Dependen
 /** Pool compartido y diferido. Nunca se abre cuando el feature flag está OFF. */
 const poolEscritura=crearPoolComercialEscritura197();
 const reales:DependenciasContrato197={
-  habilitada:()=>process.env.VERCEL_ENV==='preview'&&
+  habilitada:()=>(process.env.VERCEL_ENV==='preview'||process.env.VERCEL_ENV==='production')&&
     process.env.OPTIMA_COMERCIAL_CONTRATOS_WRITE_ENABLED==='true',
   origenPermitido:()=>process.env.OPTIMA_COMERCIAL_WRITE_ORIGIN??'',
   verificar:verificarAccesoComercialReal195,

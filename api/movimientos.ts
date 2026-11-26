@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
-import { configTablaOperativa, sucursalRealDeUbicacion, sucursalSolicitada,
+import { configTablaOperativa, sucursalRealDeUbicacion, idsVinculados, sucursalSolicitada,
   productoExistenteDeEmpresa, movimientoPermitido } from "../lib/alcance-operativo.js";
 import type { ContextoCore } from "../core/seguridad.js";
 import {
@@ -11,6 +11,10 @@ import {
   buscarProductosPorCodigos, leerStockPorProductoEnUbicacion,
   leerProductosYaCargados, leerResultadoVentas,
 } from "../lib/ventas-archivo-airtable.js";
+import {
+  destinosTransferencia, validarTransferencia, esMotivoTransferencia,
+  type SucursalTransferencia,
+} from "../lib/transferencias.js";
 
 dotenv.config({
   path: ".env.local",
@@ -34,6 +38,7 @@ type Ubicacion = {
   id: string;
   nombre: string;
   sucursal: string;
+  tipoUbicacion: string;
   sucursalCoreId: string | null;
 };
 
@@ -226,9 +231,43 @@ async function leerUbicaciones(): Promise<Ubicacion[]> {
       id: record.id,
       nombre,
       sucursal,
+      tipoUbicacion,
       sucursalCoreId: sucursalRealDeUbicacion(record.fields),
     };
   });
+}
+
+/**
+ * Sucursales de UNA empresa (todas, no solo las del usuario). Se usa para
+ * saber a qué sucursales se puede transferir mercadería. Se filtra por el ID
+ * real de la empresa, nunca por nombre visible.
+ */
+async function leerSucursalesDeEmpresa(empresaId: string): Promise<SucursalTransferencia[]> {
+  const token = getEnv("AIRTABLE_TOKEN");
+  const baseId = getEnv("AIRTABLE_USERS_BASE_ID");
+  const tabla = getEnv("AIRTABLE_SUCURSALES_TABLE_ID");
+  const resultado: SucursalTransferencia[] = [];
+  let offset: string | undefined;
+  do {
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodeURIComponent(tabla)}`);
+    url.searchParams.set("pageSize", "100");
+    if (offset) url.searchParams.set("offset", offset);
+    const response = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+    const data = (await response.json()) as AirtableResponse;
+    if (!response.ok) {
+      console.error("Error consultando sucursales:", data);
+      throw new Error("No se pudieron consultar las sucursales de la empresa");
+    }
+    for (const registro of data.records || []) {
+      const empresas = idsVinculados(registro.fields.EMPRESA);
+      const nombre = normalizarTexto(registro.fields.NOMBRE);
+      if (empresas?.length === 1 && empresas[0] === empresaId && nombre) {
+        resultado.push({ id: registro.id, nombre, activa: registro.fields.ACTIVA === true });
+      }
+    }
+    offset = data.offset;
+  } while (offset);
+  return resultado;
 }
 
 async function validarProductoExiste(productoId: string, empresaId: string) {
@@ -238,7 +277,8 @@ async function validarProductoExiste(productoId: string, empresaId: string) {
 function validarMovimiento(
   movimiento: MovimientoPayload,
   sucursalCoreId: string,
-  ubicaciones: Ubicacion[]
+  ubicaciones: Ubicacion[],
+  sucursalesActivasEmpresaIds: ReadonlySet<string> = new Set()
 ) {
   const productoId = normalizarTexto(movimiento.productoId);
   const tipo = normalizarOpcion(movimiento.tipoMovimiento);
@@ -289,6 +329,18 @@ function validarMovimiento(
     ubicacionOrigen.sucursalCoreId !== sucursalCoreId
   )) {
     return "La ubicación de origen no pertenece a la sucursal del usuario.";
+  }
+
+  if (esMotivoTransferencia(motivo)) {
+    // Única excepción a "todo dentro de mi sucursal": el destino puede estar
+    // en OTRA sucursal activa de la misma empresa (nunca de otra empresa).
+    return validarTransferencia({
+      tipoMovimiento: tipo,
+      origen: ubicacionOrigen ?? null,
+      destino: ubicacionDestino ?? null,
+      sucursalUsuarioId: sucursalCoreId,
+      sucursalesActivasEmpresaIds,
+    });
   }
 
   if (ubicacionDestino && (
@@ -783,6 +835,11 @@ export default async function handler(
       const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
       if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
       const ubicaciones = await leerUbicaciones();
+      const hayTransferencias = movimientos.some((m) => esMotivoTransferencia(normalizarOpcion(m.motivo)));
+      const sucursalesActivasEmpresaIds = hayTransferencias
+        ? new Set((await leerSucursalesDeEmpresa(autorizado.empresaId))
+            .filter((s) => s.activa).map((s) => s.id))
+        : new Set<string>();
 
       for (
         let indice = 0;
@@ -794,7 +851,8 @@ export default async function handler(
         const errorValidacion = validarMovimiento(
           movimiento,
           sucursalCore.id,
-          ubicaciones
+          ubicaciones,
+          sucursalesActivasEmpresaIds
         );
 
         if (errorValidacion) {
@@ -835,6 +893,29 @@ export default async function handler(
     }
 
     if (req.method === "GET") {
+      if (normalizarTexto(req.query.accion) === "destinos_transferencia") {
+        const sucursalPedida = normalizarSucursal(req.query.sucursal);
+        if (!sucursalPedida) {
+          return res.status(400).json({ ok: false, error: "Falta la sucursal de origen." });
+        }
+        const autorizadoDestinos = await exigirAutorizacion(req, res, {
+          modulos: ["MOVIMIENTOS"],
+          permiso: "movimientos.crear",
+          capacidadComercial: "movimientos.registro.crear",
+          sucursal: sucursalPedida,
+        });
+        if (!autorizadoDestinos) return;
+        const origen = sucursalSolicitada(autorizadoDestinos.contexto, sucursalPedida);
+        if (!origen) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
+        const [sucursalesEmpresa, todasUbicaciones] = await Promise.all([
+          leerSucursalesDeEmpresa(autorizadoDestinos.empresaId), leerUbicaciones(),
+        ]);
+        return res.status(200).json({
+          ok: true,
+          destinos: destinosTransferencia(sucursalesEmpresa, todasUbicaciones, origen.id),
+        });
+      }
+
       const idsTexto = normalizarTexto(req.query.ids);
 
       if (idsTexto) {

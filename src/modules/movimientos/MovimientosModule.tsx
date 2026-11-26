@@ -43,6 +43,12 @@ type Ubicacion = {
   activa: boolean;
 };
 
+type DestinoTransferencia = {
+  sucursalId: string;
+  sucursalNombre: string;
+  ubicaciones: { id: string; nombre: string; tipoUbicacion: string }[];
+};
+
 type LoteStock = {
   id: string;
   productoId: string;
@@ -359,6 +365,10 @@ export default function Movimientos({
 
   const [ubicacionOrigenId, setUbicacionOrigenId] = useState("");
   const [ubicacionDestinoId, setUbicacionDestinoId] = useState("");
+  // Transferencias: sucursales de la misma empresa a las que se puede enviar.
+  const [destinosTransferencia, setDestinosTransferencia] = useState<DestinoTransferencia[]>([]);
+  const [sucursalDestinoId, setSucursalDestinoId] = useState("");
+  const [cargandoDestinos, setCargandoDestinos] = useState(false);
 
   const [sinVencimiento, setSinVencimiento] = useState(false);
   const [vencimientoTexto, setVencimientoTexto] = useState("");
@@ -407,13 +417,26 @@ const [, setCantidadesPorLote] = useState<
     [ubicaciones, ubicacionOrigenId]
   );
 
-  const ubicacionDestino = useMemo(
-    () =>
-      ubicaciones.find(
-        (ubicacion) => ubicacion.id === ubicacionDestinoId
-      ) || null,
-    [ubicaciones, ubicacionDestinoId]
-  );
+  const ubicacionDestino = useMemo(() => {
+    const propia = ubicaciones.find(
+      (ubicacion) => ubicacion.id === ubicacionDestinoId
+    );
+    if (propia) return propia;
+    // Destino en otra sucursal (solo transferencias): se muestra "SUCURSAL — UBICACIÓN".
+    for (const destino of destinosTransferencia) {
+      const ubicacion = destino.ubicaciones.find((u) => u.id === ubicacionDestinoId);
+      if (ubicacion) {
+        return {
+          id: ubicacion.id,
+          nombre: `${destino.sucursalNombre} — ${ubicacion.tipoUbicacion}`,
+          sucursal: destino.sucursalNombre,
+          tipoUbicacion: ubicacion.tipoUbicacion,
+          activa: true,
+        } as Ubicacion;
+      }
+    }
+    return null;
+  }, [ubicaciones, ubicacionDestinoId, destinosTransferencia]);
 
   const ubicacionesOrigenReposicion = useMemo(
     () =>
@@ -624,9 +647,9 @@ const [, setCantidadesPorLote] = useState<
         tipoIndividual === "EGRESO" ||
         tipoIndividual === "AJUSTE -",
       necesitaDestino:
-        !esTransferencia &&
-        (tipoIndividual === "INGRESO" ||
-          tipoIndividual === "AJUSTE +"),
+        esTransferencia ||
+        tipoIndividual === "INGRESO" ||
+        tipoIndividual === "AJUSTE +",
     };
   }, [
     modo,
@@ -717,6 +740,7 @@ const [, setCantidadesPorLote] = useState<
     if (motivoIndividual === "TRANSFERENCIA") {
       setTipoIndividual("EGRESO");
       setUbicacionDestinoId("");
+      setSucursalDestinoId("");
       return;
     }
 
@@ -789,6 +813,39 @@ const [, setCantidadesPorLote] = useState<
     ubicacionOrigen,
     ubicaciones,
   ]);
+
+  async function cargarDestinosTransferencia() {
+    try {
+      setCargandoDestinos(true);
+      const response = await fetch(
+        `/api/movimientos?accion=destinos_transferencia&sucursal=${encodeURIComponent(
+          usuario.sucursalId || usuario.sucursal
+        )}`
+      );
+      const data = (await response.json()) as {
+        ok?: boolean;
+        error?: string;
+        destinos?: DestinoTransferencia[];
+      };
+      if (!response.ok || !data.ok || !data.destinos) {
+        throw new Error(data.error || "No se pudieron cargar los destinos");
+      }
+      setDestinosTransferencia(data.destinos);
+    } catch (error) {
+      console.error("Error cargando destinos de transferencia:", error);
+      setDestinosTransferencia([]);
+      setAviso({
+        tipo: "error",
+        texto: "No se pudieron cargar las sucursales de destino.",
+      });
+    } finally {
+      setCargandoDestinos(false);
+    }
+  }
+
+  useEffect(() => {
+    if (esTransferencia) cargarDestinosTransferencia();
+  }, [esTransferencia]);
 
   async function cargarUbicaciones() {
     try {
@@ -2424,7 +2481,51 @@ const [, setCantidadesPorLote] = useState<
               </label>
             )}
 
+            {esTransferencia && (
+              <>
+                <label className="mov-field">
+                  Sucursal destino
+                  <select
+                    value={sucursalDestinoId}
+                    onChange={(event) => {
+                      setSucursalDestinoId(event.target.value);
+                      setUbicacionDestinoId("");
+                    }}
+                    disabled={cargandoDestinos || guardando}
+                  >
+                    <option value="">
+                      {cargandoDestinos ? "Cargando..." : "Seleccionar"}
+                    </option>
+                    {destinosTransferencia.map((destino) => (
+                      <option key={destino.sucursalId} value={destino.sucursalId}>
+                        {destino.sucursalNombre}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="mov-field">
+                  Ubicación destino
+                  <select
+                    value={ubicacionDestinoId}
+                    onChange={(event) => setUbicacionDestinoId(event.target.value)}
+                    disabled={!sucursalDestinoId || guardando}
+                  >
+                    <option value="">Seleccionar</option>
+                    {(destinosTransferencia.find(
+                      (destino) => destino.sucursalId === sucursalDestinoId
+                    )?.ubicaciones || []).map((ubicacion) => (
+                      <option key={ubicacion.id} value={ubicacion.id}>
+                        {ubicacion.tipoUbicacion}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+
             {configuracionActual.necesitaDestino &&
+              !esTransferencia &&
               modo !== "reposicion" && (
                 <label className="mov-field">
                   Ubicación destino

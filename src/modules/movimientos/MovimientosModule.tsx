@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import BarcodeScanner from "../../components/BarcodeScanner";
 import VentasArchivo from "./VentasArchivo";
+import Vencimientos from "./Vencimientos";
 import { permiteAccionUI, permiteModoMovimientoUI, modoMovimientoInicialUI, permiteMovimientoUI } from "../../config/permisos-vista";
 import "./Movimientos.css";
 
@@ -21,7 +22,7 @@ type Props = {
   modoInicial?: ModoMovimiento;
 };
 
-type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock" | "ventas";
+type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos";
 
 type Producto = {
   id: string;
@@ -2196,6 +2197,18 @@ const [, setCantidadesPorLote] = useState<
           Ventas por archivo
         </button>}
 
+        {permiteModoMovimientoUI(usuario, "vencimientos") && <button
+          type="button"
+          className={
+            modo === "vencimientos"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("vencimientos")}
+        >
+          Vencimientos
+        </button>}
+
         {permiteModoMovimientoUI(usuario, "stock") && <button
           type="button"
           className={
@@ -2211,6 +2224,8 @@ const [, setCantidadesPorLote] = useState<
 
       {modo === "ventas" ? (
         <VentasArchivo usuario={usuario} />
+      ) : modo === "vencimientos" ? (
+        <Vencimientos usuario={usuario} />
       ) : modo === "stock" ? (
         <section className="mov-card mov-stock-card">
           <div className="mov-stock-header">
@@ -3153,7 +3168,7 @@ const [, setCantidadesPorLote] = useState<
       </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>
@@ -3273,7 +3288,7 @@ const [, setCantidadesPorLote] = useState<
       </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && resultado.length > 0 && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && resultado.length > 0 && (
         <section className="mov-card">
           <div className="mov-section-header">
             <div>
@@ -3322,7 +3337,7 @@ const [, setCantidadesPorLote] = useState<
         </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>

@@ -103,7 +103,7 @@ type VistaActiva =
   | "ajustes"
   | "usuario";
 
-type MovimientoSubvista = "recepcion" | "reposicion" | "stock" | "individual";
+type MovimientoSubvista = "recepcion" | "reposicion" | "stock" | "individual" | "ventas";
 
 type MenuIconKey =
   | "login"
@@ -1944,6 +1944,7 @@ if (vistaActiva === "administracion") {
                       {puedeCrearMovimientos && <button type="button" onClick={() => abrirMovimiento("recepcion")}>Recepción</button>}
                       {puedeCrearMovimientos && <button type="button" onClick={() => abrirMovimiento("reposicion")}>Reposición</button>}
                       {permiteModoMovimientoUI(usuarioSesion, "stock") && <button type="button" onClick={() => abrirMovimiento("stock")}>Stock</button>}
+                      {puedeCrearMovimientos && <button type="button" onClick={() => abrirMovimiento("ventas")}>Ventas</button>}
                       {(puedeCrearMovimientos || puedeAjustarMovimientos) && <button type="button" onClick={() => abrirMovimiento("individual")}>{puedeAjustarMovimientos ? "Ajustes" : "Movimiento individual"}</button>}
                     </div>
                   )}

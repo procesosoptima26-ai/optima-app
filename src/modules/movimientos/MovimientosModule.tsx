@@ -2220,14 +2220,25 @@ const [, setCantidadesPorLote] = useState<
           <div className="mov-stock-filters">
             <label className="mov-field">
               Buscar producto
-              <input
-                type="search"
-                value={busquedaStock}
-                onChange={(event) =>
-                  setBusquedaStock(event.target.value)
-                }
-                placeholder="Código, nombre, marca..."
-              />
+              <div className="mov-code-row">
+                <input
+                  type="search"
+                  value={busquedaStock}
+                  onChange={(event) =>
+                    setBusquedaStock(event.target.value)
+                  }
+                  placeholder="Código, nombre, marca..."
+                />
+
+                <button
+                  type="button"
+                  className="mov-camera-button"
+                  onClick={() => setScannerAbierto(true)}
+                  aria-label="Escanear código con la cámara"
+                >
+                  📷
+                </button>
+              </div>
             </label>
 
             <label className="mov-field">
@@ -3363,8 +3374,13 @@ const [, setCantidadesPorLote] = useState<
       {scannerAbierto && (
         <BarcodeScanner
           onScanSuccess={(codigoEscaneado) => {
-            setCodigo(codigoEscaneado);
-            buscarProducto(codigoEscaneado);
+            if (modo === "stock") {
+              // En la pantalla de Stock solo se filtra la lista por el código.
+              setBusquedaStock(codigoEscaneado);
+            } else {
+              setCodigo(codigoEscaneado);
+              buscarProducto(codigoEscaneado);
+            }
             setScannerAbierto(false);
           }}
           onClose={() => setScannerAbierto(false)}

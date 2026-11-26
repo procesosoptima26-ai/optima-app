@@ -24,3 +24,11 @@ dist-ssr
 *.sw?
 .vercel
 secretos-arca/
+
+# Copias de respaldo y archivos locales que nunca se suben
+.optima-backups/
+.optima-respaldos/
+Scripts/
+*.orig
+optima-core-actual.tar.gz
+generar-hash-password.mjs

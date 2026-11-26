@@ -777,7 +777,9 @@ function App() {
       const data = (await response.json()) as RespuestaProductoApi;
 
       if (!response.ok) {
-        throw new Error(data.error || "Error buscando producto");
+        const errorServidor = new Error(data.error || "Error buscando producto") as Error & { estado?: number };
+        errorServidor.estado = response.status;
+        throw errorServidor;
       }
 
       if (data.encontrado && data.producto) {
@@ -791,9 +793,13 @@ function App() {
       console.error("Error buscando producto:", error);
       limpiarDatosProducto();
       setEstadoProducto("error");
+      // Un rechazo por contrato o permisos (403) trae un mensaje claro del servidor: se muestra tal cual.
+      const rechazoPorAcceso = (error as { estado?: number }).estado === 403 && error instanceof Error;
       setAviso({
         tipo: "error",
-        texto: "No se pudo buscar el producto en Airtable.",
+        texto: rechazoPorAcceso
+          ? `No se pudo buscar el producto: ${(error as Error).message}.`
+          : "No se pudo buscar el producto en Airtable.",
       });
     }
   }

@@ -17,6 +17,7 @@
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/movimientos.ts": {
+      "maxDuration": 60,
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/productos-movimientos.ts": {

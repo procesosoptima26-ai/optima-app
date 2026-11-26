@@ -22,7 +22,7 @@ export function permiteMovimientoUI(usuario: SesionConPermisos, tipo: string): b
   return permiteAccionUI(usuario, "MOVIMIENTOS", permisoMovimientoPorTipo(tipo));
 }
 
-export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock";
+export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas";
 export function permiteModoMovimientoUI(usuario: SesionConPermisos, modo: ModoMovimientoUI): boolean {
   if (modo === "stock") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
   // En la vista individual también se cargan INGRESO y EGRESO ordinarios.

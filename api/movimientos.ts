@@ -4,6 +4,13 @@ import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, sucursalRealDeUbicacion, sucursalSolicitada,
   productoExistenteDeEmpresa, movimientoPermitido } from "../lib/alcance-operativo.js";
 import type { ContextoCore } from "../core/seguridad.js";
+import {
+  planificarVentas, etiquetaArchivoVentas, MAX_PRODUCTOS_POR_ARCHIVO,
+} from "../lib/ventas-archivo-plan.js";
+import {
+  buscarProductosPorCodigos, leerStockPorProductoEnUbicacion,
+  leerProductosYaCargados, leerResultadoVentas,
+} from "../lib/ventas-archivo-airtable.js";
 
 dotenv.config({
   path: ".env.local",
@@ -380,7 +387,7 @@ function armarCamposMovimiento(
   }
 
   if (observacion) {
-    fields["OBSERVACIÓN"] = observacion;
+    fields.OBSERVACIONES = observacion;
   }
 
   return fields;
@@ -557,7 +564,7 @@ function transformarMovimiento(record: AirtableRecord) {
       record.fields.RESPONSABLE
     ),
     observacion: normalizarTexto(
-      record.fields["OBSERVACIÓN"]
+      record.fields.OBSERVACIONES ?? record.fields["OBSERVACIÓN"]
     ),
     procesado: Boolean(record.fields.PROCESADO),
     errorMotor: normalizarTexto(
@@ -579,12 +586,151 @@ async function movimientosPertenecenASucursales(
   return registros.every((registro) => movimientoPermitido(registro.fields, mapa, contexto));
 }
 
+/**
+ * Ventas por archivo (Etapa 1).
+ * - ventas_vista_previa: calcula el plan SIN guardar nada.
+ * - ventas_confirmar: vuelve a calcular el plan y guarda solo las ventas listas.
+ * - ventas_resultado: informa cómo le fue al motor con lo ya cargado.
+ * El stock lo sigue modificando únicamente el motor de Airtable: acá solo se
+ * crean movimientos EGRESO + VENTA, igual que a mano.
+ */
+type LineaVentaPayload = { codigo: string; producto?: string; cantidad: number };
+
+function textoCorto(valor: unknown, maximo: number): string {
+  return typeof valor === "string" ? valor.trim().slice(0, maximo) : "";
+}
+
+async function manejarVentasArchivo(
+  req: VercelRequest,
+  res: VercelResponse,
+  accion: string,
+) {
+  if (!["ventas_vista_previa", "ventas_confirmar", "ventas_resultado"].includes(accion)) {
+    return res.status(400).json({ ok: false, error: "Acción no válida." });
+  }
+  const cuerpo = (req.body && typeof req.body === "object" && !Array.isArray(req.body)
+    ? req.body : {}) as Record<string, unknown>;
+
+  const sucursal = normalizarSucursal(cuerpo.sucursal);
+  const ubicacionId = normalizarTexto(cuerpo.ubicacionId);
+  if (!sucursal) {
+    return res.status(400).json({ ok: false, error: "Falta la sucursal." });
+  }
+  if (!REGISTRO_ID.test(ubicacionId)) {
+    return res.status(400).json({ ok: false, error: "Falta la ubicación de venta." });
+  }
+  let etiqueta: string;
+  try {
+    etiqueta = etiquetaArchivoVentas(textoCorto(cuerpo.nombreArchivo, 200));
+  } catch {
+    return res.status(400).json({ ok: false, error: "Falta el nombre del archivo." });
+  }
+
+  const autorizado = await exigirAutorizacion(req, res, {
+    modulos: ["MOVIMIENTOS"],
+    permiso: "movimientos.crear",
+    capacidadComercial: "movimientos.registro.crear",
+    sucursal,
+  });
+  if (!autorizado) return;
+
+  const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
+  if (!sucursalCore) {
+    return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
+  }
+  const ubicaciones = await leerUbicaciones();
+  const ubicacion = ubicaciones.find((u) => u.id === ubicacionId);
+  if (!ubicacion || ubicacion.sucursalCoreId !== sucursalCore.id) {
+    return res.status(400).json({
+      ok: false,
+      error: "La ubicación de venta no pertenece a la sucursal del usuario.",
+    });
+  }
+
+  if (accion === "ventas_resultado") {
+    const resultado = await leerResultadoVentas(etiqueta);
+    return res.status(200).json({ ok: true, etiqueta, resultado });
+  }
+
+  const crudas = Array.isArray(cuerpo.lineas) ? cuerpo.lineas : null;
+  if (!crudas || crudas.length === 0) {
+    return res.status(400).json({ ok: false, error: "El archivo no tiene ventas." });
+  }
+  if (crudas.length > 5000) {
+    return res.status(400).json({ ok: false, error: "El archivo tiene demasiadas filas." });
+  }
+  const lineas: LineaVentaPayload[] = [];
+  for (const cruda of crudas as Array<Record<string, unknown>>) {
+    const codigo = normalizarTexto(cruda?.codigo);
+    const cantidad = Number(cruda?.cantidad);
+    if (!/^\d{1,20}$/.test(codigo) || !Number.isFinite(cantidad) ||
+        cantidad <= 0 || cantidad > 100000) {
+      return res.status(400).json({ ok: false, error: "Hay líneas con código o cantidad inválidos." });
+    }
+    lineas.push({ codigo, producto: textoCorto(cruda?.producto, 200), cantidad });
+  }
+  if (new Set(lineas.map((l) => l.codigo)).size > MAX_PRODUCTOS_POR_ARCHIVO) {
+    return res.status(400).json({ ok: false, error: "El archivo tiene demasiados productos." });
+  }
+
+  const [catalogo, stock, yaCargados] = await Promise.all([
+    buscarProductosPorCodigos([...new Set(lineas.map((l) => l.codigo))], autorizado.empresaId),
+    leerStockPorProductoEnUbicacion(ubicacionId),
+    leerProductosYaCargados(etiqueta),
+  ]);
+
+  const plan = planificarVentas({
+    lineas: lineas.map((l) => ({ codigo: l.codigo, producto: l.producto ?? "", cantidad: l.cantidad })),
+    productosPorCodigo: catalogo.productos,
+    codigosDeOtraEmpresa: catalogo.codigosDeOtraEmpresa,
+    stockPorProductoId: stock,
+    yaCargadosPorProductoId: yaCargados,
+  });
+
+  if (accion === "ventas_vista_previa") {
+    return res.status(200).json({ ok: true, etiqueta, plan });
+  }
+
+  // ventas_confirmar: solo se guardan las ventas que el plan marca como listas.
+  if (plan.listas.length === 0) {
+    return res.status(400).json({
+      ok: false, error: "No hay ventas para cargar.", plan,
+    });
+  }
+  const responsable = textoCorto(cuerpo.responsable, 100);
+  const movimientos: MovimientoPayload[] = plan.listas.map((venta) => ({
+    productoId: venta.productoId,
+    tipoMovimiento: "EGRESO",
+    motivo: "VENTA",
+    ubicacionOrigenId: ubicacionId,
+    cantidad: venta.cantidad,
+    responsable,
+    observacion: etiqueta,
+  }));
+  for (const movimiento of movimientos) {
+    const errorValidacion = validarMovimiento(movimiento, sucursalCore.id, ubicaciones);
+    if (errorValidacion) {
+      return res.status(400).json({ ok: false, error: errorValidacion });
+    }
+  }
+  const creados = await crearMovimientos(movimientos);
+  return res.status(200).json({
+    ok: true,
+    etiqueta,
+    cantidad: creados.length,
+    omitidas: plan.problemas.length,
+  });
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
   try {
     if (req.method === "POST") {
+      const accionVentas = normalizarTexto(req.query.accion);
+      if (accionVentas) return await manejarVentasArchivo(req, res, accionVentas);
+
       const payload = req.body as GuardarMovimientosPayload;
 
       const sucursal = normalizarSucursal(

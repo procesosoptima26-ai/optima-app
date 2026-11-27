@@ -2,6 +2,7 @@
 export type SesionConPermisos = Readonly<{
   modulos: readonly string[];
   permisos?: readonly string[];
+  rol?: string;
 }> | null | undefined;
 
 export function permiteAccionUI(
@@ -23,7 +24,15 @@ export function permiteMovimientoUI(usuario: SesionConPermisos, tipo: string): b
 }
 
 export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos" | "historial";
+/** Pestañas reservadas por ahora a administradores, para que el equipo no cargue ventas por error. */
+const MODOS_SOLO_ADMIN: readonly ModoMovimientoUI[] = ["ventas", "vencimientos", "historial"];
+
+function esAdminUI(usuario: SesionConPermisos): boolean {
+  return String(usuario?.rol ?? "").trim().toUpperCase() === "ADMIN";
+}
+
 export function permiteModoMovimientoUI(usuario: SesionConPermisos, modo: ModoMovimientoUI): boolean {
+  if (MODOS_SOLO_ADMIN.includes(modo) && !esAdminUI(usuario)) return false;
   if (modo === "stock" || modo === "vencimientos" || modo === "historial") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
   // En la vista individual también se cargan INGRESO y EGRESO ordinarios.
   if (modo === "individual") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ajustar") ||

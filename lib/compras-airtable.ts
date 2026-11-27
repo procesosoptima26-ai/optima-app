@@ -47,35 +47,50 @@ function ids(valor: unknown): string[] {
 
 const esperar = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+/** Detalle corto y seguro de un error de Airtable (tipo y mensaje, nunca datos ni claves). */
+async function detalleError(respuesta: { status: number; json(): Promise<unknown> }): Promise<string> {
+  let tipo = "";
+  try {
+    const cuerpo = (await respuesta.json()) as { error?: unknown };
+    const e = cuerpo?.error;
+    if (typeof e === "string") tipo = e;
+    else if (e && typeof e === "object") {
+      const o = e as { type?: unknown; message?: unknown };
+      tipo = [o.type, o.message].filter((x): x is string => typeof x === "string").join(": ");
+    }
+  } catch { /* sin detalle */ }
+  return `${respuesta.status}${tipo ? ` (${tipo.slice(0, 160)})` : ""}`;
+}
+
 /** Pide una página; si Airtable responde "demasiados pedidos" (429) espera y reintenta. */
-async function pedirPagina(url: string, token: string): Promise<Respuesta> {
+async function pedirPagina(url: string, token: string, etiqueta: string): Promise<Respuesta> {
   for (let intento = 0; intento < 4; intento++) {
     const respuesta = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (respuesta.status === 429) {
       await esperar(1200 * (intento + 1));
       continue;
     }
-    if (!respuesta.ok) throw new Error("No se pudo consultar Airtable");
+    if (!respuesta.ok) throw new Error(`No se pudo consultar Airtable (${etiqueta}): ${await detalleError(respuesta)}`);
     const dato = (await respuesta.json()) as Respuesta;
-    if (!dato || !Array.isArray(dato.records)) throw new Error("Respuesta incompleta de Airtable");
+    if (!dato || !Array.isArray(dato.records)) throw new Error(`Respuesta incompleta de Airtable (${etiqueta})`);
     return dato;
   }
-  throw new Error("Airtable está limitando los pedidos; reintentá en unos segundos");
+  throw new Error(`Airtable está limitando los pedidos (${etiqueta}); reintentá en unos segundos`);
 }
 
-async function leerPaginas(url: URL, token: string, alRegistro: (r: Registro) => void): Promise<void> {
+async function leerPaginas(url: URL, token: string, etiqueta: string, alRegistro: (r: Registro) => void): Promise<void> {
   let offset: string | undefined;
   const vistos = new Set<string>();
   for (let pagina = 0; pagina < MAX_PAGINAS; pagina++) {
     if (offset) url.searchParams.set("offset", offset);
-    const dato = await pedirPagina(url.toString(), token);
+    const dato = await pedirPagina(url.toString(), token, etiqueta);
     for (const r of dato.records ?? []) alRegistro(r);
     if (!dato.offset) return;
-    if (vistos.has(dato.offset)) throw new Error("Paginación inconsistente en Airtable");
+    if (vistos.has(dato.offset)) throw new Error(`Paginación inconsistente en Airtable (${etiqueta})`);
     vistos.add(dato.offset);
     offset = dato.offset;
   }
-  throw new Error("La consulta excedió el límite seguro de páginas");
+  throw new Error(`La consulta excedió el límite seguro de páginas (${etiqueta})`);
 }
 
 function urlTabla(baseId: string, tabla: string, campos: readonly string[]): URL {
@@ -97,7 +112,7 @@ export async function leerCatalogoCompras(
   const campos = [campoCodigo, "NOMBRE MASTER", "PROVEEDOR", "CATEGORÍA", "EMPRESA",
     ...(campoPack ? [campoPack] : [])];
   const salida: ProductoCatalogoCompra[] = [];
-  await leerPaginas(urlTabla(baseId, tabla, campos), token, (r) => {
+  await leerPaginas(urlTabla(baseId, tabla, campos), token, "productos", (r) => {
     if (!productoDeEmpresa(r.fields, empresaId)) return;
     const codigo = texto(r.fields[campoCodigo]);
     if (!codigo) return;
@@ -113,13 +128,17 @@ export async function leerCatalogoCompras(
   return salida;
 }
 
-/** Nombre de cada proveedor por su id. */
+/** Nombre de cada proveedor por su id. Se pide por ID de campo (no por nombre) para evitar problemas con tildes. */
+const CAMPO_NOMBRE_PROVEEDOR_ID = "fldD9hvw58fzPnJZf";
+
 export async function leerProveedores(): Promise<Map<string, string>> {
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const tabla = process.env.AIRTABLE_PROVEEDORES_TABLE_NAME?.trim() || "PROVEEDORES";
+  const url = urlTabla(baseId, tabla, [CAMPO_NOMBRE_PROVEEDOR_ID]);
+  url.searchParams.set("returnFieldsByFieldId", "true");
   const salida = new Map<string, string>();
-  await leerPaginas(urlTabla(baseId, tabla, ["NOMBRE FANTASÍA"]), token, (r) => {
-    const nombre = texto(r.fields["NOMBRE FANTASÍA"]);
+  await leerPaginas(url, token, "proveedores", (r) => {
+    const nombre = texto(r.fields[CAMPO_NOMBRE_PROVEEDOR_ID]);
     if (nombre) salida.set(r.id, nombre);
   });
   return salida;
@@ -130,7 +149,7 @@ export async function leerStockDeUbicaciones(ubicacionIds: ReadonlySet<string>):
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const tabla = variable("AIRTABLE_STOCK_LOTES_TABLE_NAME");
   const stock = new Map<string, number>();
-  await leerPaginas(urlTabla(baseId, tabla, ["PRODUCTOS", "UBICACIÓN", "CANTIDAD_ACTUAL"]), token, (r) => {
+  await leerPaginas(urlTabla(baseId, tabla, ["PRODUCTOS", "UBICACIÓN", "CANTIDAD_ACTUAL"]), token, "stock", (r) => {
     if (!ids(r.fields["UBICACIÓN"]).some((u) => ubicacionIds.has(u))) return;
     const cantidad = Number(r.fields.CANTIDAD_ACTUAL);
     if (!Number.isFinite(cantidad) || cantidad <= 0) return;
@@ -156,7 +175,7 @@ export async function leerVentasDelDia(
     `AND({MOTIVO}="VENTA",IS_AFTER({FECHA_HORA},"${desdeMenos1s}"),IS_BEFORE({FECHA_HORA},"${hasta}"))`,
   );
   const crudos: Array<{ productoIds: string[]; ubicacionOrigenIds: string[]; cantidad: number }> = [];
-  await leerPaginas(url, token, (r) => {
+  await leerPaginas(url, token, `ventas ${dia}`, (r) => {
     crudos.push({
       productoIds: ids(r.fields.PRODUCTO),
       ubicacionOrigenIds: ids(r.fields["UBICACIÓN ORIGEN"]),

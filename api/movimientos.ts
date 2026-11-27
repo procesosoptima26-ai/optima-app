@@ -5,7 +5,7 @@ import { configTablaOperativa, sucursalRealDeUbicacion, idsVinculados, sucursalS
   productoExistenteDeEmpresa, movimientoPermitido } from "../lib/alcance-operativo.js";
 import type { ContextoCore } from "../core/seguridad.js";
 import {
-  planificarVentas, etiquetaArchivoVentas, MAX_PRODUCTOS_POR_ARCHIVO,
+  planificarVentas, etiquetaArchivoVentas, ventasParaRevision, MAX_PRODUCTOS_POR_ARCHIVO,
 } from "../lib/ventas-archivo-plan.js";
 import {
   buscarProductosPorCodigos, leerStockPorProductoEnUbicacion,
@@ -774,13 +774,16 @@ async function manejarVentasArchivo(
   }
 
   // ventas_confirmar: solo se guardan las ventas que el plan marca como listas.
-  if (plan.listas.length === 0) {
+  // Además se cargan las que no tienen stock suficiente: el motor las rechaza
+  // sin tocar el stock y quedan con ERROR_MOTOR para revisar y reprocesar.
+  const aRevision = ventasParaRevision(plan);
+  if (plan.listas.length === 0 && aRevision.length === 0) {
     return res.status(400).json({
       ok: false, error: "No hay ventas para cargar.", plan,
     });
   }
   const responsable = textoCorto(cuerpo.responsable, 100);
-  const movimientos: MovimientoPayload[] = plan.listas.map((venta) => ({
+  const movimientos: MovimientoPayload[] = [...plan.listas, ...aRevision].map((venta) => ({
     productoId: venta.productoId,
     tipoMovimiento: "EGRESO",
     motivo: "VENTA",
@@ -800,7 +803,8 @@ async function manejarVentasArchivo(
     ok: true,
     etiqueta,
     cantidad: creados.length,
-    omitidas: plan.problemas.length,
+    paraRevision: aRevision.length,
+    omitidas: plan.problemas.length - aRevision.length,
   });
   } finally {
     if (dueno) {

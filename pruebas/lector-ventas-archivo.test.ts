@@ -31,6 +31,14 @@ test("csv con punto y coma y coma decimal", async () => {
   assert.equal(g.find((x) => x.codigo === "1004")?.cantidad, 0.74);
 });
 
+test("acepta el encabezado 'Código / CB' del sistema de Goya", async () => {
+  const r = await leerArchivoVentas(
+    buf("Código / CB;Producto;Cantidad\n0763571720592;Azúcar;1\n1023;Huevos;2\n"), "g.csv");
+  assert.deepEqual(r.errores, []);
+  assert.equal(r.lineas.length, 2);
+  assert.equal(r.lineas[0].codigo, "763571720592");
+});
+
 test("csv con comillas y encabezados con tilde/mayúsculas", async () => {
   const r = await leerArchivoVentas(
     buf('CÓDIGO,DESCRIPCIÓN,CANTIDAD\n"123","Galletitas, dulces ""x""",3\n'), "v.csv");

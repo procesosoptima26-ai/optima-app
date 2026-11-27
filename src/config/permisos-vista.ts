@@ -23,9 +23,9 @@ export function permiteMovimientoUI(usuario: SesionConPermisos, tipo: string): b
   return permiteAccionUI(usuario, "MOVIMIENTOS", permisoMovimientoPorTipo(tipo));
 }
 
-export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos" | "historial";
+export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos" | "historial" | "compras";
 /** Pestañas reservadas por ahora a administradores, para que el equipo no cargue ventas por error. */
-const MODOS_SOLO_ADMIN: readonly ModoMovimientoUI[] = ["ventas", "vencimientos", "historial"];
+const MODOS_SOLO_ADMIN: readonly ModoMovimientoUI[] = ["ventas", "vencimientos", "historial", "compras"];
 
 function esAdminUI(usuario: SesionConPermisos): boolean {
   return String(usuario?.rol ?? "").trim().toUpperCase() === "ADMIN";
@@ -33,7 +33,7 @@ function esAdminUI(usuario: SesionConPermisos): boolean {
 
 export function permiteModoMovimientoUI(usuario: SesionConPermisos, modo: ModoMovimientoUI): boolean {
   if (MODOS_SOLO_ADMIN.includes(modo) && !esAdminUI(usuario)) return false;
-  if (modo === "stock" || modo === "vencimientos" || modo === "historial") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
+  if (modo === "stock" || modo === "vencimientos" || modo === "historial" || modo === "compras") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
   // En la vista individual también se cargan INGRESO y EGRESO ordinarios.
   if (modo === "individual") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ajustar") ||
     permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.crear");

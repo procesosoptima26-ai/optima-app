@@ -34,11 +34,11 @@ test("pestañas de movimientos según permiso y primera vista segura", () => {
   assert.equal(modoMovimientoInicialUI(ajustador),"individual");
 });
 
-test("Ventas, Vencimientos e Historial son solo para ADMIN", () => {
+test("Ventas, Vencimientos, Historial y Compras son solo para ADMIN", () => {
   const equipo = {rol:"USUARIO",modulos:["MOVIMIENTOS"],permisos:["movimientos.ver","movimientos.crear","movimientos.ajustar"]};
   const admin = {rol:"ADMIN",modulos:["MOVIMIENTOS"],permisos:["movimientos.ver","movimientos.crear"]};
   const adminSinPermiso = {rol:"ADMIN",modulos:["MOVIMIENTOS"],permisos:[]};
-  for (const modo of ["ventas","vencimientos","historial"] as const) {
+  for (const modo of ["ventas","vencimientos","historial","compras"] as const) {
     assert.equal(permiteModoMovimientoUI(equipo,modo),false);
     assert.equal(permiteModoMovimientoUI(admin,modo),true);
     assert.equal(permiteModoMovimientoUI(adminSinPermiso,modo),false);

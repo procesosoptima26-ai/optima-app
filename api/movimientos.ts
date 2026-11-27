@@ -12,6 +12,16 @@ import {
   leerProductosYaCargados, leerResultadoVentas,
 } from "../lib/ventas-archivo-airtable.js";
 import { tomarBloqueoVentas, liberarBloqueoVentas } from "../lib/bloqueo-ventas.js";
+import { calcularComprasSugeridas, ordenUrgencia } from "../lib/compras-sugeridas.js";
+import {
+  armarProductosCompra, clavePackDeSucursal, diasDeVentana, esRelevanteParaSucursal,
+  hoyArgentina, ventasPorProductoDeSucursal,
+} from "../lib/compras-datos.js";
+import { juntarVentasDeVentana } from "../lib/compras-ventas.js";
+import {
+  guardarCacheVentas, leerCacheVentas, leerCatalogoCompras, leerProveedores,
+  leerStockDeUbicaciones, leerVentasDelDia,
+} from "../lib/compras-airtable.js";
 import {
   destinosTransferencia, validarTransferencia, esMotivoTransferencia,
   type SucursalTransferencia,
@@ -818,6 +828,93 @@ async function manejarVentasArchivo(
   }
 }
 
+/**
+ * Compras sugeridas (SOLO LECTURA, solo ADMIN). No escribe nada en Airtable.
+ * La primera vez puede responder "preparando" mientras junta las ventas de los
+ * últimos 60 días; la pantalla vuelve a consultar hasta que esté completo.
+ */
+const PRESUPUESTO_VENTAS_MS = 30_000;
+
+async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) {
+  const inicio = Date.now();
+  const sucursal = normalizarSucursal(req.query.sucursal);
+  if (!sucursal) return res.status(400).json({ ok: false, error: "Falta la sucursal." });
+
+  const autorizado = await exigirAutorizacion(req, res, {
+    modulos: ["MOVIMIENTOS"],
+    permiso: "movimientos.ver",
+    capacidadComercial: "movimientos.registro.consultar",
+    sucursal,
+  });
+  if (!autorizado) return;
+  // Hoy esta pantalla es solo para administradores (el equipo no la ve).
+  if (autorizado.rol.trim().toUpperCase() !== "ADMIN") {
+    return res.status(403).json({ ok: false, error: "Esta pantalla es solo para administradores." });
+  }
+  const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
+  if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
+
+  const ubicaciones = await leerUbicaciones();
+  const sucursalPorUbicacion = new Map<string, string>();
+  for (const u of ubicaciones) if (u.sucursalCoreId) sucursalPorUbicacion.set(u.id, u.sucursalCoreId);
+  const ubicacionesDeSucursal = new Set(
+    ubicaciones.filter((u) => u.sucursalCoreId === sucursalCore.id).map((u) => u.id),
+  );
+  if (ubicacionesDeSucursal.size === 0) {
+    return res.status(400).json({ ok: false, error: "La sucursal no tiene ubicaciones configuradas." });
+  }
+
+  const hoy = hoyArgentina();
+  const dias = diasDeVentana(hoy, 60);
+  const ventana = await juntarVentasDeVentana(
+    dias, hoy,
+    {
+      leerDia: (dia) => leerVentasDelDia(dia, sucursalPorUbicacion),
+      leerCache: leerCacheVentas,
+      guardarCache: guardarCacheVentas,
+      ahoraMs: () => Date.now(),
+    },
+    { limiteMs: inicio + PRESUPUESTO_VENTAS_MS, concurrencia: 2 },
+  );
+  if (ventana.pendientes.length > 0) {
+    return res.status(200).json({
+      ok: true, preparando: true,
+      diasListos: dias.length - ventana.pendientes.length, diasTotal: dias.length,
+    });
+  }
+
+  const clavePack = clavePackDeSucursal(sucursalCore.nombre);
+  const [catalogo, stock, proveedores] = await Promise.all([
+    leerCatalogoCompras(autorizado.empresaId, clavePack),
+    leerStockDeUbicaciones(ubicacionesDeSucursal),
+    leerProveedores(),
+  ]);
+
+  const armados = armarProductosCompra({
+    catalogo,
+    stockPorProductoId: stock,
+    ventasPorProductoId: ventasPorProductoDeSucursal(ventana.porDia, sucursalCore.id),
+    proveedorPorId: proveedores,
+    clavePack,
+  });
+  const relevantes = armados.filter(esRelevanteParaSucursal);
+  const resultado = calcularComprasSugeridas(relevantes, { hoy });
+  const items = resultado.items.filter((i) => i.sugerido > 0).sort(ordenUrgencia);
+
+  return res.status(200).json({
+    ok: true, preparando: false, hoy,
+    sucursal: { id: sucursalCore.id, nombre: sucursalCore.nombre },
+    hayPacks: clavePack !== null,
+    resumen: {
+      productosEvaluados: relevantes.length,
+      productosFueraDeLista: armados.length - relevantes.length,
+      excluidos: resultado.excluidos,
+      conSugerencia: items.length,
+    },
+    items,
+  });
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
@@ -937,6 +1034,9 @@ export default async function handler(
     }
 
     if (req.method === "GET") {
+      if (normalizarTexto(req.query.accion) === "compras_sugeridas") {
+        return await manejarComprasSugeridas(req, res);
+      }
       if (normalizarTexto(req.query.accion) === "destinos_transferencia") {
         const sucursalPedida = normalizarSucursal(req.query.sucursal);
         if (!sucursalPedida) {

@@ -5,6 +5,7 @@
  * No modifica Airtable ni la configuración de la empresa.
  */
 import type { ContextoCore, SucursalCore } from "../core/seguridad.js";
+import { esMotivoTransferencia } from "./transferencias.js";
 
 export type RegistroOperativo = Readonly<{ id: string; fields: Record<string, unknown> }>;
 const REGISTRO = /^rec[A-Za-z0-9]{14}$/;
@@ -93,6 +94,14 @@ export function movimientoPermitido(
 ): boolean {
   // Los movimientos históricos pueden no tener producto asociado. Su ubicación
   // sigue determinando el titular; las altas nuevas SÍ requieren producto válido.
+  // Excepción: una TRANSFERENCIA entre sucursales la ven ambos extremos
+  // (quien envía y quien recibe), así que alcanza con que UNO sea propio.
+  if (esMotivoTransferencia(campos.MOTIVO)) {
+    const extremo = (clave: string) =>
+      campos[clave] !== undefined &&
+      ubicacionesDeRegistroPermitidas(campos, [clave], ubicacionesPorId, contexto, sucursalEspecificaId);
+    return extremo("UBICACIÓN ORIGEN") || extremo("UBICACIÓN DESTINO");
+  }
   return ubicacionesDeRegistroPermitidas(
     campos, ["UBICACIÓN ORIGEN", "UBICACIÓN DESTINO"], ubicacionesPorId,
     contexto, sucursalEspecificaId,

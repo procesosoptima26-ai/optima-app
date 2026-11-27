@@ -83,8 +83,8 @@ const PRODUCTOS_POR_TANDA = 40;
 const TITULOS_PROBLEMA: Record<VentaConProblema["motivo"], string> = {
   NO_RECONOCIDO: "No reconocidos (el código no existe en el catálogo; podés crearlos acá, pero hasta cargarles stock en Recepción no se podrá descontar la venta)",
   OTRA_EMPRESA: "Catálogo compartido (necesitan vinculación autorizada)",
-  SIN_STOCK: "Sin stock en la ubicación de venta",
-  STOCK_INSUFICIENTE: "Stock insuficiente",
+  SIN_STOCK: "Sin stock en la ubicación de venta (se cargan con error para que las revises)",
+  STOCK_INSUFICIENTE: "Stock insuficiente (se cargan con error para que las revises; no se descuenta nada)",
   YA_CARGADO: "Ya cargados desde este archivo",
 };
 
@@ -248,11 +248,14 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
   }
 
   async function cargarVentas() {
-    if (!plan || plan.listas.length === 0) return;
+    if (!plan || (plan.listas.length === 0 && paraRevision.length === 0)) return;
     setError("");
     setOcupado("Cargando ventas...");
     try {
-      const codigosListos = new Set(plan.listas.map((v) => v.codigo));
+      const codigosListos = new Set([
+        ...plan.listas.map((v) => v.codigo),
+        ...paraRevision.map((p) => p.codigo),
+      ]);
       const aCargar = lineas.filter((l) => codigosListos.has(l.codigo));
       let cargadas = 0;
       for (let i = 0; i < aCargar.length; i += PRODUCTOS_POR_TANDA) {
@@ -307,6 +310,11 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
     if (entradaArchivo.current) entradaArchivo.current.value = "";
   }
 
+  // Sin stock o con stock insuficiente: se cargan igual; el motor las deja con error para revisar.
+  const paraRevision = (plan?.problemas ?? []).filter(
+    (p) => p.motivo === "SIN_STOCK" || p.motivo === "STOCK_INSUFICIENTE",
+  );
+
   const hayArchivo = lineas.length > 0;
   const bloqueado = Boolean(ocupado);
 
@@ -315,7 +323,7 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
       <div className="mov-stock-header">
         <div>
           <span>VENTAS</span>
-          <h3>Ventas por archivo</h3>
+          <h3>Ventas</h3>
           <p>Cargá las ventas del día de {usuario.sucursal} desde el archivo de tu sistema de ventas.</p>
         </div>
         {(hayArchivo || resultado) && (
@@ -473,9 +481,10 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
             </details>
           ))}
 
-          {plan.listas.length > 0 ? (
+          {plan.listas.length > 0 || paraRevision.length > 0 ? (
             <button type="button" className="mov-refresh-button" onClick={cargarVentas} disabled={bloqueado}>
               Cargar {plan.listas.length} ventas ({plan.totales.unidadesListas} unidades)
+              {paraRevision.length > 0 ? ` y ${paraRevision.length} para revisar (con error)` : ""}
             </button>
           ) : (
             <div className="mov-empty">No hay ventas para cargar con este archivo.</div>

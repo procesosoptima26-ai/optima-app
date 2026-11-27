@@ -53,6 +53,8 @@ export type VentaConProblema = {
   detalle: string;
   stock?: number;
   faltante?: number;
+  /** Solo en SIN_STOCK y STOCK_INSUFICIENTE: producto reconocido, para cargarlo con error. */
+  productoId?: string;
 };
 
 export type PlanVentas = {
@@ -128,7 +130,7 @@ export function planificarVentas(entrada: EntradaPlan): PlanVentas {
     if (stock <= 0) {
       problemas.push({
         codigo: linea.codigo, nombre: catalogo.nombre, cantidad,
-        motivo: "SIN_STOCK", stock: 0, faltante: cantidad,
+        motivo: "SIN_STOCK", stock: 0, faltante: cantidad, productoId: catalogo.id,
         detalle: "No hay stock en la ubicación de venta.",
       });
       continue;
@@ -138,7 +140,7 @@ export function planificarVentas(entrada: EntradaPlan): PlanVentas {
     if (faltante > TOLERANCIA_VENTA) {
       problemas.push({
         codigo: linea.codigo, nombre: catalogo.nombre, cantidad,
-        motivo: "STOCK_INSUFICIENTE", stock, faltante,
+        motivo: "STOCK_INSUFICIENTE", stock, faltante, productoId: catalogo.id,
         detalle: `Stock disponible ${stock}; faltan ${faltante}.`,
       });
       continue;
@@ -164,6 +166,24 @@ export function planificarVentas(entrada: EntradaPlan): PlanVentas {
       unidadesListas: redondear(listas.reduce((a, v) => a + v.cantidad, 0)),
     },
   };
+}
+
+/**
+ * Ventas reconocidas pero sin stock suficiente. Se cargan igual como movimientos
+ * (cantidad completa): el motor de Airtable las rechaza sin tocar el stock y
+ * las deja con ERROR_MOTOR para que se revisen y reprocesen a mano.
+ */
+export function ventasParaRevision(plan: PlanVentas): VentaLista[] {
+  const salida: VentaLista[] = [];
+  for (const p of plan.problemas) {
+    if ((p.motivo === "SIN_STOCK" || p.motivo === "STOCK_INSUFICIENTE") && p.productoId) {
+      salida.push({
+        codigo: p.codigo, productoId: p.productoId, nombre: p.nombre,
+        cantidad: p.cantidad, stock: p.stock ?? 0,
+      });
+    }
+  }
+  return salida;
 }
 
 /** Marca que se escribe en OBSERVACIONES para reconocer de qué archivo viene cada venta. */

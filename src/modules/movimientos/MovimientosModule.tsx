@@ -2194,7 +2194,7 @@ const [, setCantidadesPorLote] = useState<
           }
           onClick={() => setModo("ventas")}
         >
-          Ventas por archivo
+          Ventas
         </button>}
 
         {permiteModoMovimientoUI(usuario, "vencimientos") && <button

@@ -330,7 +330,7 @@ function leerFilasCsv(texto: string): string[][] {
 /* Interpretación de columnas                                          */
 /* ------------------------------------------------------------------ */
 
-const NOMBRES_CODIGO = ["codigo", "cod", "codigodebarras", "codbarras", "ean", "sku"];
+const NOMBRES_CODIGO = ["codigo", "cod", "codigocb", "codigodebarras", "codbarras", "ean", "sku"];
 const NOMBRES_PRODUCTO = ["producto", "descripcion", "nombre", "articulo", "detalle"];
 const NOMBRES_CANTIDAD = ["cantidad", "cant", "unidades", "qty"];
 

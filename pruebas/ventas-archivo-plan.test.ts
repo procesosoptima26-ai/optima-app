@@ -1,7 +1,7 @@
 /** Etapa 1 de "Ventas por archivo": reglas del plan de carga (lógica pura). */
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planificarVentas, etiquetaArchivoVentas, TOLERANCIA_VENTA } from "../lib/ventas-archivo-plan.js";
+import { planificarVentas, etiquetaArchivoVentas, ventasParaRevision, TOLERANCIA_VENTA } from "../lib/ventas-archivo-plan.js";
 
 const cat = new Map([
   ["1", { id: "recA", nombre: "Producto A" }],
@@ -86,4 +86,29 @@ test("etiqueta del archivo: limpia caracteres peligrosos y exige nombre", () => 
   assert.equal(etiquetaArchivoVentas('25-11  ventas "bv".xlsx'), "Ventas archivo: 25-11 ventas bv.xlsx");
   assert.throws(() => etiquetaArchivoVentas("  "), /nombre/);
   assert.ok(etiquetaArchivoVentas("x".repeat(500)).length <= 140);
+});
+
+test("ventasParaRevision: solo sin stock e insuficiente, con producto reconocido y cantidad completa", () => {
+  const p = planificarVentas({
+    lineas: [
+      { codigo: "1", producto: "A", cantidad: 2 },   // lista
+      { codigo: "2", producto: "B", cantidad: 5 },   // insuficiente (hay 2)
+      { codigo: "3", producto: "C", cantidad: 1 },   // sin stock
+      { codigo: "4", producto: "D", cantidad: 1 },   // no reconocido
+    ],
+    productosPorCodigo: new Map([
+      ["1", { id: "recA", nombre: "A" }],
+      ["2", { id: "recB", nombre: "B" }],
+      ["3", { id: "recC", nombre: "C" }],
+    ]),
+    codigosDeOtraEmpresa: new Set(),
+    stockPorProductoId: new Map([["recA", 10], ["recB", 2]]),
+    yaCargadosPorProductoId: new Set(),
+  });
+  const r = ventasParaRevision(p);
+  assert.deepEqual(r.map((v) => [v.codigo, v.productoId, v.cantidad]), [
+    ["2", "recB", 5],
+    ["3", "recC", 1],
+  ]);
+  assert.deepEqual(p.listas.map((v) => v.codigo), ["1"]);
 });

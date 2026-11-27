@@ -10,7 +10,7 @@ export type AvisoCompra =
   | "VENTAS_EN_BAJA"
   | "SIN_PACK_CARGADO"
   | "SIN_PROVEEDOR"
-  | "CODIGO_REUTILIZADO";
+  | "DISCONTINUADO";
 
 export type ItemCompra = {
   productoId: string;
@@ -22,6 +22,8 @@ export type ItemCompra = {
   ventaDiaria: number;
   diasAlcanza: number | null;
   diasSinVender: number | null;
+  grupo: string;
+  grupoNombre: string;
   coberturaDias: number;
   factorTemporada: number;
   multiplo: number;
@@ -37,8 +39,17 @@ const TEXTO_AVISO: Record<AvisoCompra, string> = {
   VENTAS_EN_BAJA: "Sus ventas vienen bajando",
   SIN_PACK_CARGADO: "Falta cargar el pack: se sugiere de a 1 unidad",
   SIN_PROVEEDOR: "No tiene proveedor cargado",
-  CODIGO_REUTILIZADO: "Código reutilizado: solo cuentan las ventas del producto actual",
+  DISCONTINUADO: "Discontinuado: ya no se compra",
 };
+
+/** Texto corto de por qué se calculó así: grupo, días que cubre y ajuste por temporada. */
+export function textoCriterio(item: Pick<ItemCompra, "grupoNombre" | "coberturaDias" | "factorTemporada">): string {
+  const base = `${item.grupoNombre} · cubre ${Math.round(item.coberturaDias)} días`;
+  const f = Math.round(item.factorTemporada * 100) / 100;
+  if (f === 1) return base;
+  const texto = String(f).replace(".", ",");
+  return `${base} · temporada ${f > 1 ? "alta" : "baja"} (×${texto})`;
+}
 
 export function textoAviso(aviso: string): string {
   return TEXTO_AVISO[aviso as AvisoCompra] ?? aviso;
@@ -119,7 +130,7 @@ function num(n: number, decimales = 1): string {
 
 /** CSV para Excel en Argentina (separador ";" y coma decimal), un pedido agrupado por proveedor. */
 export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
-  const filas = ["Proveedor;Código;Producto;Stock actual;Venta diaria;Días que alcanza;Pack;Pedir (unidades);Avisos"];
+  const filas = ["Proveedor;Código;Producto;Stock actual;Venta diaria;Días que alcanza;Pack;Pedir (unidades);Grupo;Cobertura (días);Factor temporada;Avisos"];
   for (const g of grupos) {
     for (const i of g.items) {
       filas.push([
@@ -131,6 +142,9 @@ export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
         i.diasAlcanza === null ? "" : num(i.diasAlcanza, 1),
         num(i.multiplo, 2),
         num(i.sugerido, 2),
+        celda(i.grupoNombre),
+        num(i.coberturaDias, 0),
+        num(i.factorTemporada, 2),
         celda(i.avisos.map(textoAviso).join(" | ")),
       ].join(";"));
     }

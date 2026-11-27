@@ -900,6 +900,12 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
   const relevantes = armados.filter(esRelevanteParaSucursal);
   const resultado = calcularComprasSugeridas(relevantes, { hoy });
   const items = resultado.items.filter((i) => i.sugerido > 0).sort(ordenUrgencia);
+  // Discontinuados que todavía tienen stock o vendieron: no se piden, pero conviene verlos.
+  const discontinuadosConMovimiento = resultado.items
+    .filter((i) => i.avisos.includes("DISCONTINUADO") && (i.stock > 0 || i.ventaDiaria > 0))
+    .sort((a, b) => b.ventaDiaria - a.ventaDiaria || a.nombre.localeCompare(b.nombre, "es"))
+    .map((i) => ({ productoId: i.productoId, codigo: i.codigo, nombre: i.nombre, stock: i.stock, ventaDiaria: i.ventaDiaria }));
+  const totalDiscontinuados = resultado.items.filter((i) => i.avisos.includes("DISCONTINUADO")).length;
 
   return res.status(200).json({
     ok: true, preparando: false, hoy,
@@ -910,8 +916,10 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
       productosFueraDeLista: armados.length - relevantes.length,
       excluidos: resultado.excluidos,
       conSugerencia: items.length,
+      discontinuados: totalDiscontinuados,
     },
     items,
+    discontinuadosConMovimiento,
   });
 }
 

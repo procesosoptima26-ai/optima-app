@@ -7,6 +7,7 @@ import {
   armarProductosCompra,
   clavePackDeSucursal,
   diasDeVentana,
+  esDiscontinuado,
   hoyArgentina,
   interpretarPack,
   limitesDiaUtc,
@@ -88,4 +89,34 @@ test("armarProductosCompra aplica pack, proveedores y cortes", () => {
   const sin = armarProductosCompra({ ...base, clavePack: null });
   assert.equal(sin[0].multiplo, null);
   assert.equal(sin[0].cortePorCambioDeProducto, null);
+});
+
+test("esDiscontinuado: solo '-' o 'discontinuado'; un pack vacío o un número no lo es", () => {
+  assert.equal(esDiscontinuado("-"), true);
+  assert.equal(esDiscontinuado(" – "), true);
+  assert.equal(esDiscontinuado("--"), true);
+  assert.equal(esDiscontinuado("Discontinuado"), true);
+  assert.equal(esDiscontinuado("DISCONTINUADO"), true);
+  assert.equal(esDiscontinuado(""), false);
+  assert.equal(esDiscontinuado(null), false);
+  assert.equal(esDiscontinuado(undefined), false);
+  assert.equal(esDiscontinuado("6"), false);
+  assert.equal(esDiscontinuado("x6"), false);
+  assert.equal(esDiscontinuado("sin dato"), false);
+});
+
+test("armarProductosCompra marca los discontinuados y deja el pack en null", () => {
+  const base = { categoria: null, proveedorIds: [] as string[] };
+  const lista = armarProductosCompra({
+    catalogo: [
+      { id: "a", codigo: "1111", nombre: "Cebolla", packTexto: "-", ...base },
+      { id: "b", codigo: "1112", nombre: "Papas", packTexto: "6", ...base },
+      { id: "c", codigo: "1113", nombre: "Sin dato", packTexto: null, ...base },
+    ],
+    stockPorProductoId: new Map(),
+    ventasPorProductoId: new Map(),
+    proveedorPorId: new Map(),
+    clavePack: "BELLA",
+  });
+  assert.deepEqual(lista.map((p) => [p.discontinuado, p.multiplo]), [[true, null], [false, 6], [false, null]]);
 });

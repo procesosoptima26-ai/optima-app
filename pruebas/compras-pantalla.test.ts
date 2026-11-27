@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoDiasAlcanza, SIN_PROVEEDOR,
+  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoCriterio, textoDiasAlcanza, SIN_PROVEEDOR,
   type ItemCompra,
 } from "../src/modules/movimientos/compras.js";
 
 function item(o: Partial<ItemCompra>): ItemCompra {
   return {
     productoId: "r", codigo: "1", nombre: "Prod", categoria: null, proveedores: [], stock: 0, ventaDiaria: 1,
-    diasAlcanza: 0, diasSinVender: 0, coberturaDias: 15, factorTemporada: 1, multiplo: 6, objetivo: 15, sugerido: 12,
+    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, objetivo: 15, sugerido: 12,
     avisos: [], ...o,
   };
 }
@@ -42,6 +42,7 @@ test("pedidoACsv: encabezado, coma decimal y protección de fórmulas", () => {
   const filas = csv.replace(/^﻿/, "").split("\r\n");
   assert.equal(filas.length, 2);
   assert.match(filas[0], /^Proveedor;Código;Producto/);
+  assert.match(filas[0], /;Grupo;Cobertura \(días\);Factor temporada;Avisos$/);
   assert.ok(filas[1].includes('"\'=SUMA(1)"'));
   assert.ok(filas[1].includes(";1,25;2,5;"));
 });
@@ -54,4 +55,18 @@ test("textos de avisos y de días", () => {
   assert.equal(textoDiasAlcanza({ diasAlcanza: 0, stock: 0 }), "sin stock");
   assert.equal(textoDiasAlcanza({ diasAlcanza: 0.4, stock: 1 }), "menos de 1 día");
   assert.equal(textoDiasAlcanza({ diasAlcanza: 3.7, stock: 5 }), "alcanza 3 días");
+});
+
+test("textoAviso: discontinuado y ya no existe el cartel de código reutilizado", () => {
+  assert.match(textoAviso("DISCONTINUADO"), /Discontinuado/);
+  assert.equal(textoAviso("CODIGO_REUTILIZADO"), "CODIGO_REUTILIZADO");
+});
+
+test("textoCriterio: grupo, cobertura y temporada solo cuando cambia", () => {
+  assert.equal(textoCriterio({ grupoNombre: "Almacén", coberturaDias: 21, factorTemporada: 1 }), "Almacén · cubre 21 días");
+  assert.equal(
+    textoCriterio({ grupoNombre: "Helados y postres helados", coberturaDias: 10, factorTemporada: 1.28 }),
+    "Helados y postres helados · cubre 10 días · temporada alta (×1,28)",
+  );
+  assert.match(textoCriterio({ grupoNombre: "Bebidas sin alcohol", coberturaDias: 14, factorTemporada: 0.7 }), /temporada baja \(×0,7\)/);
 });

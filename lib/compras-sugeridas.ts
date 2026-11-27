@@ -10,18 +10,31 @@
  * Excel solo muestran lo que esta función devuelve.
  *
  * Reglas (acordadas con Antonella, 27-11-2026):
- * - Venta diaria = ventas de los últimos 60 días / días de esa ventana.
+ * - Ritmo de venta = mitad el promedio de los últimos 60 días y mitad el de los
+ *   últimos 30 (así reacciona a lo que viene subiendo o bajando sin depender de un solo día).
  * - Si el código cambió de producto (código reutilizado), solo cuentan las
- *   ventas desde la fecha de corte.
- * - Objetivo = venta diaria × días de cobertura × factor de temporada.
- * - Sugerido = objetivo − stock, redondeado HACIA ARRIBA al pack de compra.
+ *   ventas desde la fecha de corte (sin mostrar ningún cartel: es un detalle interno).
+ * - Cada producto pertenece a un GRUPO (helados, bebidas, lácteos...): el grupo define
+ *   cuántos días de cobertura conviene tener y cuánto cambia la venta según el mes
+ *   (ver compras-reglas.ts).
+ * - Objetivo = ritmo de venta × días de cobertura × factor de temporada.
+ * - Sugerido = objetivo − stock, redondeado HACIA ARRIBA al pack de compra. Si lo que
+ *   falta es menos de media caja y el stock todavía alcanza para una semana o más, se
+ *   espera: no se pide una caja entera por una diferencia chica.
+ * - Producto DISCONTINUADO (pack "-" o "discontinuado" en Airtable): nunca se sugiere.
  * - Sin ventas recientes y sin stock: se sugiere un pack, marcado como tal,
  *   para que no se pase por alto un producto que se dejó de reponer.
  * - Se excluyen bolsas y productos "Ocupado".
  */
+import { COBERTURA_POR_GRUPO, NOMBRE_GRUPO, clasificarGrupo, factorDeTemporada, type GrupoCompra } from "./compras-reglas.js";
 
 export const VENTANA_DIAS = 60;
 export const COBERTURA_GENERAL_DIAS = 15;
+/** Ventana corta para detectar lo que viene subiendo o bajando. */
+export const VENTANA_RECIENTE_DIAS = 30;
+/** Si falta menos que esta fracción de una caja, y todavía alcanza el stock, no se pide. */
+export const FRACCION_MINIMA_DE_CAJA = 0.5;
+export const DIAS_PARA_ESPERAR = 7;
 
 /** Códigos que no son mercadería comprable (bolsas). Se compara sin ceros a la izquierda. */
 export const CODIGOS_EXCLUIDOS_POR_DEFECTO: readonly string[] = ["10002", "10004"];
@@ -48,6 +61,8 @@ export type ProductoCompra = {
   ventas: readonly VentaDiaria[];
   /** Código reutilizado: solo cuentan las ventas desde esta fecha (AAAA-MM-DD). */
   cortePorCambioDeProducto?: string | null;
+  /** Ya no se compra más: no se sugiere nada. */
+  discontinuado?: boolean;
 };
 
 export type ParametrosCompra = {
@@ -68,7 +83,7 @@ export type AvisoCompra =
   | "VENTAS_EN_BAJA"
   | "SIN_PACK_CARGADO"
   | "SIN_PROVEEDOR"
-  | "CODIGO_REUTILIZADO";
+  | "DISCONTINUADO";
 
 export type ItemCompra = {
   productoId: string;
@@ -82,6 +97,9 @@ export type ItemCompra = {
   diasAlcanza: number | null;
   /** Días desde la última venta dentro de la historia recibida; null si no hubo. */
   diasSinVender: number | null;
+  /** Grupo de compra (helados, bebidas...) y su nombre para mostrar. */
+  grupo: GrupoCompra;
+  grupoNombre: string;
   coberturaDias: number;
   factorTemporada: number;
   multiplo: number;
@@ -96,6 +114,19 @@ export type ResultadoCompras = {
   /** Productos excluidos (bolsas, "Ocupado"), para poder mostrar cuántos fueron. */
   excluidos: number;
 };
+
+/** Faltante que se redondea al pack: con menos de media caja y stock para una semana, se espera. */
+export function sugeridoConUmbral(
+  faltante: number,
+  multiplo: number,
+  diasAlcanza: number | null,
+): number {
+  if (faltante <= 0) return 0;
+  if (multiplo > 1 && faltante < multiplo * FRACCION_MINIMA_DE_CAJA && diasAlcanza !== null && diasAlcanza >= DIAS_PARA_ESPERAR) {
+    return 0;
+  }
+  return redondearAlPack(faltante, multiplo);
+}
 
 const MS_DIA = 86_400_000;
 
@@ -157,10 +188,17 @@ export function calcularComprasSugeridas(
     const corte = p.cortePorCambioDeProducto ? aDia(p.cortePorCambioDeProducto) : null;
     const desde = corte !== null ? Math.max(inicioVentana, corte) : inicioVentana;
     const diasEfectivos = Math.max(1, hoy - desde + 1);
-    if (corte !== null) avisos.push("CODIGO_REUTILIZADO");
 
     const unidades = ventasEnRango(p.ventas, desde, hoy);
-    const ventaDiaria = unidades / diasEfectivos;
+    const promedioVentana = unidades / diasEfectivos;
+    // Ritmo: mitad promedio de toda la ventana, mitad promedio de los últimos 30 días
+    // (solo si hay más de 30 días de historia válida; si no, alcanza con el promedio general).
+    let ventaDiaria = promedioVentana;
+    if (diasEfectivos > VENTANA_RECIENTE_DIAS) {
+      const desdeReciente = hoy - VENTANA_RECIENTE_DIAS + 1;
+      const promedioReciente = ventasEnRango(p.ventas, desdeReciente, hoy) / VENTANA_RECIENTE_DIAS;
+      ventaDiaria = 0.5 * promedioVentana + 0.5 * promedioReciente;
+    }
 
     // Última venta (entre toda la historia recibida) para saber hace cuánto no se vende.
     let ultima: number | null = null;
@@ -180,18 +218,36 @@ export function calcularComprasSugeridas(
     }
 
     const categoria = p.categoria;
-    const coberturaDias = (categoria ? parametros.coberturaPorCategoria?.[categoria] : undefined) || coberturaGeneral;
-    const factorTemporada = (categoria ? parametros.factorPorCategoria?.[categoria] : undefined) ?? factorGeneral;
+    const grupo = clasificarGrupo(p.nombre, categoria);
+    // Lo que se pase de afuera (parámetros) manda; si no, valen las reglas del grupo.
+    const coberturaDias =
+      (categoria ? parametros.coberturaPorCategoria?.[categoria] : undefined) ||
+      (grupo === "GENERAL" && parametros.coberturaGeneralDias !== undefined ? coberturaGeneral : COBERTURA_POR_GRUPO[grupo]);
+    const factorTemporada =
+      (categoria ? parametros.factorPorCategoria?.[categoria] : undefined) ??
+      (parametros.factorGeneral !== undefined ? factorGeneral : factorDeTemporada(grupo, parametros.hoy, coberturaDias, ventana));
 
     const multiploValido = Number.isFinite(p.multiplo) && (p.multiplo as number) > 0;
     const multiplo = multiploValido ? (p.multiplo as number) : 1;
+    const stock = Math.max(0, p.stock);
+    const diasAlcanza = ventaDiaria > 0 ? redondear(stock / ventaDiaria, 1) : null;
+
+    if (p.discontinuado) {
+      // Ya no se compra: no se sugiere nada ni se muestran otros avisos.
+      items.push({
+        productoId: p.productoId, codigo: p.codigo, nombre: p.nombre, categoria, proveedores: p.proveedores,
+        stock: redondear(stock), ventaDiaria: redondear(ventaDiaria), diasAlcanza, diasSinVender,
+        grupo, grupoNombre: NOMBRE_GRUPO[grupo], coberturaDias, factorTemporada, multiplo,
+        objetivo: 0, sugerido: 0, avisos: ["DISCONTINUADO"],
+      });
+      continue;
+    }
+
     if (!multiploValido) avisos.push("SIN_PACK_CARGADO");
     if (p.proveedores.length === 0) avisos.push("SIN_PROVEEDOR");
 
-    const stock = Math.max(0, p.stock);
     const objetivo = ventaDiaria * coberturaDias * factorTemporada;
-    let sugerido = redondearAlPack(redondear(objetivo - stock), multiplo);
-    const diasAlcanza = ventaDiaria > 0 ? redondear(stock / ventaDiaria, 1) : null;
+    let sugerido = sugeridoConUmbral(redondear(objetivo - stock), multiplo, diasAlcanza);
 
     if (unidades === 0) {
       avisos.push("SIN_VENTAS_RECIENTES");
@@ -209,6 +265,8 @@ export function calcularComprasSugeridas(
       ventaDiaria: redondear(ventaDiaria),
       diasAlcanza,
       diasSinVender,
+      grupo,
+      grupoNombre: NOMBRE_GRUPO[grupo],
       coberturaDias,
       factorTemporada,
       multiplo,

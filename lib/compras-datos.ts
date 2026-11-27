@@ -46,6 +46,17 @@ export function interpretarPack(texto: string | null | undefined): number | null
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * Un producto discontinuado (ya no se compra más) se marca en Airtable escribiendo "-"
+ * o la palabra "discontinuado" en el campo CANT. PACK. Un pack vacío, en cambio, significa
+ * "todavía falta cargarlo".
+ */
+export function esDiscontinuado(texto: string | null | undefined): boolean {
+  if (texto === null || texto === undefined) return false;
+  const t = String(texto).normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
+  return /^[-–—]+$/.test(t) || /^discontinu/.test(t);
+}
+
 export type EntradaArmado = {
   catalogo: readonly ProductoCatalogoCompra[];
   /** Stock total de la sucursal por id de producto (suma de lotes). */
@@ -69,6 +80,7 @@ export function armarProductosCompra(entrada: EntradaArmado): ProductoCompra[] {
       categoria: p.categoria,
       proveedores,
       multiplo: entrada.clavePack ? interpretarPack(p.packTexto) : null,
+      discontinuado: entrada.clavePack ? esDiscontinuado(p.packTexto) : false,
       stock: entrada.stockPorProductoId.get(p.id) ?? 0,
       ventas: entrada.ventasPorProductoId.get(p.id) ?? [],
       cortePorCambioDeProducto: cortes[sinCerosIzquierda(p.codigo)] ?? null,

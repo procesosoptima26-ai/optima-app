@@ -6,6 +6,7 @@ import {
   pedidoACsv,
   proveedoresDisponibles,
   textoAviso,
+  textoCriterio,
   textoDiasAlcanza,
   type ItemCompra,
 } from "./compras";
@@ -25,7 +26,10 @@ type Resumen = {
   productosFueraDeLista: number;
   excluidos: number;
   conSugerencia: number;
+  discontinuados?: number;
 };
+
+type Discontinuado = { productoId: string; codigo: string; nombre: string; stock: number; ventaDiaria: number };
 
 type Respuesta = {
   ok?: boolean;
@@ -37,6 +41,7 @@ type Respuesta = {
   hayPacks?: boolean;
   resumen?: Resumen;
   items?: ItemCompra[];
+  discontinuadosConMovimiento?: Discontinuado[];
 };
 
 const ESPERA_ENTRE_CONSULTAS_MS = 2000;
@@ -48,6 +53,7 @@ function formatear(n: number): string {
 export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras }) {
   const [items, setItems] = useState<ItemCompra[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
+  const [discontinuados, setDiscontinuados] = useState<Discontinuado[]>([]);
   const [hoy, setHoy] = useState("");
   const [cargando, setCargando] = useState(false);
   const [progreso, setProgreso] = useState<{ listos: number; total: number } | null>(null);
@@ -85,6 +91,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
           continue;
         }
         setItems(datos.items ?? []);
+        setDiscontinuados(datos.discontinuadosConMovimiento ?? []);
         setResumen(datos.resumen ?? null);
         setHoy(datos.hoy ?? "");
         setProgreso(null);
@@ -102,6 +109,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
 
   useEffect(() => {
     setItems([]);
+    setDiscontinuados([]);
     setResumen(null);
     setProveedor("");
     void cargar();
@@ -137,8 +145,9 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
           <span>COMPRAS</span>
           <h3>Compras sugeridas</h3>
           <p>
-            Qué conviene comprar en {usuario.sucursal}, según las ventas de los últimos 60 días, el stock y el pack
-            de cada producto. Es una sugerencia: la decisión es tuya.
+            Qué conviene comprar en {usuario.sucursal}, según el ritmo de ventas (últimos 60 y 30 días), el stock, el pack
+            de cada producto, los días que conviene cubrir según el tipo de producto y la temporada. Es una sugerencia: la
+            decisión es tuya.
           </p>
         </div>
         <button type="button" className="mov-refresh-button" onClick={() => void cargar()} disabled={cargando}>
@@ -161,6 +170,9 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
             <div><span>Para comprar</span><strong>{items.length}</strong></div>
             <div><span>Con estos filtros</span><strong>{filtrados.length}</strong></div>
             <div><span>Productos evaluados</span><strong>{resumen.productosEvaluados}</strong></div>
+            {(resumen.discontinuados ?? 0) > 0 && (
+              <div><span>Discontinuados</span><strong>{resumen.discontinuados}</strong></div>
+            )}
           </div>
 
           <div className="mov-stock-filters">
@@ -194,6 +206,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                       <strong>{i.nombre}</strong>
                       <span>Código {i.codigo} · Pack {formatear(i.multiplo)} · Vende {formatear(i.ventaDiaria)} por día</span>
                       <p>Stock {formatear(i.stock)} u. ({textoDiasAlcanza(i)}) · Objetivo {formatear(i.objetivo)} u.</p>
+                      <p>{textoCriterio(i)}</p>
                       {i.avisos.map((a) => <small key={a} className="compras-aviso">{textoAviso(a)}</small>)}
                     </div>
                     <div className="mov-status mov-status-pending compras-pedir">
@@ -204,6 +217,24 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
               </div>
             </div>
           ))}
+
+          {discontinuados.length > 0 && (
+            <div className="compras-grupo">
+              <h4>Marcados como discontinuados, pero con stock o ventas <small>({discontinuados.length} · no se piden; revisá si siguen)</small></h4>
+              <div className="mov-history">
+                {discontinuados.map((d) => (
+                  <article key={`disc-${d.productoId}`} className="mov-history-item">
+                    <div>
+                      <strong>{d.nombre}</strong>
+                      <span>Código {d.codigo} · Vende {formatear(d.ventaDiaria)} por día</span>
+                      <p>Stock {formatear(d.stock)} u.</p>
+                      <small className="compras-aviso">{textoAviso("DISCONTINUADO")}</small>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="mov-header-actions">
             {grupos.length > 0 && (

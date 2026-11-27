@@ -4,6 +4,7 @@ import {
   calcularComprasSugeridas,
   agruparPorProveedor,
   redondearAlPack,
+  sugeridoConUmbral,
   type ProductoCompra,
   type VentaDiaria
 } from "../lib/compras-sugeridas.js";
@@ -27,7 +28,7 @@ function producto(extra: Partial<ProductoCompra> = {}): ProductoCompra {
     productoId: "rec1",
     codigo: "7790000000001",
     nombre: "Producto de prueba",
-    categoria: "Almacén",
+    categoria: null,
     proveedores: ["ARCOR"],
     multiplo: 6,
     stock: 0,
@@ -138,7 +139,8 @@ test("código reutilizado: solo cuentan las ventas desde la fecha de corte", () 
   );
   const it = r.items[0];
   assert.equal(it.ventaDiaria, 1);
-  assert.ok(it.avisos.includes("CODIGO_REUTILIZADO"));
+  // El corte se aplica en silencio: no hay cartel de "código reutilizado".
+  assert.deepEqual(it.avisos, []);
   assert.equal(it.sugerido, 15);
 });
 
@@ -186,4 +188,87 @@ test("agrupar por proveedor: un producto con varios proveedores aparece en todos
 
 test("fecha inválida corta con un error claro", () => {
   assert.throws(() => calcularComprasSugeridas([producto()], { hoy: "27/11/2026" }), /Fecha inválida/);
+});
+
+test("el ritmo mezcla el promedio de 60 días con el de los últimos 30", () => {
+  // 30 unidades, todas en los últimos 30 días: promedio 60d = 0,5; promedio 30d = 1 -> ritmo 0,75.
+  const r = calcularComprasSugeridas([producto({ stock: 0, multiplo: 1, ventas: ventasParejas(30, 30) })], { hoy: HOY });
+  assert.equal(r.items[0].ventaDiaria, 0.75);
+  // Un producto que vendía y dejó de vender: el ritmo baja a la mitad del promedio.
+  const viejas: VentaDiaria[] = [{ fecha: "2026-10-05", cantidad: 60 }];
+  const r2 = calcularComprasSugeridas([producto({ stock: 0, multiplo: 1, ventas: viejas })], { hoy: HOY });
+  assert.equal(r2.items[0].ventaDiaria, 0.5);
+});
+
+test("el grupo define la cobertura: lo perecedero cubre menos días que el almacén", () => {
+  const ventas = ventasParejas(60, 60);
+  const r = calcularComprasSugeridas(
+    [
+      producto({ productoId: "l", nombre: "Yogurt Cremigal Vainilla 1Lt", multiplo: 1, ventas }),
+      producto({ productoId: "a", nombre: "Fideo Matarazzo Tirabuzón 500gr", multiplo: 1, ventas }),
+    ],
+    { hoy: HOY }
+  );
+  const lacteo = r.items.find((i) => i.productoId === "l")!;
+  const almacen = r.items.find((i) => i.productoId === "a")!;
+  assert.equal(lacteo.grupo, "LACTEOS_Y_FIAMBRES");
+  assert.equal(lacteo.coberturaDias, 10);
+  assert.equal(almacen.grupo, "ALMACEN");
+  assert.equal(almacen.coberturaDias, 21);
+});
+
+test("temporada: a fines de noviembre los helados piden más que lo que vendieron", () => {
+  const r = calcularComprasSugeridas(
+    [producto({ nombre: "Helado Sape! Limón 500gr", multiplo: 1, ventas: ventasParejas(60, 60) })],
+    { hoy: HOY }
+  );
+  const it = r.items[0];
+  assert.equal(it.grupo, "HELADOS");
+  assert.ok(it.factorTemporada > 1.1 && it.factorTemporada < 1.5, `factor ${it.factorTemporada}`);
+  assert.ok(it.objetivo > it.ventaDiaria * it.coberturaDias);
+});
+
+test("temporada: en pleno invierno los helados bajan, y un producto sin estacionalidad no cambia", () => {
+  const julio = "2026-07-15";
+  const r = calcularComprasSugeridas(
+    [
+      producto({ productoId: "h", nombre: "Helado Sape! Limón 500gr", multiplo: 1, ventas: ventasParejas(60, 60, julio) }),
+      producto({ productoId: "n", nombre: "Producto de prueba", multiplo: 1, ventas: ventasParejas(60, 60, julio) }),
+    ],
+    { hoy: julio }
+  );
+  assert.equal(r.items.find((i) => i.productoId === "n")!.factorTemporada, 1);
+  assert.ok(r.items.find((i) => i.productoId === "h")!.factorTemporada <= 1.1);
+});
+
+test("discontinuado: nunca se sugiere, aunque no tenga stock y venda", () => {
+  const r = calcularComprasSugeridas(
+    [producto({ discontinuado: true, multiplo: null, stock: 0, ventas: ventasParejas(60, 60) })],
+    { hoy: HOY }
+  );
+  const it = r.items[0];
+  assert.equal(it.sugerido, 0);
+  assert.deepEqual(it.avisos, ["DISCONTINUADO"]);
+});
+
+test("si falta menos de media caja y el stock alcanza una semana, se espera", () => {
+  // 1 por día, cobertura 15 -> objetivo 15. Stock 12 -> faltan 3; pack 12 (media caja = 6) y alcanza 12 días -> no se pide.
+  const r = calcularComprasSugeridas([producto({ stock: 12, multiplo: 12, ventas: ventasParejas(60, 60) })], { hoy: HOY });
+  assert.equal(r.items[0].sugerido, 0);
+  // Con stock 3 alcanza solo 3 días: se pide la caja.
+  const r2 = calcularComprasSugeridas([producto({ stock: 3, multiplo: 12, ventas: ventasParejas(60, 60) })], { hoy: HOY });
+  assert.equal(r2.items[0].sugerido, 12);
+  // Si falta media caja o más, también se pide.
+  const r3 = calcularComprasSugeridas([producto({ stock: 8, multiplo: 12, ventas: ventasParejas(60, 60) })], { hoy: HOY });
+  assert.equal(r3.items[0].sugerido, 12);
+});
+
+test("sugeridoConUmbral: casos límite", () => {
+  assert.equal(sugeridoConUmbral(0, 6, 10), 0);
+  assert.equal(sugeridoConUmbral(-2, 6, 10), 0);
+  assert.equal(sugeridoConUmbral(2, 6, 10), 0);
+  assert.equal(sugeridoConUmbral(2, 6, 3), 6);
+  assert.equal(sugeridoConUmbral(2, 6, null), 6);
+  assert.equal(sugeridoConUmbral(3, 6, 10), 6);
+  assert.equal(sugeridoConUmbral(0.4, 1, 20), 1);
 });

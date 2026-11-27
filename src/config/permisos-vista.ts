@@ -22,9 +22,9 @@ export function permiteMovimientoUI(usuario: SesionConPermisos, tipo: string): b
   return permiteAccionUI(usuario, "MOVIMIENTOS", permisoMovimientoPorTipo(tipo));
 }
 
-export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos";
+export type ModoMovimientoUI = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos" | "historial";
 export function permiteModoMovimientoUI(usuario: SesionConPermisos, modo: ModoMovimientoUI): boolean {
-  if (modo === "stock" || modo === "vencimientos") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
+  if (modo === "stock" || modo === "vencimientos" || modo === "historial") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ver");
   // En la vista individual también se cargan INGRESO y EGRESO ordinarios.
   if (modo === "individual") return permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.ajustar") ||
     permiteAccionUI(usuario, "MOVIMIENTOS", "movimientos.crear");

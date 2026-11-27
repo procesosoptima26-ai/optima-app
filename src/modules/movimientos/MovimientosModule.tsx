@@ -3,6 +3,7 @@ import type { KeyboardEvent } from "react";
 import BarcodeScanner from "../../components/BarcodeScanner";
 import VentasArchivo from "./VentasArchivo";
 import Vencimientos from "./Vencimientos";
+import Historial from "./Historial";
 import { permiteAccionUI, permiteModoMovimientoUI, modoMovimientoInicialUI, permiteMovimientoUI } from "../../config/permisos-vista";
 import "./Movimientos.css";
 
@@ -22,7 +23,7 @@ type Props = {
   modoInicial?: ModoMovimiento;
 };
 
-type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos";
+type ModoMovimiento = "recepcion" | "reposicion" | "individual" | "stock" | "ventas" | "vencimientos" | "historial";
 
 type Producto = {
   id: string;
@@ -2266,6 +2267,18 @@ const [, setCantidadesPorLote] = useState<
           Vencimientos
         </button>}
 
+        {permiteModoMovimientoUI(usuario, "historial") && <button
+          type="button"
+          className={
+            modo === "historial"
+              ? "mov-mode-button mov-mode-active"
+              : "mov-mode-button"
+          }
+          onClick={() => setModo("historial")}
+        >
+          Historial
+        </button>}
+
         {permiteModoMovimientoUI(usuario, "stock") && <button
           type="button"
           className={
@@ -2283,6 +2296,8 @@ const [, setCantidadesPorLote] = useState<
         <VentasArchivo usuario={usuario} />
       ) : modo === "vencimientos" ? (
         <Vencimientos usuario={usuario} />
+      ) : modo === "historial" ? (
+        <Historial usuario={usuario} />
       ) : modo === "stock" ? (
         <section className="mov-card mov-stock-card">
           <div className="mov-stock-header">
@@ -3269,7 +3284,7 @@ const [, setCantidadesPorLote] = useState<
       </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && modo !== "historial" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>
@@ -3389,7 +3404,7 @@ const [, setCantidadesPorLote] = useState<
       </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && resultado.length > 0 && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && modo !== "historial" && resultado.length > 0 && (
         <section className="mov-card">
           <div className="mov-section-header">
             <div>
@@ -3438,7 +3453,7 @@ const [, setCantidadesPorLote] = useState<
         </section>
       )}
 
-      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && (
+      {modo !== "stock" && modo !== "ventas" && modo !== "vencimientos" && modo !== "historial" && (
       <section className="mov-card">
         <div className="mov-section-header">
           <div>

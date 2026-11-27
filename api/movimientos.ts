@@ -583,8 +583,14 @@ async function leerMovimientosRecientes(
   throw new Error("La consulta de movimientos excedió el límite seguro de páginas");
 }
 
-function transformarMovimiento(record: AirtableRecord) {
+function transformarMovimiento(record: AirtableRecord, nombresUbicacion?: Map<string, string>) {
+  const origenId = obtenerPrimerIdVinculado(record.fields["UBICACIÓN ORIGEN"]);
+  const destinoId = obtenerPrimerIdVinculado(record.fields["UBICACIÓN DESTINO"]);
   return {
+    ...(nombresUbicacion ? {
+      ubicacionOrigenNombre: (origenId && nombresUbicacion.get(origenId)) || "",
+      ubicacionDestinoNombre: (destinoId && nombresUbicacion.get(destinoId)) || "",
+    } : {}),
     id: record.id,
     fechaHora:
       normalizarTexto(record.fields.FECHA_HORA) ||
@@ -986,7 +992,7 @@ export default async function handler(
 
         return res.status(200).json({
           ok: true,
-          movimientos: registros.map(transformarMovimiento),
+          movimientos: registros.map((registro) => transformarMovimiento(registro)),
         });
       }
 
@@ -1014,17 +1020,21 @@ export default async function handler(
       const limite =
         Number.isFinite(limiteSolicitado) &&
         limiteSolicitado > 0
-          ? Math.min(Math.floor(limiteSolicitado), 50)
+          ? Math.min(Math.floor(limiteSolicitado), normalizarTexto(req.query.detalle) === "1" ? 300 : 50)
           : 20;
 
       const sucursalCore = sucursalSolicitada(autorizado.contexto, sucursal);
       if (!sucursalCore) return res.status(403).json({ ok: false, error: "Sucursal no autorizada" });
       const recientes = await leerMovimientosRecientes(sucursalCore.id, limite, autorizado.contexto);
+      // Con detalle=1 (pantalla Historial) se agregan los nombres de ubicación.
+      const nombresUbicacion = normalizarTexto(req.query.detalle) === "1"
+        ? new Map((await leerUbicaciones()).map((u) => [u.id, u.nombre] as [string, string]))
+        : undefined;
 
       return res.status(200).json({
         ok: true,
         sucursal,
-        movimientos: recientes.map(transformarMovimiento),
+        movimientos: recientes.map((registro) => transformarMovimiento(registro, nombresUbicacion)),
       });
     }
 

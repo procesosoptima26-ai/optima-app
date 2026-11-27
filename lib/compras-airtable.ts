@@ -10,7 +10,7 @@
  */
 import { configTablaOperativa, productoDeEmpresa } from "./alcance-operativo.js";
 import { ejecutarRedisReal } from "./bloqueo-ventas.js";
-import { CAMPO_PACK_POR_SUCURSAL, agregarVentasDelDia, limitesDiaUtc } from "./compras-datos.js";
+import { CAMPO_PACK, agregarVentasDelDia, limitesDiaUtc } from "./compras-datos.js";
 import type { ProductoCatalogoCompra, VentasDelDia } from "./compras-datos.js";
 import type { ClaveSucursalCompras } from "./compras-cortes.js";
 
@@ -100,7 +100,7 @@ function urlTabla(baseId: string, tabla: string, campos: readonly string[]): URL
   return url;
 }
 
-/** Productos de la empresa, con el pack de la sucursal como texto. */
+/** Productos de la empresa, con el pack (igual para todas las sucursales) como texto. */
 export async function leerCatalogoCompras(
   empresaId: string,
   clavePack: ClaveSucursalCompras | null,
@@ -108,7 +108,7 @@ export async function leerCatalogoCompras(
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const tabla = variable("AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME");
   const campoCodigo = variable("AIRTABLE_MOVIMIENTOS_CODE_FIELD");
-  const campoPack = clavePack ? CAMPO_PACK_POR_SUCURSAL[clavePack] : null;
+  const campoPack = clavePack ? CAMPO_PACK : null;
   const campos = [campoCodigo, "NOMBRE MASTER", "PROVEEDOR", "CATEGORÍA", "EMPRESA",
     ...(campoPack ? [campoPack] : [])];
   const salida: ProductoCatalogoCompra[] = [];

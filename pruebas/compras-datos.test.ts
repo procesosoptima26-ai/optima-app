@@ -52,11 +52,11 @@ test("ventasPorProductoDeSucursal ordena por día y separa sucursales", () => {
   assert.deepEqual(m.get("p2"), [{ fecha: "2026-11-09", cantidad: 4 }]);
 });
 
-test("esRelevanteParaSucursal: stock, ventas o pack", () => {
+test("esRelevanteParaSucursal: stock o ventas (el pack no cuenta)", () => {
   const base = { productoId: "a", codigo: "1", nombre: "x", categoria: null, proveedores: [], multiplo: null, stock: 0, ventas: [] };
   assert.equal(esRelevanteParaSucursal(base), false);
   assert.equal(esRelevanteParaSucursal({ ...base, stock: 1 }), true);
-  assert.equal(esRelevanteParaSucursal({ ...base, multiplo: 6 }), true);
+  assert.equal(esRelevanteParaSucursal({ ...base, multiplo: 6 }), false);
   assert.equal(esRelevanteParaSucursal({ ...base, ventas: [{ fecha: "2026-11-01", cantidad: 1 }] }), true);
 });
 

@@ -19,11 +19,11 @@ export type ProductoCatalogoCompra = {
   nombre: string;
   categoria: string | null;
   proveedorIds: readonly string[];
-  /** Texto crudo del campo "CANT. BELLA" / "CANT. GOYA" según la sucursal. */
+  /** Texto crudo del campo "CANT. PACK" (el pack es del producto, igual para todas las sucursales). */
   packTexto: string | null;
 };
 
-/** Cuál de los dos campos de pack corresponde a la sucursal; null si la sucursal no tiene uno. */
+/** Qué sucursal es (para los cortes por cambio de producto); null si no se reconoce. */
 export function clavePackDeSucursal(nombreSucursal: string): ClaveSucursalCompras | null {
   const n = nombreSucursal.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
   if (n.includes("BELLA")) return "BELLA";
@@ -31,10 +31,8 @@ export function clavePackDeSucursal(nombreSucursal: string): ClaveSucursalCompra
   return null;
 }
 
-export const CAMPO_PACK_POR_SUCURSAL: Readonly<Record<ClaveSucursalCompras, string>> = {
-  BELLA: "CANT. BELLA",
-  GOYA: "CANT. GOYA",
-};
+/** Un solo campo de pack para todas las sucursales: la caja del proveedor es la misma. */
+export const CAMPO_PACK = "CANT. PACK";
 
 /**
  * El pack se escribe a mano como texto ("6", "12", a veces "x6"). Se toma el
@@ -102,12 +100,12 @@ export function hoyArgentina(ahora: Date = new Date()): string {
 }
 
 /**
- * Un producto es relevante para la sucursal si tiene stock, vendió en la ventana,
- * o ya tiene pack cargado (señal de que ella lo trabaja ahí). Así no aparecen
- * en la lista cientos de productos viejos o de la otra sucursal.
+ * Un producto es relevante para la sucursal si tiene stock o vendió en la ventana.
+ * El pack ya no cuenta: como es el mismo para todas las sucursales, no indica que
+ * la sucursal trabaje el producto, y haría aparecer cientos de productos de la otra.
  */
 export function esRelevanteParaSucursal(p: ProductoCompra): boolean {
-  return p.stock > 0 || p.ventas.length > 0 || p.multiplo !== null;
+  return p.stock > 0 || p.ventas.length > 0;
 }
 
 /** Ventas de un día: sucursal (id Core) -> producto (id Airtable) -> cantidad. */

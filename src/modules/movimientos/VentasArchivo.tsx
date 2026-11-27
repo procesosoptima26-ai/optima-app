@@ -206,6 +206,8 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
       });
       if (!datos.plan) throw new Error("El servidor no devolvió la vista previa.");
       setPlan(datos.plan);
+      // Si este archivo ya se había cargado (otra sesión, otra pestaña), se muestra cómo va.
+      await consultarResultado();
     } catch (e) {
       setPlan(null);
       setError(e instanceof Error ? e.message : "No se pudo preparar la vista previa.");
@@ -314,6 +316,31 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
   const paraRevision = (plan?.problemas ?? []).filter(
     (p) => p.motivo === "SIN_STOCK" || p.motivo === "STOCK_INSUFICIENTE",
   );
+
+  // Mientras el motor siga procesando, se vuelve a consultar solo cada 5 segundos.
+  const hayPendientes = (resultado?.pendientes ?? 0) > 0;
+  useEffect(() => {
+    if (!hayPendientes || ocupado) return;
+    let activo = true;
+    const temporizador = setTimeout(async () => {
+      try {
+        const datos = await pedir("/api/movimientos?accion=ventas_resultado", {
+          sucursal,
+          ubicacionId,
+          nombreArchivo: nombreCarga.trim(),
+          responsable: usuario.nombre,
+        });
+        if (activo && datos.resultado) setResultado(datos.resultado);
+      } catch {
+        // Si falla una consulta, se reintenta sola en la próxima vuelta.
+        if (activo) setResultado((actual) => (actual ? { ...actual } : actual));
+      }
+    }, 5000);
+    return () => {
+      activo = false;
+      clearTimeout(temporizador);
+    };
+  }, [hayPendientes, ocupado, resultado, sucursal, ubicacionId, nombreCarga, usuario.nombre]);
 
   const hayArchivo = lineas.length > 0;
   const bloqueado = Boolean(ocupado);
@@ -492,12 +519,20 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
         </>
       )}
 
-      {resultado && (
-        <div className="mov-stock-summary">
-          <div><span>Procesadas por el motor</span><strong>{resultado.procesadas}</strong></div>
-          <div><span>Pendientes</span><strong>{resultado.pendientes}</strong></div>
-          <div><span>Con error</span><strong>{resultado.conError.length}</strong></div>
-        </div>
+      {resultado && resultado.total > 0 && (
+        <>
+          <div className="mov-stock-summary">
+            <div><span>Procesadas por el motor</span><strong>{resultado.procesadas}</strong></div>
+            <div><span>Pendientes</span><strong>{resultado.pendientes}</strong></div>
+            <div><span>Con error</span><strong>{resultado.conError.length}</strong></div>
+          </div>
+          <button type="button" className="mov-refresh-button" onClick={() => void consultarResultado()} disabled={bloqueado}>
+            Actualizar
+          </button>
+          {resultado.pendientes > 0 && (
+            <div className="mov-empty">El motor sigue procesando; esta pantalla se actualiza sola cada pocos segundos.</div>
+          )}
+        </>
       )}
 
       {resultado && resultado.conError.length > 0 && (

@@ -130,10 +130,12 @@ export async function leerCatalogoCompras(
 
 /** Nombre de cada proveedor por su id. Se pide por ID de campo (no por nombre) para evitar problemas con tildes. */
 const CAMPO_NOMBRE_PROVEEDOR_ID = "fldD9hvw58fzPnJZf";
+/** Se usa el ID de la tabla (igual en la base real y en la de prueba) y no su nombre. */
+const TABLA_PROVEEDORES_ID = "tblkcbhcKll84jQoo";
 
 export async function leerProveedores(): Promise<Map<string, string>> {
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
-  const tabla = process.env.AIRTABLE_PROVEEDORES_TABLE_NAME?.trim() || "PROVEEDORES";
+  const tabla = process.env.AIRTABLE_PROVEEDORES_TABLE_NAME?.trim() || TABLA_PROVEEDORES_ID;
   const url = urlTabla(baseId, tabla, [CAMPO_NOMBRE_PROVEEDOR_ID]);
   url.searchParams.set("returnFieldsByFieldId", "true");
   const salida = new Map<string, string>();

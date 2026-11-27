@@ -11,6 +11,7 @@ import {
   buscarProductosPorCodigos, leerStockPorProductoEnUbicacion,
   leerProductosYaCargados, leerResultadoVentas,
 } from "../lib/ventas-archivo-airtable.js";
+import { tomarBloqueoVentas, liberarBloqueoVentas } from "../lib/bloqueo-ventas.js";
 import {
   destinosTransferencia, validarTransferencia, esMotivoTransferencia,
   type SucursalTransferencia,
@@ -725,6 +726,29 @@ async function manejarVentasArchivo(
     return res.status(400).json({ ok: false, error: "El archivo tiene demasiados productos." });
   }
 
+  // Candado: solo una confirmación a la vez por archivo y ubicación. Si Redis
+  // no responde, NO se carga (preferimos frenar antes que descontar dos veces).
+  // La vista previa no escribe nada, así que no lo necesita.
+  let dueno: string | null = null;
+  if (accion === "ventas_confirmar") {
+    try {
+      dueno = await tomarBloqueoVentas(ubicacionId, etiqueta);
+    } catch (error) {
+      console.error("No se pudo tomar el candado de ventas:", error);
+      return res.status(503).json({
+        ok: false,
+        error: "No se pudo asegurar la carga en este momento. No se cargó nada; probá de nuevo en un minuto.",
+      });
+    }
+    if (!dueno) {
+      return res.status(409).json({
+        ok: false,
+        error: "Este archivo ya se está cargando (otra pestaña o persona). Esperá unos segundos y mirá el resultado.",
+      });
+    }
+  }
+
+  try {
   const [catalogo, stock, yaCargados] = await Promise.all([
     buscarProductosPorCodigos([...new Set(lineas.map((l) => l.codigo))], autorizado.empresaId),
     leerStockPorProductoEnUbicacion(ubicacionId),
@@ -772,6 +796,16 @@ async function manejarVentasArchivo(
     cantidad: creados.length,
     omitidas: plan.problemas.length,
   });
+  } finally {
+    if (dueno) {
+      try {
+        await liberarBloqueoVentas(ubicacionId, etiqueta, dueno);
+      } catch (error) {
+        // El candado vence solo a los 90 s; no se debe tapar la respuesta real.
+        console.error("No se pudo liberar el candado de ventas:", error);
+      }
+    }
+  }
 }
 
 export default async function handler(

@@ -33,3 +33,20 @@ test("pestañas de movimientos según permiso y primera vista segura", () => {
   assert.equal(modoMovimientoInicialUI(creador),"recepcion");
   assert.equal(modoMovimientoInicialUI(ajustador),"individual");
 });
+
+test("Ventas, Vencimientos e Historial son solo para ADMIN", () => {
+  const equipo = {rol:"USUARIO",modulos:["MOVIMIENTOS"],permisos:["movimientos.ver","movimientos.crear","movimientos.ajustar"]};
+  const admin = {rol:"ADMIN",modulos:["MOVIMIENTOS"],permisos:["movimientos.ver","movimientos.crear"]};
+  const adminSinPermiso = {rol:"ADMIN",modulos:["MOVIMIENTOS"],permisos:[]};
+  for (const modo of ["ventas","vencimientos","historial"] as const) {
+    assert.equal(permiteModoMovimientoUI(equipo,modo),false);
+    assert.equal(permiteModoMovimientoUI(admin,modo),true);
+    assert.equal(permiteModoMovimientoUI(adminSinPermiso,modo),false);
+    assert.equal(permiteModoMovimientoUI(null,modo),false);
+  }
+  // El resto de las pestañas del equipo no cambia.
+  assert.equal(permiteModoMovimientoUI(equipo,"stock"),true);
+  assert.equal(permiteModoMovimientoUI(equipo,"recepcion"),true);
+  assert.equal(permiteModoMovimientoUI(equipo,"reposicion"),true);
+  assert.equal(permiteModoMovimientoUI({...equipo,rol:" admin "},"ventas"),true);
+});

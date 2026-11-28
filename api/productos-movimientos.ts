@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
-import { crearProveedorMinimo, leerProveedores, leerValoresCatalogo } from "../lib/compras-airtable.js";
+import { crearProveedorMinimo, leerProveedoresDeEmpresa, leerValoresCatalogo } from "../lib/compras-airtable.js";
 import {
   agruparOpciones, claveOpcion, limpiarOpcion, normalizarCantPack,
   opcionExistente, resolverOpcion,
@@ -56,7 +56,7 @@ const cacheOpciones = new Map<string, { hasta: number; opciones: Opciones }>();
 async function obtenerOpciones(empresaId: string, forzar = false): Promise<Opciones> {
   const guardado = cacheOpciones.get(empresaId);
   if (!forzar && guardado && guardado.hasta > Date.now()) return guardado.opciones;
-  const [valores, proveedores] = await Promise.all([leerValoresCatalogo(empresaId), leerProveedores()]);
+  const [valores, proveedores] = await Promise.all([leerValoresCatalogo(empresaId), leerProveedoresDeEmpresa(empresaId)]);
   const opciones: Opciones = {
     producto: agruparOpciones(valores.producto),
     marca: agruparOpciones(valores.marca),
@@ -285,7 +285,7 @@ async function crearProducto(payload: CrearProductoPayload, empresaId: string) {
       proveedor = { ...parecido, creado: false };
     } else {
       const nombre = proveedorNuevoNombre;
-      proveedor = { id: await crearProveedorMinimo(nombre), nombre, creado: true };
+      proveedor = { id: await crearProveedorMinimo(nombre, empresaId), nombre, creado: true };
     }
   }
 

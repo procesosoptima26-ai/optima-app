@@ -266,13 +266,29 @@ export async function leerValoresCatalogo(empresaId: string): Promise<ValoresCat
   return salida;
 }
 
-/** Crea un proveedor con SOLO el nombre fantasía; administración completa el resto después. */
-export async function crearProveedorMinimo(nombre: string): Promise<string> {
+/**
+ * Proveedores de UNA empresa (los que tienen su EMPRESA vinculada). Cada empresa ve solo los suyos.
+ * Se pide por nombre de campo (EMPRESA) para que no dependa de identificadores de una base en particular.
+ */
+export async function leerProveedoresDeEmpresa(empresaId: string): Promise<Map<string, string>> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const url = urlTabla(baseId, TABLA_PROVEEDORES_ID, ["NOMBRE FANTASÍA", "EMPRESA"]);
+  const salida = new Map<string, string>();
+  await leerPaginas(url, token, "proveedores de la empresa", (r) => {
+    if (!productoDeEmpresa(r.fields, empresaId)) return;
+    const nombre = texto(r.fields["NOMBRE FANTASÍA"]);
+    if (nombre) salida.set(r.id, nombre);
+  });
+  return salida;
+}
+
+/** Crea un proveedor con SOLO el nombre fantasía y su empresa; administración completa el resto después. */
+export async function crearProveedorMinimo(nombre: string, empresaId: string): Promise<string> {
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   const respuesta = await fetch(`https://api.airtable.com/v0/${baseId}/${TABLA_PROVEEDORES_ID}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ fields: { [CAMPO_NOMBRE_PROVEEDOR_ID]: nombre }, typecast: true }),
+    body: JSON.stringify({ fields: { "NOMBRE FANTASÍA": nombre, EMPRESA: [empresaId] }, typecast: true }),
     signal: AbortSignal.timeout(15000),
   });
   const dato = (await respuesta.json().catch(() => ({}))) as { id?: unknown };

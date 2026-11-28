@@ -238,3 +238,46 @@ export async function guardarCacheVentas(dia: string, datos: VentasDelDia): Prom
   const { baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
   await ejecutarRedisReal(["SET", claveCache(baseId, dia), JSON.stringify(datos), "EX", SEGUNDOS_CACHE]);
 }
+
+/**
+ * Valores que hoy usa el catálogo de la empresa en Producto / Marca / Presentación / Especificación
+ * (con repeticiones: después se agrupan). Es solo lectura. Se piden pocos campos para que sea rápido.
+ */
+export type ValoresCatalogo = { producto: string[]; marca: string[]; presentacion: string[]; especificacion: string[] };
+
+export async function leerValoresCatalogo(empresaId: string): Promise<ValoresCatalogo> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tabla = variable("AIRTABLE_MOVIMIENTOS_PRODUCTOS_TABLE_NAME");
+  const url = urlTabla(baseId, tabla, ["PRODUCTO", "MARCA", "PRESENTACIÓN", "ESPECIFICACIÓN", "EMPRESA"]);
+  const salida: ValoresCatalogo = { producto: [], marca: [], presentacion: [], especificacion: [] };
+  await leerPaginas(url, token, "opciones de productos", (r) => {
+    if (!productoDeEmpresa(r.fields, empresaId)) return;
+    const unico = (v: unknown) => (typeof v === "string" ? v : (v as { name?: unknown } | null)?.name);
+    for (const [campo, destino] of [["PRODUCTO", salida.producto], ["MARCA", salida.marca], ["PRESENTACIÓN", salida.presentacion]] as const) {
+      const v = unico(r.fields[campo]);
+      if (typeof v === "string" && v.trim()) destino.push(v);
+    }
+    const esp = r.fields["ESPECIFICACIÓN"];
+    for (const v of Array.isArray(esp) ? esp : esp ? [esp] : []) {
+      const t = unico(v);
+      if (typeof t === "string" && t.trim()) salida.especificacion.push(t);
+    }
+  });
+  return salida;
+}
+
+/** Crea un proveedor con SOLO el nombre fantasía; administración completa el resto después. */
+export async function crearProveedorMinimo(nombre: string): Promise<string> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const respuesta = await fetch(`https://api.airtable.com/v0/${baseId}/${TABLA_PROVEEDORES_ID}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ fields: { [CAMPO_NOMBRE_PROVEEDOR_ID]: nombre }, typecast: true }),
+    signal: AbortSignal.timeout(15000),
+  });
+  const dato = (await respuesta.json().catch(() => ({}))) as { id?: unknown };
+  if (!respuesta.ok || typeof dato.id !== "string" || !REGISTRO_ID.test(dato.id)) {
+    throw new Error("No se pudo crear el proveedor");
+  }
+  return dato.id;
+}

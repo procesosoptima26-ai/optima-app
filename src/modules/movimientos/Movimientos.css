@@ -1560,3 +1560,15 @@
 .compras-aviso { display: block; margin-top: 4px; color: #9a5b00; }
 .compras-pedir { text-align: center; min-width: 64px; }
 .compras-check { flex-direction: row; align-items: center; gap: 8px; }
+
+/* Formulario de producto nuevo: listas con buscador (Recepción y Ventas) */
+.mov-new-product-form { display: flex; flex-direction: column; gap: 10px; }
+.mov-selector { position: relative; }
+.mov-selector-elegidos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.mov-selector-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #e6f0ff; color: #12315f; font-size: 14px; }
+.mov-selector-chip button { border: 0; background: transparent; cursor: pointer; font-size: 14px; padding: 0; }
+.mov-selector-lista { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid #c9d3e3; border-radius: 8px; background: #fff; max-height: 220px; overflow-y: auto; }
+.mov-selector-lista button { width: 100%; text-align: left; border: 0; background: transparent; padding: 8px; font-size: 15px; cursor: pointer; border-radius: 6px; }
+.mov-selector-lista button:hover { background: #f0f4fb; }
+.mov-selector-nueva { color: #0b5c2e; font-weight: 600; }
+.mov-selector-cerrar { align-self: flex-start; border: 0; background: transparent; color: #55627a; font-size: 13px; cursor: pointer; padding: 4px 0; }

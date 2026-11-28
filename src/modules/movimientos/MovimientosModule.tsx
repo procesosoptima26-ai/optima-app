@@ -5,6 +5,7 @@ import VentasArchivo from "./VentasArchivo";
 import Vencimientos from "./Vencimientos";
 import Historial from "./Historial";
 import ComprasSugeridas from "./ComprasSugeridas";
+import FormularioProductoNuevo from "./FormularioProductoNuevo";
 import { permiteAccionUI, permiteModoMovimientoUI, modoMovimientoInicialUI, permiteMovimientoUI } from "../../config/permisos-vista";
 import "./Movimientos.css";
 
@@ -166,13 +167,6 @@ type LoteRecepcion = {
   sinVencimiento: boolean;
   vencimientoTexto: string;
   distribuciones: DistribucionRecepcion[];
-};
-
-type NuevoProducto = {
-  producto: string;
-  marca: string;
-  presentacion: string;
-  especificacion: string;
 };
 
 const tiposAjustes = ["INGRESO", "EGRESO", "AJUSTE +", "AJUSTE -"];
@@ -352,12 +346,6 @@ export default function Movimientos({
   const [codigo, setCodigo] = useState("");
   const [producto, setProducto] = useState<Producto | null>(null);
   const [productoNoEncontrado, setProductoNoEncontrado] = useState(false);
-  const [nuevoProducto, setNuevoProducto] = useState<NuevoProducto>({
-    producto: "",
-    marca: "",
-    presentacion: "",
-    especificacion: "",
-  });
   const [creandoProducto, setCreandoProducto] = useState(false);
   const [buscandoProducto, setBuscandoProducto] = useState(false);
   const [scannerAbierto, setScannerAbierto] = useState(false);
@@ -1200,69 +1188,18 @@ const [, setCantidadesPorLote] = useState<
     }
   }
 
-  async function crearProductoYContinuar() {
-    if (!codigo.trim()) {
-      setAviso({
-        tipo: "error",
-        texto: "Falta el código del producto.",
-      });
-      return;
-    }
-
-    if (!nuevoProducto.producto.trim()) {
-      setAviso({
-        tipo: "error",
-        texto: "Ingresá el nombre del producto.",
-      });
-      return;
-    }
-
-    try {
-      setCreandoProducto(true);
-
-      const response = await fetch("/api/productos-movimientos", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          codigo,
-          ...nuevoProducto,
-        }),
-      });
-
-      const data = (await response.json()) as RespuestaProducto;
-
-      if (!response.ok || !data.ok || !data.producto) {
-        throw new Error(
-          data.error || "No se pudo crear el producto."
-        );
-      }
-
-      setProducto(data.producto);
-      setProductoNoEncontrado(false);
-      setNuevoProducto({
-        producto: "",
-        marca: "",
-        presentacion: "",
-        especificacion: "",
-      });
-
-      setAviso({
-        tipo: "exito",
-        texto: "Producto creado. Ya podés continuar con la recepción.",
-      });
-    } catch (error) {
-      setAviso({
-        tipo: "error",
-        texto:
-          error instanceof Error
-            ? error.message
-            : "No se pudo crear el producto.",
-      });
-    } finally {
-      setCreandoProducto(false);
-    }
+  async function alCrearseProducto(
+    productoCreado: Producto,
+    proveedorNuevo: boolean,
+  ) {
+    setProducto(productoCreado);
+    setProductoNoEncontrado(false);
+    setAviso({
+      tipo: "exito",
+      texto: proveedorNuevo
+        ? "Producto creado. El proveedor nuevo quedó cargado solo con el nombre: avisale a administración para que complete sus datos."
+        : "Producto creado. Ya podés continuar con la recepción.",
+    });
   }
 
   function manejarEnterCodigo(
@@ -1963,12 +1900,6 @@ const [, setCantidadesPorLote] = useState<
     setCodigo("");
     setProducto(null);
     setProductoNoEncontrado(false);
-    setNuevoProducto({
-      producto: "",
-      marca: "",
-      presentacion: "",
-      especificacion: "",
-    });
     setCantidad("");
     setObservacion("");
     setSinVencimiento(false);
@@ -2658,74 +2589,14 @@ const [, setCantidadesPorLote] = useState<
               <span>Se guardará en PRODUCTOS</span>
             </div>
 
-            <label className="mov-field">
-              Nombre del producto
-              <input
-                value={nuevoProducto.producto}
-                onChange={(event) =>
-                  setNuevoProducto((actual) => ({
-                    ...actual,
-                    producto: event.target.value,
-                  }))
-                }
-                placeholder="Ej: Gaseosa cola 2,25 L"
-              />
-            </label>
-
-            <div className="mov-two-columns">
-              <label className="mov-field">
-                Marca
-                <input
-                  value={nuevoProducto.marca}
-                  onChange={(event) =>
-                    setNuevoProducto((actual) => ({
-                      ...actual,
-                      marca: event.target.value,
-                    }))
-                  }
-                  placeholder="Opcional"
-                />
-              </label>
-
-              <label className="mov-field">
-                Presentación
-                <input
-                  value={nuevoProducto.presentacion}
-                  onChange={(event) =>
-                    setNuevoProducto((actual) => ({
-                      ...actual,
-                      presentacion: event.target.value,
-                    }))
-                  }
-                  placeholder="Opcional"
-                />
-              </label>
-            </div>
-
-            <label className="mov-field">
-              Especificación
-              <input
-                value={nuevoProducto.especificacion}
-                onChange={(event) =>
-                  setNuevoProducto((actual) => ({
-                    ...actual,
-                    especificacion: event.target.value,
-                  }))
-                }
-                placeholder="Opcional"
-              />
-            </label>
-
-            <button
-              type="button"
-              className="mov-create-product-button"
-              onClick={crearProductoYContinuar}
-              disabled={creandoProducto}
-            >
-              {creandoProducto
-                ? "Creando producto..."
-                : "Crear producto y continuar"}
-            </button>
+            <FormularioProductoNuevo
+              key={codigo}
+              codigo={codigo}
+              textoBoton="Crear producto y continuar"
+              onCreado={alCrearseProducto}
+              onOcupado={setCreandoProducto}
+              onError={(texto) => setAviso({ tipo: "error", texto })}
+            />
           </section>
         )}
 

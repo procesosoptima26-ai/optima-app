@@ -6,6 +6,7 @@ import {
   type ErrorLinea,
   type VentaAgrupada,
 } from "./lector-ventas-archivo";
+import FormularioProductoNuevo from "./FormularioProductoNuevo";
 
 /**
  * Ventas por archivo (Etapa 1).
@@ -129,10 +130,8 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
   const entradaArchivo = useRef<HTMLInputElement | null>(null);
   // Etapa 2: crear desde la lista un producto que el catálogo no conoce.
   const [creando, setCreando] = useState<string | null>(null);
-  const [formNombre, setFormNombre] = useState("");
-  const [formMarca, setFormMarca] = useState("");
-  const [formPresentacion, setFormPresentacion] = useState("");
   const [mensajeProducto, setMensajeProducto] = useState("");
+  const [avisoProveedor, setAvisoProveedor] = useState("");
 
   useEffect(() => {
     let activo = true;
@@ -218,33 +217,17 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
 
   function abrirCreacion(p: VentaConProblema) {
     setCreando(p.codigo);
-    setFormNombre(p.nombre || "");
-    setFormMarca("");
-    setFormPresentacion("");
     setMensajeProducto("");
   }
 
-  async function guardarProductoNuevo(codigo: string) {
-    const nombre = formNombre.trim();
-    if (!nombre) {
-      setMensajeProducto("Escribí el nombre del producto.");
-      return;
-    }
-    setMensajeProducto("");
-    setOcupado("Creando el producto...");
-    try {
-      await pedir("/api/productos-movimientos", {
-        codigo,
-        producto: nombre,
-        marca: formMarca.trim(),
-        presentacion: formPresentacion.trim(),
-      });
-    } catch (e) {
-      setMensajeProducto(e instanceof Error ? e.message : "No se pudo crear el producto.");
-      setOcupado("");
-      return;
-    }
+  async function alCrearseProducto(proveedorNuevo: boolean) {
     setCreando(null);
+    setMensajeProducto("");
+    if (proveedorNuevo) {
+      setAvisoProveedor(
+        "El proveedor nuevo quedó cargado solo con el nombre: avisale a administración para que complete sus datos.",
+      );
+    }
     // Vuelve a revisar el archivo: el producto nuevo ya no figura como desconocido.
     await verVistaPrevia();
   }
@@ -398,6 +381,7 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
       {ocupado && <div className="mov-empty">{ocupado}</div>}
       {progreso && <div className="mov-product-searching">{progreso}</div>}
       {error && <div className="mov-empty" role="alert">{error}</div>}
+      {avisoProveedor && <div className="mov-empty" role="status">{avisoProveedor}</div>}
 
       {hayArchivo && (
         <div className="mov-stock-summary">
@@ -466,40 +450,17 @@ export default function VentasArchivo({ usuario }: { usuario: UsuarioVentas }) {
                     )}
                     {motivo === "NO_RECONOCIDO" && creando === p.codigo && (
                       <div className="mov-stock-filters">
-                        <label className="mov-field">
-                          Nombre del producto
-                          <input
-                            value={formNombre}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setFormNombre(e.target.value)}
-                            maxLength={200}
-                            disabled={bloqueado}
-                          />
-                        </label>
-                        <label className="mov-field">
-                          Marca (opcional)
-                          <input
-                            value={formMarca}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setFormMarca(e.target.value)}
-                            maxLength={100}
-                            disabled={bloqueado}
-                          />
-                        </label>
-                        <label className="mov-field">
-                          Presentación (opcional)
-                          <input
-                            value={formPresentacion}
-                            onChange={(e: ChangeEvent<HTMLInputElement>) => setFormPresentacion(e.target.value)}
-                            maxLength={100}
-                            disabled={bloqueado}
-                          />
-                        </label>
+                        <FormularioProductoNuevo
+                          key={p.codigo}
+                          codigo={p.codigo}
+                          nombreSugerido={p.nombre}
+                          deshabilitado={bloqueado}
+                          textoBoton="Guardar producto"
+                          onCreado={(_, proveedorNuevo) => alCrearseProducto(proveedorNuevo)}
+                          onCancelar={() => setCreando(null)}
+                          onError={setMensajeProducto}
+                        />
                         {mensajeProducto && <div className="mov-empty" role="alert">{mensajeProducto}</div>}
-                        <button type="button" className="mov-refresh-button" onClick={() => void guardarProductoNuevo(p.codigo)} disabled={bloqueado}>
-                          Guardar producto
-                        </button>{" "}
-                        <button type="button" className="mov-refresh-button" onClick={() => setCreando(null)} disabled={bloqueado}>
-                          Cancelar
-                        </button>
                       </div>
                     )}
                   </li>

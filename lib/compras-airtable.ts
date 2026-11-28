@@ -13,6 +13,7 @@ import { ejecutarRedisReal } from "./bloqueo-ventas.js";
 import { CAMPO_PACK, agregarVentasDelDia, limitesDiaUtc } from "./compras-datos.js";
 import type { ProductoCatalogoCompra, VentasDelDia } from "./compras-datos.js";
 import type { ClaveSucursalCompras } from "./compras-cortes.js";
+import type { LoteStock } from "./compras-vencimientos.js";
 
 type Registro = { id: string; fields: Record<string, unknown> };
 type Respuesta = { records?: Registro[]; offset?: string };
@@ -160,6 +161,31 @@ export async function leerStockDeUbicaciones(ubicacionIds: ReadonlySet<string>):
     }
   });
   return stock;
+}
+
+/**
+ * Lotes con stock de las ubicaciones indicadas, por producto, con su vencimiento (AAAA-MM-DD o null).
+ * Es la misma lectura que `leerStockDeUbicaciones`, pero conserva el detalle por lote.
+ */
+export async function leerLotesDeUbicaciones(
+  ubicacionIds: ReadonlySet<string>,
+): Promise<Map<string, LoteStock[]>> {
+  const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+  const tabla = variable("AIRTABLE_STOCK_LOTES_TABLE_NAME");
+  const lotes = new Map<string, LoteStock[]>();
+  await leerPaginas(urlTabla(baseId, tabla, ["PRODUCTOS", "UBICACIÓN", "CANTIDAD_ACTUAL", "VENCIMIENTO"]), token, "stock", (r) => {
+    if (!ids(r.fields["UBICACIÓN"]).some((u) => ubicacionIds.has(u))) return;
+    const cantidad = Number(r.fields.CANTIDAD_ACTUAL);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) return;
+    const venc = texto(r.fields.VENCIMIENTO);
+    const vencimiento = /^\d{4}-\d{2}-\d{2}/.test(venc) ? venc.slice(0, 10) : null;
+    for (const p of ids(r.fields.PRODUCTOS)) {
+      const lista = lotes.get(p) ?? [];
+      lista.push({ cantidad, vencimiento });
+      lotes.set(p, lista);
+    }
+  });
+  return lotes;
 }
 
 /** Ventas de UN día argentino (todas las sucursales de la base), ya sumadas. */

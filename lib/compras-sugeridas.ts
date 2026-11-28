@@ -27,11 +27,14 @@
  * - A los proveedores que venden por unidad no se les pide menos de 3 unidades.
  * - VENTA MUY LENTA (2 unidades o menos en 60 días): no se sugiere en la lista principal,
  *   va a una lista aparte "pedir solo si querés tenerlo", para que no se venza mercadería.
+ * - El stock que cuenta para comprar es el VENDIBLE: sin lo vencido y sin lo que no alcanza a
+ *   venderse antes de vencer (ver compras-vencimientos.ts). Se informa qué está vencido o en riesgo.
  * - Producto DISCONTINUADO (pack "-" o "discontinuado" en Airtable): nunca se sugiere.
  * - Sin ventas recientes y sin stock: se sugiere un pack, marcado como tal,
  *   para que no se pase por alto un producto que se dejó de reponer.
  * - Se excluyen bolsas y productos "Ocupado".
  */
+import { analizarVencimientos, type LoteStock } from "./compras-vencimientos.js";
 import { formatoDeProveedor, pasoDeCompra, type FormatoCompra } from "./compras-proveedores.js";
 import { COBERTURA_POR_GRUPO, NOMBRE_GRUPO, clasificarGrupo, factorDeTemporada, type GrupoCompra } from "./compras-reglas.js";
 
@@ -74,6 +77,8 @@ export type ProductoCompra = {
   cortePorCambioDeProducto?: string | null;
   /** Ya no se compra más: no se sugiere nada. */
   discontinuado?: boolean;
+  /** Lotes de la sucursal con su vencimiento. Si no se pasan, todo el stock cuenta como vendible. */
+  lotes?: readonly LoteStock[];
 };
 
 export type ParametrosCompra = {
@@ -94,7 +99,9 @@ export type AvisoCompra =
   | "VENTAS_EN_BAJA"
   | "SIN_PACK_CARGADO"
   | "SIN_PROVEEDOR"
-  | "DISCONTINUADO";
+  | "DISCONTINUADO"
+  | "STOCK_VENCIDO"
+  | "POR_VENCER";
 
 export type ItemCompra = {
   productoId: string;
@@ -103,6 +110,14 @@ export type ItemCompra = {
   categoria: string | null;
   proveedores: readonly string[];
   stock: number;
+  /** Stock que se puede vender antes de que venza (sin lo vencido ni lo que no alcanza a salir). */
+  stockVendible: number;
+  /** Unidades vencidas que siguen en stock. */
+  vencidas: number;
+  /** Unidades que no se alcanzan a vender antes de vencer. */
+  porVencer: number;
+  /** Fecha del vencimiento más próximo entre lo vencido o en riesgo. */
+  primerVencimiento: string | null;
   ventaDiaria: number;
   /** Cuántos días alcanza el stock al ritmo actual; null si no hay ventas. */
   diasAlcanza: number | null;
@@ -251,7 +266,12 @@ export function calcularComprasSugeridas(
     const multiploValido = Number.isFinite(p.multiplo) && (p.multiplo as number) > 0;
     const multiplo = multiploValido ? (p.multiplo as number) : 1;
     const stock = Math.max(0, p.stock);
-    const diasAlcanza = ventaDiaria > 0 ? redondear(stock / ventaDiaria, 1) : null;
+    // Stock vendible: sin lo vencido ni lo que no alcanza a venderse antes de vencer.
+    const venc = p.lotes
+      ? analizarVencimientos(p.lotes, parametros.hoy, ventaDiaria * factorTemporada)
+      : { stockVendible: stock, vencidas: 0, porVencer: 0, primerVencimiento: null };
+    const stockVendible = Math.min(stock, venc.stockVendible);
+    const diasAlcanza = ventaDiaria > 0 ? redondear(stockVendible / ventaDiaria, 1) : null;
     // Con varios proveedores se usa el formato del primero (hasta que haya comparación de costos).
     const formatoCompra = formatoDeProveedor(p.proveedores[0]);
     const paso = pasoDeCompra(formatoCompra, multiplo);
@@ -260,7 +280,8 @@ export function calcularComprasSugeridas(
       // Ya no se compra: no se sugiere nada ni se muestran otros avisos.
       items.push({
         productoId: p.productoId, codigo: p.codigo, nombre: p.nombre, categoria, proveedores: p.proveedores,
-        stock: redondear(stock), ventaDiaria: redondear(ventaDiaria), diasAlcanza, diasSinVender,
+        stock: redondear(stock), stockVendible: redondear(stockVendible), vencidas: venc.vencidas, porVencer: venc.porVencer,
+        primerVencimiento: venc.primerVencimiento, ventaDiaria: redondear(ventaDiaria), diasAlcanza, diasSinVender,
         grupo, grupoNombre: NOMBRE_GRUPO[grupo], coberturaDias, factorTemporada, multiplo,
         formatoCompra, paso, necesidadReal: 0, unidadesVendidas: redondear(unidades), ventaMuyLenta: false,
         objetivo: 0, sugerido: 0, avisos: ["DISCONTINUADO"],
@@ -272,7 +293,9 @@ export function calcularComprasSugeridas(
     if (p.proveedores.length === 0) avisos.push("SIN_PROVEEDOR");
 
     const objetivo = ventaDiaria * coberturaDias * factorTemporada;
-    const faltante = redondear(objetivo - stock);
+    if (venc.vencidas > 0) avisos.push("STOCK_VENCIDO");
+    if (venc.porVencer > 0) avisos.push("POR_VENCER");
+    const faltante = redondear(objetivo - stockVendible);
     const necesidadReal = redondearAlPack(faltante, 1);
     let sugerido = sugeridoConUmbral(faltante, paso, diasAlcanza);
 
@@ -292,6 +315,10 @@ export function calcularComprasSugeridas(
       categoria,
       proveedores: p.proveedores,
       stock: redondear(stock),
+      stockVendible: redondear(stockVendible),
+      vencidas: venc.vencidas,
+      porVencer: venc.porVencer,
+      primerVencimiento: venc.primerVencimiento,
       ventaDiaria: redondear(ventaDiaria),
       diasAlcanza,
       diasSinVender,

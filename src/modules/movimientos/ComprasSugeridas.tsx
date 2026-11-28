@@ -9,7 +9,10 @@ import {
   textoCriterio,
   textoDiasAlcanza,
   textoPedidoReal,
+  textoStock,
+  textoVencimiento,
   type ItemCompra,
+  type ItemRiesgo,
 } from "./compras";
 
 /**
@@ -29,6 +32,9 @@ type Resumen = {
   conSugerencia: number;
   discontinuados?: number;
   ventaMuyLenta?: number;
+  enRiesgoDeVencer?: number;
+  unidadesVencidas?: number;
+  unidadesPorVencer?: number;
 };
 
 type Discontinuado = { productoId: string; codigo: string; nombre: string; stock: number; ventaDiaria: number };
@@ -45,6 +51,7 @@ type Respuesta = {
   items?: ItemCompra[];
   discontinuadosConMovimiento?: Discontinuado[];
   ventaMuyLenta?: ItemCompra[];
+  enRiesgo?: ItemRiesgo[];
 };
 
 const ESPERA_ENTRE_CONSULTAS_MS = 2000;
@@ -58,6 +65,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [discontinuados, setDiscontinuados] = useState<Discontinuado[]>([]);
   const [lentos, setLentos] = useState<ItemCompra[]>([]);
+  const [enRiesgo, setEnRiesgo] = useState<ItemRiesgo[]>([]);
   const [hoy, setHoy] = useState("");
   const [cargando, setCargando] = useState(false);
   const [progreso, setProgreso] = useState<{ listos: number; total: number } | null>(null);
@@ -72,6 +80,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const refPedido = useRef<HTMLDivElement>(null);
   const refLentos = useRef<HTMLDivElement>(null);
   const refDiscontinuados = useRef<HTMLDivElement>(null);
+  const refRiesgo = useRef<HTMLDivElement>(null);
 
   function irA(ref: { current: HTMLElement | null }) {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -106,6 +115,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
         setItems(datos.items ?? []);
         setDiscontinuados(datos.discontinuadosConMovimiento ?? []);
         setLentos(datos.ventaMuyLenta ?? []);
+        setEnRiesgo(datos.enRiesgo ?? []);
         setResumen(datos.resumen ?? null);
         setHoy(datos.hoy ?? "");
         setProgreso(null);
@@ -125,6 +135,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
     setItems([]);
     setDiscontinuados([]);
     setLentos([]);
+    setEnRiesgo([]);
     setResumen(null);
     setProveedor("");
     void cargar();
@@ -192,6 +203,11 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                 <span>Venta muy lenta</span><strong>{resumen.ventaMuyLenta}</strong><em>ver lista ↓</em>
               </button>
             )}
+            {(resumen.enRiesgoDeVencer ?? 0) > 0 && (
+              <button type="button" className="compras-contador" onClick={() => irA(refRiesgo)}>
+                <span>Vencidos / por vencer</span><strong>{resumen.enRiesgoDeVencer}</strong><em>ver lista ↓</em>
+              </button>
+            )}
             {(resumen.discontinuados ?? 0) > 0 && (
               discontinuados.length > 0 ? (
                 <button type="button" className="compras-contador" onClick={() => irA(refDiscontinuados)}>
@@ -234,7 +250,8 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                     <div>
                       <strong>{i.nombre}</strong>
                       <span>Código {i.codigo} · Pack {formatear(i.multiplo)} · Vende {formatear(i.ventaDiaria)} por día</span>
-                      <p>Stock {formatear(i.stock)} u. ({textoDiasAlcanza(i)}) · Objetivo {formatear(i.objetivo)} u.</p>
+                      <p>{textoStock(i)} ({textoDiasAlcanza(i)}) · Objetivo {formatear(i.objetivo)} u.</p>
+                      {textoVencimiento(i) && <p className="compras-aviso">{textoVencimiento(i)}</p>}
                       <p>{textoPedidoReal(i)}</p>
                       <p>{textoCriterio(i)}</p>
                       {i.avisos.map((a) => <small key={a} className="compras-aviso">{textoAviso(a)}</small>)}
@@ -260,6 +277,31 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                       <span>Código {i.codigo} · {i.proveedores.length > 0 ? i.proveedores.join(" / ") : "(sin proveedor)"}</span>
                       <p>Vendió {formatear(i.unidadesVendidas)} u. en 60 días · Stock {formatear(i.stock)} u.</p>
                       <p>{textoPedidoReal(i)}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {enRiesgo.length > 0 && (
+            <div className="compras-grupo" ref={refRiesgo}>
+              <h4>
+                Stock vencido o en riesgo de vencer{" "}
+                <small>
+                  ({enRiesgo.length} productos · {formatear(resumen.unidadesVencidas ?? 0)} u. vencidas · {formatear(resumen.unidadesPorVencer ?? 0)} u.
+                  que no se alcanzan a vender; no cuentan como stock para comprar)
+                </small>
+              </h4>
+              <button type="button" className="compras-volver" onClick={() => irA(refResumen)}>↑ Volver al resumen</button>
+              <div className="mov-history">
+                {enRiesgo.map((i) => (
+                  <article key={`riesgo-${i.productoId}`} className="mov-history-item">
+                    <div>
+                      <strong>{i.nombre}</strong>
+                      <span>Código {i.codigo} · {i.proveedores.length > 0 ? i.proveedores.join(" / ") : "(sin proveedor)"} · Vende {formatear(i.ventaDiaria)} por día</span>
+                      <p>{textoStock(i)}</p>
+                      <p className="compras-aviso">{textoVencimiento(i)}</p>
                     </div>
                   </article>
                 ))}

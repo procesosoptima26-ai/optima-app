@@ -333,3 +333,40 @@ test("proveedor por unidad: faltantes de menos de 3 unidades no se piden; 3 o m�
   const caja2 = calcularComprasSugeridas([producto({ proveedores: ["COCA COLA GOYA"], multiplo: 6, stock: 26, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
   assert.equal(caja2.sugerido, 6);
 });
+
+// --- Stock vendible según vencimientos (27-11-2026) ---
+
+test("el stock vencido no cuenta: se pide como si no estuviera y se avisa", () => {
+  // 2 por día, objetivo 30. Hay 30 u., pero todas vencidas → faltan 30 → pack de 6 → 30.
+  const base = { multiplo: 6, ventas: ventasParejas(120, 60) };
+  const sinLotes = calcularComprasSugeridas([producto({ ...base, stock: 30 })], { hoy: HOY }).items[0];
+  assert.equal(sinLotes.sugerido, 0);
+  const vencido = calcularComprasSugeridas(
+    [producto({ ...base, stock: 30, lotes: [{ cantidad: 30, vencimiento: "2026-11-01" }] })], { hoy: HOY },
+  ).items[0];
+  assert.equal(vencido.stock, 30);
+  assert.equal(vencido.stockVendible, 0);
+  assert.equal(vencido.vencidas, 30);
+  assert.equal(vencido.sugerido, 30);
+  assert.ok(vencido.avisos.includes("STOCK_VENCIDO"));
+});
+
+test("lo que no alcanza a venderse antes de vencer tampoco cuenta", () => {
+  // 2 por día, vence en 5 días: se venden 10 de 30. Vendible 10 → faltan 20 → pack 6 → 24.
+  const it = calcularComprasSugeridas(
+    [producto({ multiplo: 6, stock: 30, ventas: ventasParejas(120, 60), lotes: [{ cantidad: 30, vencimiento: "2026-12-02" }] })],
+    { hoy: HOY },
+  ).items[0];
+  assert.equal(it.stockVendible, 10);
+  assert.equal(it.porVencer, 20);
+  assert.equal(it.sugerido, 24);
+  assert.ok(it.avisos.includes("POR_VENCER"));
+  assert.equal(it.diasAlcanza, 5);
+});
+
+test("sin información de lotes, todo el stock es vendible (no cambia nada)", () => {
+  const it = calcularComprasSugeridas([producto({ stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(it.stockVendible, 10);
+  assert.equal(it.vencidas, 0);
+  assert.equal(it.porVencer, 0);
+});

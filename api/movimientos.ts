@@ -22,7 +22,7 @@ import {
 import { juntarVentasDeVentana } from "../lib/compras-ventas.js";
 import {
   guardarCacheVentas, leerCacheVentas, leerCatalogoCompras, leerProveedores,
-  leerStockDeUbicaciones, leerVentasDelDia,
+  leerLotesDeUbicaciones, leerStockDeUbicaciones, leerVentasDelDia,
 } from "../lib/compras-airtable.js";
 import {
   destinosTransferencia, validarTransferencia, esMotivoTransferencia,
@@ -889,15 +889,21 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
   }
 
   const clavePack = clavePackDeSucursal(sucursalCore.nombre);
-  const [catalogo, stock, proveedores] = await Promise.all([
+  const [catalogo, lotes, proveedores] = await Promise.all([
     leerCatalogoCompras(autorizado.empresaId, clavePack),
-    leerStockDeUbicaciones(ubicacionesDeSucursal),
+    leerLotesDeUbicaciones(ubicacionesDeSucursal),
     leerProveedores(),
   ]);
+  // Stock total por producto = suma de sus lotes; el detalle por lote sirve para los vencimientos.
+  const stock = new Map<string, number>();
+  for (const [productoId, lista] of lotes) {
+    stock.set(productoId, Math.round(lista.reduce((s, l) => s + l.cantidad, 0) * 1000) / 1000);
+  }
 
   const armados = armarProductosCompra({
     catalogo,
     stockPorProductoId: stock,
+    lotesPorProductoId: lotes,
     ventasPorProductoId: ventasPorProductoDeSucursal(ventana.porDia, sucursalCore.id),
     proveedorPorId: proveedores,
     clavePack,
@@ -912,6 +918,17 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
     .filter((i) => i.avisos.includes("DISCONTINUADO") && (i.stock > 0 || i.ventaDiaria > 0))
     .sort((a, b) => b.ventaDiaria - a.ventaDiaria || a.nombre.localeCompare(b.nombre, "es"))
     .map((i) => ({ productoId: i.productoId, codigo: i.codigo, nombre: i.nombre, stock: i.stock, ventaDiaria: i.ventaDiaria }));
+  // Stock vencido o que no alcanza a venderse antes de vencer: lo más urgente primero.
+  const enRiesgo = resultado.items
+    .filter((i) => i.vencidas > 0 || i.porVencer > 0)
+    .sort((a, b) =>
+      (a.primerVencimiento ?? "9999").localeCompare(b.primerVencimiento ?? "9999") ||
+      (b.vencidas + b.porVencer) - (a.vencidas + a.porVencer))
+    .map((i) => ({
+      productoId: i.productoId, codigo: i.codigo, nombre: i.nombre, proveedores: i.proveedores,
+      stock: i.stock, stockVendible: i.stockVendible, vencidas: i.vencidas, porVencer: i.porVencer,
+      primerVencimiento: i.primerVencimiento, ventaDiaria: i.ventaDiaria,
+    }));
   const totalDiscontinuados = resultado.items.filter((i) => i.avisos.includes("DISCONTINUADO")).length;
 
   return res.status(200).json({
@@ -925,10 +942,14 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
       conSugerencia: items.length,
       discontinuados: totalDiscontinuados,
       ventaMuyLenta: ventaMuyLenta.length,
+      enRiesgoDeVencer: enRiesgo.length,
+      unidadesVencidas: Math.round(enRiesgo.reduce((s, i) => s + i.vencidas, 0)),
+      unidadesPorVencer: Math.round(enRiesgo.reduce((s, i) => s + i.porVencer, 0)),
     },
     items,
     discontinuadosConMovimiento,
     ventaMuyLenta,
+    enRiesgo,
   });
 }
 

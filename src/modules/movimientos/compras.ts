@@ -10,7 +10,9 @@ export type AvisoCompra =
   | "VENTAS_EN_BAJA"
   | "SIN_PACK_CARGADO"
   | "SIN_PROVEEDOR"
-  | "DISCONTINUADO";
+  | "DISCONTINUADO"
+  | "STOCK_VENCIDO"
+  | "POR_VENCER";
 
 export type ItemCompra = {
   productoId: string;
@@ -19,6 +21,10 @@ export type ItemCompra = {
   categoria: string | null;
   proveedores: readonly string[];
   stock: number;
+  stockVendible: number;
+  vencidas: number;
+  porVencer: number;
+  primerVencimiento: string | null;
   ventaDiaria: number;
   diasAlcanza: number | null;
   diasSinVender: number | null;
@@ -47,7 +53,41 @@ const TEXTO_AVISO: Record<AvisoCompra, string> = {
   SIN_PACK_CARGADO: "Falta cargar el pack: se sugiere de a 1 unidad",
   SIN_PROVEEDOR: "No tiene proveedor cargado",
   DISCONTINUADO: "Discontinuado: ya no se compra",
+  STOCK_VENCIDO: "Hay stock vencido: sacalo y dalo de baja",
+  POR_VENCER: "Parte del stock no se alcanza a vender antes de vencer",
 };
+
+/** Producto con stock vencido o que no alcanza a venderse antes de vencer (para la lista de riesgo). */
+export type ItemRiesgo = Pick<
+  ItemCompra,
+  "productoId" | "codigo" | "nombre" | "proveedores" | "stock" | "stockVendible" | "vencidas" | "porVencer" | "primerVencimiento" | "ventaDiaria"
+>;
+
+function fechaCorta(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
+}
+
+function nUnidades(x: number): string {
+  return String(Math.round(x * 10) / 10).replace(".", ",");
+}
+
+/** Texto de lo vencido y de lo que no se alcanza a vender antes de vencer; vacío si no hay nada. */
+export function textoVencimiento(item: Pick<ItemCompra, "vencidas" | "porVencer" | "primerVencimiento">): string {
+  const partes: string[] = [];
+  if (item.vencidas > 0) partes.push(`${nUnidades(item.vencidas)} u. vencidas (siguen en stock)`);
+  if (item.porVencer > 0) {
+    const desde = item.primerVencimiento ? ` (vence desde el ${fechaCorta(item.primerVencimiento)})` : "";
+    partes.push(`${nUnidades(item.porVencer)} u. no se alcanzan a vender antes de vencer${desde}`);
+  }
+  return partes.join(" · ");
+}
+
+/** "Stock 12 u." o, si parte no es vendible, "Stock 12 u. (8 vendibles)". */
+export function textoStock(item: Pick<ItemCompra, "stock" | "stockVendible">): string {
+  if (item.stockVendible < item.stock) return `Stock ${nUnidades(item.stock)} u. (${nUnidades(item.stockVendible)} vendibles)`;
+  return `Stock ${nUnidades(item.stock)} u.`;
+}
 
 /** Texto corto de por qué se calculó así: grupo, días que cubre y ajuste por temporada. */
 export function textoCriterio(item: Pick<ItemCompra, "grupoNombre" | "coberturaDias" | "factorTemporada">): string {
@@ -164,7 +204,7 @@ function num(n: number, decimales = 1): string {
 
 /** CSV para Excel en Argentina (separador ";" y coma decimal), un pedido agrupado por proveedor. */
 export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
-  const filas = ["Proveedor;Código;Producto;Stock actual;Venta diaria;Días que alcanza;Pack;Necesidad real (unidades);Cómo compra el proveedor;Pedir (unidades);Grupo;Cobertura (días);Factor temporada;Avisos"];
+  const filas = ["Proveedor;Código;Producto;Stock actual;Stock vendible;Venta diaria;Días que alcanza;Pack;Necesidad real (unidades);Cómo compra el proveedor;Pedir (unidades);Vencidas (u.);Por vencer (u.);Grupo;Cobertura (días);Factor temporada;Avisos"];
   for (const g of grupos) {
     for (const i of g.items) {
       filas.push([
@@ -172,12 +212,15 @@ export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
         celda(i.codigo),
         celda(i.nombre),
         num(i.stock, 2),
+        num(i.stockVendible, 2),
         num(i.ventaDiaria, 2),
         i.diasAlcanza === null ? "" : num(i.diasAlcanza, 1),
         num(i.multiplo, 2),
         num(i.necesidadReal, 0),
         celda(textoFormato(i.formatoCompra, i.multiplo)),
         num(i.sugerido, 2),
+        num(i.vencidas, 2),
+        num(i.porVencer, 2),
         celda(i.grupoNombre),
         num(i.coberturaDias, 0),
         num(i.factorTemporada, 2),

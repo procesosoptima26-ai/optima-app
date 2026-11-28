@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoCriterio, textoDiasAlcanza, textoPedidoReal, SIN_PROVEEDOR,
+  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoCriterio, textoDiasAlcanza, textoPedidoReal, textoStock, textoVencimiento, SIN_PROVEEDOR,
   type ItemCompra,
 } from "../src/modules/movimientos/compras.js";
 
 function item(o: Partial<ItemCompra>): ItemCompra {
   return {
     productoId: "r", codigo: "1", nombre: "Prod", categoria: null, proveedores: [], stock: 0, ventaDiaria: 1,
-    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, formatoCompra: "PACK", paso: 6, necesidadReal: 12, unidadesVendidas: 30, ventaMuyLenta: false, objetivo: 15, sugerido: 12,
+    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, formatoCompra: "PACK", paso: 6, necesidadReal: 12, unidadesVendidas: 30, stockVendible: 0, vencidas: 0, porVencer: 0, primerVencimiento: null, ventaMuyLenta: false, objetivo: 15, sugerido: 12,
     avisos: [], ...o,
   };
 }
@@ -68,6 +68,20 @@ test("pedidoACsv incluye necesidad real y cómo compra el proveedor", () => {
   const filas = csv.replace(/^\uFEFF/, "").split("\r\n");
   assert.match(filas[0], /;Pack;Necesidad real \(unidades\);Cómo compra el proveedor;Pedir \(unidades\);/);
   assert.ok(filas[1].includes(';6;3;"caja cerrada de 6";12;'));
+});
+
+test("textoVencimiento y textoStock", () => {
+  assert.equal(textoVencimiento({ vencidas: 0, porVencer: 0, primerVencimiento: null }), "");
+  assert.equal(textoVencimiento({ vencidas: 3, porVencer: 0, primerVencimiento: "2026-11-01" }), "3 u. vencidas (siguen en stock)");
+  assert.equal(
+    textoVencimiento({ vencidas: 0, porVencer: 4.5, primerVencimiento: "2026-12-02" }),
+    "4,5 u. no se alcanzan a vender antes de vencer (vence desde el 02/12/2026)",
+  );
+  assert.match(textoVencimiento({ vencidas: 2, porVencer: 1, primerVencimiento: "2026-11-01" }), /vencidas.* · .*no se alcanzan/);
+  assert.equal(textoStock({ stock: 12, stockVendible: 12 }), "Stock 12 u.");
+  assert.equal(textoStock({ stock: 12, stockVendible: 8 }), "Stock 12 u. (8 vendibles)");
+  assert.match(textoAviso("STOCK_VENCIDO"), /vencido/);
+  assert.match(textoAviso("POR_VENCER"), /vencer/);
 });
 
 test("textos de avisos y de días", () => {

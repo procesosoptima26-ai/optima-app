@@ -11,6 +11,7 @@
  */
 import { CORTES_POR_CAMBIO_DE_PRODUCTO, type ClaveSucursalCompras } from "./compras-cortes.js";
 import { sinCerosIzquierda, type ProductoCompra, type VentaDiaria } from "./compras-sugeridas.js";
+import type { LoteStock } from "./compras-vencimientos.js";
 
 /** Datos de un producto tal como vienen del catálogo. */
 export type ProductoCatalogoCompra = {
@@ -62,6 +63,8 @@ export type EntradaArmado = {
   /** Stock total de la sucursal por id de producto (suma de lotes). */
   stockPorProductoId: ReadonlyMap<string, number>;
   ventasPorProductoId: ReadonlyMap<string, readonly VentaDiaria[]>;
+  /** Lotes de la sucursal por producto (con vencimiento). Opcional: sin esto todo el stock es vendible. */
+  lotesPorProductoId?: ReadonlyMap<string, readonly LoteStock[]>;
   /** Nombre de cada proveedor por su id. */
   proveedorPorId: ReadonlyMap<string, string>;
   clavePack: ClaveSucursalCompras | null;
@@ -83,6 +86,7 @@ export function armarProductosCompra(entrada: EntradaArmado): ProductoCompra[] {
       discontinuado: entrada.clavePack ? esDiscontinuado(p.packTexto) : false,
       stock: entrada.stockPorProductoId.get(p.id) ?? 0,
       ventas: entrada.ventasPorProductoId.get(p.id) ?? [],
+      lotes: entrada.lotesPorProductoId?.get(p.id),
       cortePorCambioDeProducto: cortes[sinCerosIzquierda(p.codigo)] ?? null,
     };
   });

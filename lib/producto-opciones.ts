@@ -13,13 +13,19 @@ export function limpiarOpcion(texto: unknown): string {
   return typeof texto === "string" ? texto.replace(/\s+/g, " ").trim() : "";
 }
 
-/** Clave para comparar: sin mayúsculas, sin tildes y sin espacios, puntos ni guiones. */
+/**
+ * Clave para comparar: sin mayúsculas, sin tildes y sin espacios, puntos ni guiones.
+ * Excepción importante: un punto, una coma o un guion ENTRE DOS NÚMEROS se conserva
+ * ("10,5gr" y "10.5gr" son lo mismo, pero distintos de "105gr"; "1-2" no es "12").
+ */
 export function claveOpcion(texto: unknown): string {
   return limpiarOpcion(texto)
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/[\s.\-_]/g, "");
+    .replace(/(\d),(?=\d)/g, "$1.")
+    .replace(/(?<!\d)[.\-]|[.\-](?!\d)/g, "")
+    .replace(/[\s_]/g, "");
 }
 
 function conTilde(texto: string): boolean {

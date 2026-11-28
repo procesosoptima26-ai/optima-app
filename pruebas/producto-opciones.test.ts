@@ -10,6 +10,17 @@ test("la clave ignora mayúsculas, tildes, espacios, puntos y guiones", () => {
   assert.equal(claveOpcion("1 Kg"), claveOpcion("1kg"));
   assert.equal(claveOpcion("LA SERENÍSIMA"), claveOpcion("La Serenisima "));
   assert.notEqual(claveOpcion("Arroz"), claveOpcion("Arroz Gallo"));
+});
+
+test("los decimales no se confunden con enteros", () => {
+  assert.notEqual(claveOpcion("10,5gr"), claveOpcion("105gr"));
+  assert.notEqual(claveOpcion("1.1kg"), claveOpcion("11kg"));
+  assert.notEqual(claveOpcion("1-2"), claveOpcion("12"));
+  assert.equal(claveOpcion("10,5gr"), claveOpcion("10.5 GR"));
+  assert.equal(claveOpcion("1,5L"), claveOpcion("1.5l"));
+  assert.equal(claveOpcion("c.c."), claveOpcion("cc"));
+  assert.equal(claveOpcion("sin-tacc"), claveOpcion("Sin Tacc"));
+  assert.equal(agruparOpciones(["105gr", "10,5gr", "10.5gr"]).length, 2);
   assert.equal(claveOpcion(""), "");
 });
 

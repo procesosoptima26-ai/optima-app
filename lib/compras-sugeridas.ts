@@ -25,6 +25,9 @@
  *   media caja o de a 12. El sugerido se redondea al escalón de ese proveedor, no siempre a la caja.
  *   Además de lo que se pide, se informa la necesidad real (unidades exactas que faltan).
  * - A los proveedores que venden por unidad no se les pide menos de 3 unidades.
+ * - POCAS UNIDADES: si el producto rota (3 o más unidades en 60 días), el proveedor vende por
+ *   unidad y faltan 1 o 2 unidades con el stock por acabarse (menos de 7 días), no entra al pedido
+ *   (mínimo de 3) pero se avisa en una lista aparte para no quedarse sin él sin darse cuenta.
  * - VENTA MUY LENTA (2 unidades o menos en 60 días): no se sugiere en la lista principal,
  *   va a una lista aparte "pedir solo si querés tenerlo", para que no se venza mercadería.
  * - El stock que cuenta para comprar es el VENDIBLE: sin lo vencido y sin lo que no alcanza a
@@ -140,6 +143,8 @@ export type ItemCompra = {
   unidadesVendidas: number;
   /** Venta muy lenta: se muestra aparte y no entra en el pedido. */
   ventaMuyLenta: boolean;
+  /** Rota, faltan 1 o 2 unidades y el stock se acaba pronto, pero no alcanza el pedido mínimo del proveedor. */
+  pocasUnidades: boolean;
   /** Unidades a comprar (múltiplo del escalón del proveedor); 0 si no hace falta. */
   sugerido: number;
   avisos: readonly AvisoCompra[];
@@ -283,7 +288,7 @@ export function calcularComprasSugeridas(
         stock: redondear(stock), stockVendible: redondear(stockVendible), vencidas: venc.vencidas, porVencer: venc.porVencer,
         primerVencimiento: venc.primerVencimiento, ventaDiaria: redondear(ventaDiaria), diasAlcanza, diasSinVender,
         grupo, grupoNombre: NOMBRE_GRUPO[grupo], coberturaDias, factorTemporada, multiplo,
-        formatoCompra, paso, necesidadReal: 0, unidadesVendidas: redondear(unidades), ventaMuyLenta: false,
+        formatoCompra, paso, necesidadReal: 0, unidadesVendidas: redondear(unidades), ventaMuyLenta: false, pocasUnidades: false,
         objetivo: 0, sugerido: 0, avisos: ["DISCONTINUADO"],
       });
       continue;
@@ -307,6 +312,12 @@ export function calcularComprasSugeridas(
     // Pedido por unidad demasiado chico (1 o 2): no se le escribe a un proveedor por eso.
     if (formatoCompra === "UNIDAD" && sugerido < PEDIDO_MINIMO_POR_UNIDAD) sugerido = 0;
     const ventaMuyLenta = unidades > 0 && unidades <= UNIDADES_VENTA_MUY_LENTA;
+    // Rota, faltan 1 o 2 u. y se acaba pronto: no llega al mínimo del proveedor, pero no hay que perderlo de vista.
+    const pocasUnidades =
+      formatoCompra === "UNIDAD" && sugerido === 0 &&
+      necesidadReal >= 1 && necesidadReal < PEDIDO_MINIMO_POR_UNIDAD &&
+      unidades > UNIDADES_VENTA_MUY_LENTA &&
+      (diasAlcanza === null || diasAlcanza < DIAS_PARA_ESPERAR);
 
     items.push({
       productoId: p.productoId,
@@ -333,6 +344,7 @@ export function calcularComprasSugeridas(
       necesidadReal,
       unidadesVendidas: redondear(unidades),
       ventaMuyLenta,
+      pocasUnidades,
       sugerido,
       avisos
     });

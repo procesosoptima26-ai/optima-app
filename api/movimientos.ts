@@ -913,6 +913,8 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
   // Venta muy lenta (2 u. o menos en 60 días): no entran al pedido, van en una lista aparte.
   const items = resultado.items.filter((i) => i.sugerido > 0 && !i.ventaMuyLenta).sort(ordenUrgencia);
   const ventaMuyLenta = resultado.items.filter((i) => i.sugerido > 0 && i.ventaMuyLenta).sort(ordenUrgencia);
+  // Faltan 1 o 2 unidades de un producto que rota y se acaba pronto: no llega al mínimo de pedido, pero se avisa.
+  const pocasUnidades = resultado.items.filter((i) => i.pocasUnidades).sort(ordenUrgencia);
   // Discontinuados que todavía tienen stock o vendieron: no se piden, pero conviene verlos.
   const discontinuadosConMovimiento = resultado.items
     .filter((i) => i.avisos.includes("DISCONTINUADO") && (i.stock > 0 || i.ventaDiaria > 0))
@@ -942,6 +944,7 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
       conSugerencia: items.length,
       discontinuados: totalDiscontinuados,
       ventaMuyLenta: ventaMuyLenta.length,
+      pocasUnidades: pocasUnidades.length,
       enRiesgoDeVencer: enRiesgo.length,
       unidadesVencidas: Math.round(enRiesgo.reduce((s, i) => s + i.vencidas, 0)),
       unidadesPorVencer: Math.round(enRiesgo.reduce((s, i) => s + i.porVencer, 0)),
@@ -949,6 +952,7 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
     items,
     discontinuadosConMovimiento,
     ventaMuyLenta,
+    pocasUnidades,
     enRiesgo,
   });
 }

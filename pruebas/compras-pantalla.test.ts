@@ -8,7 +8,7 @@ import {
 function item(o: Partial<ItemCompra>): ItemCompra {
   return {
     productoId: "r", codigo: "1", nombre: "Prod", categoria: null, proveedores: [], stock: 0, ventaDiaria: 1,
-    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, formatoCompra: "PACK", paso: 6, necesidadReal: 12, unidadesVendidas: 30, stockVendible: 0, vencidas: 0, porVencer: 0, primerVencimiento: null, ventaMuyLenta: false, objetivo: 15, sugerido: 12,
+    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, formatoCompra: "PACK", paso: 6, necesidadReal: 12, unidadesVendidas: 30, stockVendible: 0, vencidas: 0, porVencer: 0, primerVencimiento: null, ventaMuyLenta: false, pocasUnidades: false, objetivo: 15, sugerido: 12,
     avisos: [], ...o,
   };
 }

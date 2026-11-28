@@ -370,3 +370,40 @@ test("sin información de lotes, todo el stock es vendible (no cambia nada)", ()
   assert.equal(it.vencidas, 0);
   assert.equal(it.porVencer, 0);
 });
+
+// --- Lista "faltan pocas unidades" (28-11-2026) ---
+
+test("faltan pocas unidades pero el stock todavía rinde: no hace falta avisar", () => {
+  // 3 u/día, objetivo 45; stock 44 → falta 1 pero alcanza casi 15 días: no es urgente.
+  const it = calcularComprasSugeridas(
+    [producto({ proveedores: ["ARCOR"], multiplo: 24, stock: 44, ventas: ventasParejas(180, 60) })], { hoy: HOY },
+  ).items[0];
+  assert.equal(it.necesidadReal, 1);
+  assert.equal(it.sugerido, 0);
+  assert.equal(it.pocasUnidades, false);
+});
+
+test("pocas unidades: aparece cuando falta poco y el stock se acaba en menos de 7 días", () => {
+  // Cobertura grande vía parámetro: 1 u/día, cobertura 8 días → objetivo 8; stock 6 → faltan 2; alcanza 6 días (< 7).
+  const it = calcularComprasSugeridas(
+    [producto({ proveedores: ["ARCOR"], multiplo: 6, stock: 6, ventas: ventasParejas(60, 60) })],
+    { hoy: HOY, coberturaGeneralDias: 8, factorGeneral: 1 },
+  ).items[0];
+  assert.equal(it.necesidadReal, 2);
+  assert.equal(it.sugerido, 0);
+  assert.equal(it.diasAlcanza, 6);
+  assert.equal(it.pocasUnidades, true);
+});
+
+test("pocas unidades no aplica a caja cerrada, a venta muy lenta ni a faltantes de 3 o más", () => {
+  const base = { multiplo: 6, stock: 6, ventas: ventasParejas(60, 60) };
+  const par = { hoy: HOY, coberturaGeneralDias: 8, factorGeneral: 1 };
+  const caja = calcularComprasSugeridas([producto({ ...base, proveedores: ["COCA COLA GOYA"] })], par).items[0];
+  assert.equal(caja.pocasUnidades, false);
+  const lenta = calcularComprasSugeridas([producto({ ...base, proveedores: ["ARCOR"], ventas: [{ fecha: HOY, cantidad: 2 }] })], par).items[0];
+  assert.equal(lenta.pocasUnidades, false);
+  const tres = calcularComprasSugeridas([producto({ ...base, proveedores: ["ARCOR"], stock: 5 })], par).items[0];
+  assert.equal(tres.necesidadReal, 3);
+  assert.equal(tres.sugerido, 3);
+  assert.equal(tres.pocasUnidades, false);
+});

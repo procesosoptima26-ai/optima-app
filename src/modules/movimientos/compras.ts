@@ -39,6 +39,7 @@ export type ItemCompra = {
   necesidadReal: number;
   unidadesVendidas: number;
   ventaMuyLenta: boolean;
+  pocasUnidades: boolean;
   sugerido: number;
   avisos: readonly AvisoCompra[];
 };

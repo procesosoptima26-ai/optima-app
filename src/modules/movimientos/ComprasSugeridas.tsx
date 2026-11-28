@@ -32,6 +32,7 @@ type Resumen = {
   conSugerencia: number;
   discontinuados?: number;
   ventaMuyLenta?: number;
+  pocasUnidades?: number;
   enRiesgoDeVencer?: number;
   unidadesVencidas?: number;
   unidadesPorVencer?: number;
@@ -51,6 +52,7 @@ type Respuesta = {
   items?: ItemCompra[];
   discontinuadosConMovimiento?: Discontinuado[];
   ventaMuyLenta?: ItemCompra[];
+  pocasUnidades?: ItemCompra[];
   enRiesgo?: ItemRiesgo[];
 };
 
@@ -65,6 +67,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [discontinuados, setDiscontinuados] = useState<Discontinuado[]>([]);
   const [lentos, setLentos] = useState<ItemCompra[]>([]);
+  const [pocas, setPocas] = useState<ItemCompra[]>([]);
   const [enRiesgo, setEnRiesgo] = useState<ItemRiesgo[]>([]);
   const [hoy, setHoy] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -81,6 +84,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const refLentos = useRef<HTMLDivElement>(null);
   const refDiscontinuados = useRef<HTMLDivElement>(null);
   const refRiesgo = useRef<HTMLDivElement>(null);
+  const refPocas = useRef<HTMLDivElement>(null);
 
   function irA(ref: { current: HTMLElement | null }) {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -115,6 +119,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
         setItems(datos.items ?? []);
         setDiscontinuados(datos.discontinuadosConMovimiento ?? []);
         setLentos(datos.ventaMuyLenta ?? []);
+        setPocas(datos.pocasUnidades ?? []);
         setEnRiesgo(datos.enRiesgo ?? []);
         setResumen(datos.resumen ?? null);
         setHoy(datos.hoy ?? "");
@@ -135,6 +140,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
     setItems([]);
     setDiscontinuados([]);
     setLentos([]);
+    setPocas([]);
     setEnRiesgo([]);
     setResumen(null);
     setProveedor("");
@@ -201,6 +207,11 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
             {(resumen.ventaMuyLenta ?? 0) > 0 && (
               <button type="button" className="compras-contador" onClick={() => irA(refLentos)}>
                 <span>Venta muy lenta</span><strong>{resumen.ventaMuyLenta}</strong><em>ver lista ↓</em>
+              </button>
+            )}
+            {(resumen.pocasUnidades ?? 0) > 0 && (
+              <button type="button" className="compras-contador" onClick={() => irA(refPocas)}>
+                <span>Faltan pocas unidades</span><strong>{resumen.pocasUnidades}</strong><em>ver lista ↓</em>
               </button>
             )}
             {(resumen.enRiesgoDeVencer ?? 0) > 0 && (
@@ -277,6 +288,27 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                       <span>Código {i.codigo} · {i.proveedores.length > 0 ? i.proveedores.join(" / ") : "(sin proveedor)"}</span>
                       <p>Vendió {formatear(i.unidadesVendidas)} u. en 60 días · Stock {formatear(i.stock)} u.</p>
                       <p>{textoPedidoReal(i)}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {pocas.length > 0 && (
+            <div className="compras-grupo" ref={refPocas}>
+              <h4>
+                Faltan pocas unidades{" "}
+                <small>({pocas.length} · rotan y el stock se acaba pronto, pero faltan 1 o 2 u. y no llegan al pedido mínimo de 3; pedilos con otro pedido si querés)</small>
+              </h4>
+              <button type="button" className="compras-volver" onClick={() => irA(refResumen)}>↑ Volver al resumen</button>
+              <div className="mov-history">
+                {pocas.map((i) => (
+                  <article key={`pocas-${i.productoId}`} className="mov-history-item">
+                    <div>
+                      <strong>{i.nombre}</strong>
+                      <span>Código {i.codigo} · {i.proveedores.length > 0 ? i.proveedores.join(" / ") : "(sin proveedor)"} · Vende {formatear(i.ventaDiaria)} por día</span>
+                      <p>{textoStock(i)} ({textoDiasAlcanza(i)}) · Faltan {formatear(i.necesidadReal)} u. para llegar al objetivo</p>
                     </div>
                   </article>
                 ))}

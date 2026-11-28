@@ -1567,8 +1567,9 @@
 .mov-selector-elegidos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
 .mov-selector-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: #e6f0ff; color: #12315f; font-size: 14px; }
 .mov-selector-chip button { border: 0; background: transparent; cursor: pointer; font-size: 14px; padding: 0; }
-.mov-selector-lista { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid #c9d3e3; border-radius: 8px; background: #fff; max-height: 220px; overflow-y: auto; }
-.mov-selector-lista button { width: 100%; text-align: left; border: 0; background: transparent; padding: 8px; font-size: 15px; cursor: pointer; border-radius: 6px; }
-.mov-selector-lista button:hover { background: #f0f4fb; }
-.mov-selector-nueva { color: #0b5c2e; font-weight: 600; }
+.mov-selector-lista { list-style: none; margin: 6px 0 0; padding: 0; border: 2px solid #1f4e9c; border-radius: 10px; background: #ffffff; max-height: 240px; overflow-y: auto; box-shadow: 0 4px 12px rgba(18, 49, 95, 0.18); }
+.mov-selector-lista li + li { border-top: 1px solid #dbe3f0; }
+.mov-selector-lista button { display: block; width: 100%; text-align: left; border: 0; background: #ffffff; color: #12315f; padding: 12px 14px; font-size: 16px; font-weight: 600; cursor: pointer; border-radius: 0; }
+.mov-selector-lista button:hover, .mov-selector-lista button:active { background: #e6f0ff; color: #0b2447; }
+.mov-selector-lista .mov-selector-nueva { background: #e8f7ee; color: #0b5c2e; font-weight: 700; }
 .mov-selector-cerrar { align-self: flex-start; border: 0; background: transparent; color: #55627a; font-size: 13px; cursor: pointer; padding: 4px 0; }

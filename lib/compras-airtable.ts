@@ -282,6 +282,18 @@ export async function leerProveedoresDeEmpresa(empresaId: string): Promise<Map<s
   return salida;
 }
 
+/**
+ * Enlace directo para abrir un proveedor en Airtable (para el mail de "proveedor nuevo").
+ * Solo lo abre quien tenga acceso a la base. Si no se puede armar, devuelve undefined.
+ */
+export function enlaceProveedorAirtable(proveedorId: string): string | undefined {
+  if (!REGISTRO_ID.test(proveedorId)) return undefined;
+  try {
+    const { baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");
+    return `https://airtable.com/${baseId}/${TABLA_PROVEEDORES_ID}/${proveedorId}`;
+  } catch { return undefined; }
+}
+
 /** Crea un proveedor con SOLO el nombre fantasía y su empresa; administración completa el resto después. */
 export async function crearProveedorMinimo(nombre: string, empresaId: string): Promise<string> {
   const { token, baseId } = configTablaOperativa("AIRTABLE_MOVIMIENTOS_BASE_ID");

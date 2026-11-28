@@ -20,6 +20,8 @@ export type DatosAvisoProveedorNuevo = {
   pantalla: string;
   codigoProducto?: string | number;
   productoNombre?: string;
+  /** Enlace directo para abrir el proveedor y completar sus datos. */
+  enlace?: string;
 };
 
 export type DependenciasAviso = {
@@ -44,6 +46,8 @@ export function armarCorreoProveedorNuevo(d: DatosAvisoProveedorNuevo, para: str
     "",
     "El proveedor quedó cargado solo con el nombre. Falta completar: razón social, CUIT, dirección,",
     "contacto, teléfono, condición de IVA y forma de pago (tabla PROVEEDORES).",
+    "",
+    d.enlace ? `Completalo desde acá: ${d.enlace}` : "",
     "",
     "OPTIMA",
   ];

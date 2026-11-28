@@ -4,6 +4,7 @@ import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
 import { ErrorSolicitud, obtenerOpciones, prepararAltaProducto } from "../lib/producto-alta.js";
 import { avisarProveedorNuevo } from "../lib/aviso-proveedor-nuevo.js";
+import { enlaceProveedorAirtable } from "../lib/compras-airtable.js";
 import { limpiarOpcion } from "../lib/producto-opciones.js";
 
 dotenv.config({
@@ -244,6 +245,7 @@ async function crearProducto(payload: CrearProductoPayload, empresaId: string) {
     await avisarProveedorNuevo({
       empresaId,
       proveedorNombre: alta.proveedor.nombre,
+      enlace: enlaceProveedorAirtable(alta.proveedor.id),
       pantalla: "Recepción / Ventas",
       codigoProducto: busqueda.codigoNormalizado,
       productoNombre: typeof alta.campos.PRODUCTO === "string" ? alta.campos.PRODUCTO : undefined,

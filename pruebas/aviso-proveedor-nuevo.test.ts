@@ -56,3 +56,11 @@ test("si algo lanza error, nunca se propaga (el alta del producto no se frena)",
   });
   assert.equal(n2, 1);
 });
+
+test("si hay enlace, el mail lo incluye; si no hay, no deja renglones vacíos de más", () => {
+  const con = armarCorreoProveedorNuevo({ ...datos, enlace: "https://airtable.com/appX/tblY/recZ" }, "a@x.com");
+  assert.match(con.texto, /Completalo desde acá: https:\/\/airtable\.com\/appX\/tblY\/recZ/);
+  const sin = armarCorreoProveedorNuevo(datos, "a@x.com");
+  assert.doesNotMatch(sin.texto, /Completalo desde acá/);
+  assert.doesNotMatch(sin.texto, /\n\n\n/);
+});

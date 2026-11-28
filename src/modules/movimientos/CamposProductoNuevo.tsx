@@ -67,6 +67,8 @@ type PropsSelector = {
   elegidos: string[];
   multiple?: boolean;
   obligatorio?: boolean;
+  /** Frase corta que explica qué va en el campo (se muestra debajo del nombre). */
+  ayuda?: string;
   deshabilitado?: boolean;
   onCambio: (valores: string[]) => void;
 };
@@ -74,7 +76,7 @@ type PropsSelector = {
 const MAXIMO_SUGERENCIAS = 8;
 
 /** Lista desplegable con buscador: elegís una opción existente o agregás una nueva con control de parecidos. */
-function SelectorOpcion({ etiqueta, campo, opciones, elegidos, multiple, obligatorio, deshabilitado, onCambio }: PropsSelector) {
+function SelectorOpcion({ etiqueta, campo, opciones, elegidos, multiple, obligatorio, ayuda, deshabilitado, onCambio }: PropsSelector) {
   const [busqueda, setBusqueda] = useState("");
   const [abierto, setAbierto] = useState(false);
 
@@ -102,6 +104,7 @@ function SelectorOpcion({ etiqueta, campo, opciones, elegidos, multiple, obligat
   return (
     <div className="mov-field mov-selector">
       <span>{etiqueta}{obligatorio ? "" : " (opcional)"}</span>
+      {ayuda && <small className="mov-selector-ayuda">{ayuda}</small>}
       {elegidos.length > 0 && (
         <div className="mov-selector-elegidos">
           {elegidos.map((e) => (
@@ -196,15 +199,15 @@ export default function CamposProductoNuevo({ valor, onCambio, deshabilitado, no
   const proveedorEsNuevo = valor.proveedor[0] !== undefined && !opcionExistente(valor.proveedor[0], nombresProveedores);
   return (
     <div className="mov-new-product-form">
-      <SelectorOpcion etiqueta="Producto" campo="producto" obligatorio opciones={opciones.producto}
+      <SelectorOpcion etiqueta="Producto" campo="producto" obligatorio ayuda="¿Qué es? Ej: Pan" opciones={opciones.producto}
         elegidos={valor.producto} deshabilitado={deshabilitado} onCambio={(v) => cambiar({ producto: v })} />
       <div className="mov-two-columns">
-        <SelectorOpcion etiqueta="Marca" campo="marca" opciones={opciones.marca}
+        <SelectorOpcion etiqueta="Marca" campo="marca" ayuda="¿De quién es? Ej: Belia" opciones={opciones.marca}
           elegidos={valor.marca} deshabilitado={deshabilitado} onCambio={(v) => cambiar({ marca: v })} />
-        <SelectorOpcion etiqueta="Presentación" campo="presentacion" opciones={opciones.presentacion}
+        <SelectorOpcion etiqueta="Presentación" campo="presentacion" ayuda="¿Cuánto trae? Ej: 450gr" opciones={opciones.presentacion}
           elegidos={valor.presentacion} deshabilitado={deshabilitado} onCambio={(v) => cambiar({ presentacion: v })} />
       </div>
-      <SelectorOpcion etiqueta="Especificación" campo="especificacion" multiple opciones={opciones.especificacion}
+      <SelectorOpcion etiqueta="Especificación" campo="especificacion" multiple ayuda="¿Qué lo diferencia de otros con el mismo nombre? Ej: Lactal Integral" opciones={opciones.especificacion}
         elegidos={valor.especificacion} deshabilitado={deshabilitado} onCambio={(v) => cambiar({ especificacion: v })} />
       <div className="mov-two-columns">
         <SelectorOpcion etiqueta="Proveedor" campo="proveedor" opciones={nombresProveedores}

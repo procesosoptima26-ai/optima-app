@@ -1573,3 +1573,4 @@
 .mov-selector-lista button:hover, .mov-selector-lista button:active { background: #e6f0ff; color: #0b2447; }
 .mov-selector-lista .mov-selector-nueva { background: #e8f7ee; color: #0b5c2e; font-weight: 700; }
 .mov-selector-cerrar { align-self: flex-start; border: 0; background: transparent; color: #55627a; font-size: 13px; cursor: pointer; padding: 4px 0; }
+.mov-selector-ayuda { display: block; color: #55627a; font-size: 13px; font-weight: 400; margin: 2px 0 6px; }

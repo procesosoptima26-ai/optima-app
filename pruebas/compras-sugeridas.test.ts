@@ -320,3 +320,16 @@ test("agruparPorProveedor deja afuera la venta muy lenta", () => {
   const ids = agruparPorProveedor(r.items).flatMap((g) => g.items.map((i) => i.productoId));
   assert.deepEqual(ids, ["n"]);
 });
+
+test("proveedor por unidad: faltantes de menos de 3 unidades no se piden; 3 o más sí", () => {
+  // 2 por día, cobertura 15 días → objetivo 30. Con stock 28 faltan 2; con stock 27 faltan 3.
+  const con = (stock: number) => calcularComprasSugeridas([producto({ proveedores: ["ARCOR"], multiplo: 24, stock, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(con(28).necesidadReal, 2);
+  assert.equal(con(28).sugerido, 0);
+  assert.equal(con(27).sugerido, 3);
+  // Con caja cerrada la regla no cambia: se sigue pidiendo el pack.
+  const caja = calcularComprasSugeridas([producto({ proveedores: ["COCA COLA GOYA"], multiplo: 6, stock: 28, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(caja.sugerido, 0); // falta menos de media caja y el stock alcanza: ya se esperaba
+  const caja2 = calcularComprasSugeridas([producto({ proveedores: ["COCA COLA GOYA"], multiplo: 6, stock: 26, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(caja2.sugerido, 6);
+});

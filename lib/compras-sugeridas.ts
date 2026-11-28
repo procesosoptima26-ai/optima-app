@@ -24,6 +24,7 @@
  * - Cada proveedor vende de una forma (compras-proveedores.ts): por unidad, caja cerrada,
  *   media caja o de a 12. El sugerido se redondea al escalón de ese proveedor, no siempre a la caja.
  *   Además de lo que se pide, se informa la necesidad real (unidades exactas que faltan).
+ * - A los proveedores que venden por unidad no se les pide menos de 3 unidades.
  * - VENTA MUY LENTA (2 unidades o menos en 60 días): no se sugiere en la lista principal,
  *   va a una lista aparte "pedir solo si querés tenerlo", para que no se venza mercadería.
  * - Producto DISCONTINUADO (pack "-" o "discontinuado" en Airtable): nunca se sugiere.
@@ -43,6 +44,8 @@ export const FRACCION_MINIMA_DE_CAJA = 0.5;
 export const DIAS_PARA_ESPERAR = 7;
 /** Venta muy lenta: esta cantidad de unidades (o menos, pero más de 0) en los últimos 60 días. */
 export const UNIDADES_VENTA_MUY_LENTA = 2;
+/** Proveedores que venden por unidad: un pedido de menos de esta cantidad no vale la pena y no se sugiere. */
+export const PEDIDO_MINIMO_POR_UNIDAD = 3;
 
 /** Códigos que no son mercadería comprable (bolsas). Se compara sin ceros a la izquierda. */
 export const CODIGOS_EXCLUIDOS_POR_DEFECTO: readonly string[] = ["10002", "10004"];
@@ -278,6 +281,8 @@ export function calcularComprasSugeridas(
       // Sin ventas y sin stock: se sugiere un pack para no perder de vista el producto.
       if (stock <= 0) sugerido = paso;
     }
+    // Pedido por unidad demasiado chico (1 o 2): no se le escribe a un proveedor por eso.
+    if (formatoCompra === "UNIDAD" && sugerido < PEDIDO_MINIMO_POR_UNIDAD) sugerido = 0;
     const ventaMuyLenta = unidades > 0 && unidades <= UNIDADES_VENTA_MUY_LENTA;
 
     items.push({

@@ -1373,7 +1373,7 @@
   .mov-stock-header .mov-refresh-button { width:100%; }
   .mov-stock-filters { grid-template-columns:1fr; gap:0; }
   .mov-stock-summary { grid-template-columns:repeat(3,1fr); gap:6px; }
-  .mov-stock-summary > div { padding:8px 5px; }
+  .mov-stock-summary > div, .mov-stock-summary > button.compras-contador { padding:8px 5px; }
   .mov-stock-summary span { font-size:8px; }
   .mov-stock-summary strong { font-size:16px; }
 }
@@ -1552,6 +1552,11 @@
 .compras-grupo { margin-top: 18px; }
 .compras-grupo h4 { margin: 0 0 8px; }
 .compras-grupo h4 small { font-weight: 400; opacity: 0.7; }
+.mov-stock-summary > button.compras-contador { padding:10px; border:1px solid var(--optima-green-dark); border-radius:14px; background:var(--optima-soft-surface); text-align:center; font:inherit; color:inherit; cursor:pointer; width:100%; }
+.mov-stock-summary > button.compras-contador:active { filter:brightness(0.95); }
+.compras-contador em { display:block; margin-top:2px; font-size:10px; font-style:normal; color:var(--optima-green-dark); }
+.compras-volver { margin:0 0 8px; padding:6px 10px; border:1px solid var(--optima-border); border-radius:10px; background:var(--optima-soft-surface); font:inherit; font-size:12px; cursor:pointer; }
+.compras-ancla { scroll-margin-top:8px; }
 .compras-aviso { display: block; margin-top: 4px; color: #9a5b00; }
 .compras-pedir { text-align: center; min-width: 64px; }
 .compras-check { flex-direction: row; align-items: center; gap: 8px; }

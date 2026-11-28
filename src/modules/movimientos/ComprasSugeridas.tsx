@@ -67,6 +67,15 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const [soloAvisos, setSoloAvisos] = useState(false);
   // Cada carga tiene un número; si el usuario cambia de sucursal o sale, las respuestas viejas se descartan.
   const cargaActual = useRef(0);
+  // Puntos de la pantalla a los que saltan los contadores (así no hay que bajar a mano).
+  const refResumen = useRef<HTMLDivElement>(null);
+  const refPedido = useRef<HTMLDivElement>(null);
+  const refLentos = useRef<HTMLDivElement>(null);
+  const refDiscontinuados = useRef<HTMLDivElement>(null);
+
+  function irA(ref: { current: HTMLElement | null }) {
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const cargar = useCallback(async () => {
     const numero = ++cargaActual.current;
@@ -172,15 +181,25 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
 
       {!error && !progreso && resumen && (
         <>
-          <div className="mov-stock-summary">
-            <div><span>Para comprar</span><strong>{items.length}</strong></div>
+          <div className="mov-stock-summary" ref={refResumen}>
+            <button type="button" className="compras-contador" onClick={() => irA(refPedido)}>
+              <span>Para comprar</span><strong>{items.length}</strong><em>ver lista ↓</em>
+            </button>
             <div><span>Con estos filtros</span><strong>{filtrados.length}</strong></div>
             <div><span>Productos evaluados</span><strong>{resumen.productosEvaluados}</strong></div>
             {(resumen.ventaMuyLenta ?? 0) > 0 && (
-              <div><span>Venta muy lenta</span><strong>{resumen.ventaMuyLenta}</strong></div>
+              <button type="button" className="compras-contador" onClick={() => irA(refLentos)}>
+                <span>Venta muy lenta</span><strong>{resumen.ventaMuyLenta}</strong><em>ver lista ↓</em>
+              </button>
             )}
             {(resumen.discontinuados ?? 0) > 0 && (
-              <div><span>Discontinuados</span><strong>{resumen.discontinuados}</strong></div>
+              discontinuados.length > 0 ? (
+                <button type="button" className="compras-contador" onClick={() => irA(refDiscontinuados)}>
+                  <span>Discontinuados</span><strong>{resumen.discontinuados}</strong><em>ver lista ↓</em>
+                </button>
+              ) : (
+                <div><span>Discontinuados</span><strong>{resumen.discontinuados}</strong></div>
+              )
             )}
           </div>
 
@@ -205,6 +224,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
           {resumen.conSugerencia === 0 && <div className="mov-empty">Con los datos actuales no hay nada para comprar.</div>}
           {resumen.conSugerencia > 0 && filtrados.length === 0 && <div className="mov-empty">No hay productos con estos filtros.</div>}
 
+          <div ref={refPedido} className="compras-ancla" />
           {grupos.map((g) => (
             <div key={g.proveedor} className="compras-grupo">
               <h4>{g.proveedor} <small>({g.items.length} productos · {formatear(g.unidades)} u.)</small></h4>
@@ -229,8 +249,9 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
           ))}
 
           {lentos.length > 0 && (
-            <div className="compras-grupo">
+            <div className="compras-grupo" ref={refLentos}>
               <h4>Venta muy lenta <small>({lentos.length} · no están en el pedido; pedilos solo si querés tenerlos)</small></h4>
+              <button type="button" className="compras-volver" onClick={() => irA(refResumen)}>↑ Volver al resumen</button>
               <div className="mov-history">
                 {lentos.map((i) => (
                   <article key={`lento-${i.productoId}`} className="mov-history-item">
@@ -247,8 +268,9 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
           )}
 
           {discontinuados.length > 0 && (
-            <div className="compras-grupo">
+            <div className="compras-grupo" ref={refDiscontinuados}>
               <h4>Marcados como discontinuados, pero con stock o ventas <small>({discontinuados.length} · no se piden; revisá si siguen)</small></h4>
+              <button type="button" className="compras-volver" onClick={() => irA(refResumen)}>↑ Volver al resumen</button>
               <div className="mov-history">
                 {discontinuados.map((d) => (
                   <article key={`disc-${d.productoId}`} className="mov-history-item">

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent } from "react";
 import BarcodeScanner from "./components/BarcodeScanner";
 import MovimientosModule from "./modules/movimientos/MovimientosModule";
+import CamposProductoNuevo, { camposNuevoVacios, cuerpoAltaProducto, type CamposNuevo } from "./modules/movimientos/CamposProductoNuevo";
 import GestionSucursales from "./modules/usuarios/GestionSucursales";
 import ConsultaEmpresa from "./modules/usuarios/ConsultaEmpresa";
 import ConsultaPlataforma from "./modules/usuarios/ConsultaPlataforma";
@@ -444,6 +445,8 @@ function App() {
   const [marca, setMarca] = useState("");
   const [presentacion, setPresentacion] = useState("");
   const [especificacion, setEspecificacion] = useState("");
+  // Producto nuevo: lo elegido en las listas (producto, marca, presentación, especificaciones, proveedor, cant. pack).
+  const [camposNuevo, setCamposNuevo] = useState<CamposNuevo>(camposNuevoVacios);
   const [sucursal, setSucursal] = useState("Bella Vista");
   const [ubicacion, setUbicacion] = useState("Galpón");
   const [sinVencimiento, setSinVencimiento] = useState(false);
@@ -749,6 +752,16 @@ function App() {
     setMarca("");
     setPresentacion("");
     setEspecificacion("");
+    setCamposNuevo(camposNuevoVacios);
+  }
+
+  // Lo elegido en las listas se copia a los campos de siempre (validaciones, nombre, guardado).
+  function cambiarCamposNuevo(nuevo: CamposNuevo) {
+    setCamposNuevo(nuevo);
+    setProducto(nuevo.producto[0] ?? "");
+    setMarca(nuevo.marca[0] ?? "");
+    setPresentacion(nuevo.presentacion[0] ?? "");
+    setEspecificacion(nuevo.especificacion.join(" "));
   }
 
   async function buscarProductoEnAirtable(codigoIngresado: string) {
@@ -1085,6 +1098,17 @@ function App() {
       ...movimiento,
       sucursal: sucursalesDisponibles.find(s => s.nombre === sucursal)?.id || usuarioSesion?.sucursalId || "",
       productoNuevo: modoEdicion ? false : estadoProducto === "nuevo",
+      // Solo producto nuevo: especificaciones elegidas, proveedor y cant. pack.
+      ...(!modoEdicion && estadoProducto === "nuevo"
+        ? (() => {
+            const alta = cuerpoAltaProducto(camposNuevo);
+            return {
+              especificaciones: alta.especificacion,
+              proveedorNuevo: alta.proveedorNuevo,
+              cantPack: alta.cantPack,
+            };
+          })()
+        : {}),
       registrosEliminados: modoEdicion ? registrosEliminadosEdicion : [],
       lotes: lotesNormalizados.map((lote) => ({
         id: lote.id,
@@ -1562,53 +1586,12 @@ function App() {
                 <span>Completá los datos para crearlo.</span>
               </div>
 
-              <div className="product-grid">
-                <div className="field-group">
-                  <label htmlFor="producto">Producto</label>
-                  <input
-                    id="producto"
-                    value={producto}
-                    onChange={(event) => setProducto(event.target.value)}
-                    placeholder="Ej: Leche"
-                    disabled={guardando}
-                  />
-                </div>
-
-                <div className="field-group">
-                  <label htmlFor="marca">Marca</label>
-                  <input
-                    id="marca"
-                    value={marca}
-                    onChange={(event) => setMarca(event.target.value)}
-                    placeholder="Ej: La Serenísima"
-                    disabled={guardando}
-                  />
-                </div>
-
-                <div className="field-group">
-                  <label htmlFor="presentacion">Presentación</label>
-                  <input
-                    id="presentacion"
-                    value={presentacion}
-                    onChange={(event) => setPresentacion(event.target.value)}
-                    placeholder="Ej: 1L"
-                    disabled={guardando}
-                  />
-                </div>
-
-                <div className="field-group">
-                  <label htmlFor="especificacion">Especificación</label>
-                  <input
-                    id="especificacion"
-                    value={especificacion}
-                    onChange={(event) =>
-                      setEspecificacion(event.target.value)
-                    }
-                    placeholder="Ej: Entera / Sin TACC"
-                    disabled={guardando}
-                  />
-                </div>
-              </div>
+              <CamposProductoNuevo
+                valor={camposNuevo}
+                onCambio={cambiarCamposNuevo}
+                deshabilitado={guardando}
+                mostrarVistaPrevia={false}
+              />
 
               {nombre && (
                 <div className="nombre-preview">

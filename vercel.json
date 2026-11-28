@@ -11,6 +11,7 @@
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/stock.ts": {
+      "maxDuration": 30,
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/stock-lotes.ts": {
@@ -21,6 +22,7 @@
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/productos-movimientos.ts": {
+      "maxDuration": 30,
       "includeFiles": "node_modules/{pg,pg-cloudflare,pg-connection-string,pg-int8,pg-pool,pg-protocol,pg-types,pgpass,postgres-array,postgres-bytea,postgres-date,postgres-interval,split2,xtend}/**"
     },
     "api/errores-movimientos.ts": {

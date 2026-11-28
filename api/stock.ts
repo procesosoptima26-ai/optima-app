@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, productoDeEmpresa, sucursalSolicitada, sucursalRealDeUbicacion } from "../lib/alcance-operativo.js";
+import { ErrorSolicitud, prepararAltaProducto } from "../lib/producto-alta.js";
 
 dotenv.config({
   path: ".env.local",
@@ -21,6 +22,14 @@ type GuardarStockPayload = {
   marca: string;
   presentacion: string;
   especificacion: string;
+  /** Producto nuevo: especificaciones elegidas (selección múltiple). Si falta, se usa `especificacion`. */
+  especificaciones?: string[];
+  /** Producto nuevo: proveedor elegido de la lista (id de Airtable). */
+  proveedorId?: string;
+  /** Producto nuevo: proveedor que no estaba en la lista (se crea solo con el nombre). */
+  proveedorNuevo?: string;
+  /** Producto nuevo: unidades por pack, opcional. */
+  cantPack?: string;
   sucursal: string;
   ubicacion: string;
   sinVencimiento: boolean;
@@ -77,23 +86,27 @@ function limpiarTexto(valor: string) {
   return valor.trim();
 }
 
-function armarCamposProductoNuevo(payload: GuardarStockPayload, empresaId: string) {
+async function armarCamposProductoNuevo(payload: GuardarStockPayload, empresaId: string) {
   const codeField = getEnv("AIRTABLE_CODE_FIELD");
-  const especificacionLimpia = limpiarTexto(payload.especificacion);
+
+  // Listas de opciones, proveedor y cant. pack: lógica común en lib/producto-alta.ts.
+  const alta = await prepararAltaProducto({
+    producto: payload.producto,
+    marca: payload.marca,
+    presentacion: payload.presentacion,
+    especificacion: payload.especificaciones ?? payload.especificacion,
+    proveedorId: payload.proveedorId,
+    proveedorNuevo: payload.proveedorNuevo,
+    cantPack: payload.cantPack,
+  }, empresaId);
 
   const fields: Record<string, unknown> = {
     [codeField]: convertirCodigoParaProductos(payload.codigo),
-    PRODUCTO: limpiarTexto(payload.producto),
-    MARCA: limpiarTexto(payload.marca),
-    "PRESENTACIÓN": limpiarTexto(payload.presentacion),
     EMPRESA: [empresaId],
+    ...alta.campos,
   };
 
-  if (especificacionLimpia) {
-    fields["ESPECIFICACIÓN"] = [especificacionLimpia];
-  }
-
-  return fields;
+  return { fields, recordar: alta.recordar };
 }
 
 async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: string) {
@@ -106,6 +119,8 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: s
     productosTable
   )}`;
 
+  const alta = await armarCamposProductoNuevo(payload, empresaId);
+
   const response = await fetch(url, {
     method: "POST",
     headers: {
@@ -115,7 +130,7 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: s
     body: JSON.stringify({
       records: [
         {
-          fields: armarCamposProductoNuevo(payload, empresaId),
+          fields: alta.fields,
         },
       ],
       typecast: true,
@@ -127,6 +142,8 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: s
     console.error("Error creando producto:", data);
     throw new Error("No se pudo crear el producto nuevo en Airtable");
   }
+
+  alta.recordar();
 }
 
 /** Catálogo compartido: cada código consultado tiene que estar asignado
@@ -591,6 +608,9 @@ export default async function handler(
       registrosEliminados: resultadoActualizacion.eliminados,
     });
   } catch (error) {
+    if (error instanceof ErrorSolicitud) {
+      return res.status(400).json({ error: error.message });
+    }
     console.error(error);
 
     return res.status(500).json({

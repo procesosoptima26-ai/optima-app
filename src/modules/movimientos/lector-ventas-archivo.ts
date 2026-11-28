@@ -59,6 +59,20 @@ export function codigoDeBalanza(codigo: string): string {
   return interno === "0" ? codigo : interno;
 }
 
+/**
+ * Equivalencias: un producto vendido como "x2" de otro (1024 = 2 × 1023).
+ * Misma tabla que lib/ventas-equivalencias.ts.
+ */
+export const EQUIVALENCIAS_VENTA: Readonly<Record<string, { codigoBase: string; factor: number }>> = {
+  "1024": { codigoBase: "1023", factor: 2 },
+};
+
+export function aplicarEquivalenciaVenta(codigo: string, cantidad: number): { codigo: string; cantidad: number } {
+  const eq = EQUIVALENCIAS_VENTA[codigo];
+  if (!eq) return { codigo, cantidad };
+  return { codigo: eq.codigoBase, cantidad: Math.round(cantidad * eq.factor * 1000) / 1000 };
+}
+
 /** Deja solo dígitos, quita ceros a la izquierda y convierte las etiquetas de balanza. */
 export function normalizarCodigoVenta(valor: string): string {
   const limpio = valor.trim().replace(/\s+/g, "");
@@ -397,7 +411,8 @@ export function interpretarFilas(filas: string[][]): LecturaVentas {
       });
       continue;
     }
-    lineas.push({ fila: numeroFila, codigo, producto, cantidad });
+    const equivalente = aplicarEquivalenciaVenta(codigo, cantidad);
+    lineas.push({ fila: numeroFila, codigo: equivalente.codigo, producto, cantidad: equivalente.cantidad });
   }
   return { lineas, errores };
 }

@@ -13,6 +13,7 @@ import {
 } from "../lib/ventas-archivo-airtable.js";
 import { tomarBloqueoVentas, liberarBloqueoVentas } from "../lib/bloqueo-ventas.js";
 import { codigoDeBalanza } from "../lib/ventas-balanza.js";
+import { aplicarEquivalenciaVenta } from "../lib/ventas-equivalencias.js";
 import { calcularComprasSugeridas, ordenUrgencia } from "../lib/compras-sugeridas.js";
 import {
   armarProductosCompra, clavePackDeSucursal, diasDeVentana, esRelevanteParaSucursal,
@@ -738,7 +739,9 @@ async function manejarVentasArchivo(
       return res.status(400).json({ ok: false, error: "Hay líneas con código o cantidad inválidos." });
     }
     // Etiquetas de balanza (16 dígitos, empiezan con 24) → código interno del producto.
-    lineas.push({ codigo: codigoDeBalanza(codigo), producto: textoCorto(cruda?.producto, 200), cantidad });
+    // Productos "x2" de otro (1024 = 2 × 1023): se cuentan como unidades del producto base.
+    const convertida = aplicarEquivalenciaVenta(codigoDeBalanza(codigo), cantidad);
+    lineas.push({ codigo: convertida.codigo, producto: textoCorto(cruda?.producto, 200), cantidad: convertida.cantidad });
   }
   if (new Set(lineas.map((l) => l.codigo)).size > MAX_PRODUCTOS_POR_ARCHIVO) {
     return res.status(400).json({ ok: false, error: "El archivo tiene demasiados productos." });

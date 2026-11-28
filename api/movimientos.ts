@@ -12,6 +12,7 @@ import {
   leerProductosYaCargados, leerResultadoVentas,
 } from "../lib/ventas-archivo-airtable.js";
 import { tomarBloqueoVentas, liberarBloqueoVentas } from "../lib/bloqueo-ventas.js";
+import { codigoDeBalanza } from "../lib/ventas-balanza.js";
 import { calcularComprasSugeridas, ordenUrgencia } from "../lib/compras-sugeridas.js";
 import {
   armarProductosCompra, clavePackDeSucursal, diasDeVentana, esRelevanteParaSucursal,
@@ -736,7 +737,8 @@ async function manejarVentasArchivo(
         cantidad <= 0 || cantidad > 100000) {
       return res.status(400).json({ ok: false, error: "Hay líneas con código o cantidad inválidos." });
     }
-    lineas.push({ codigo, producto: textoCorto(cruda?.producto, 200), cantidad });
+    // Etiquetas de balanza (16 dígitos, empiezan con 24) → código interno del producto.
+    lineas.push({ codigo: codigoDeBalanza(codigo), producto: textoCorto(cruda?.producto, 200), cantidad });
   }
   if (new Set(lineas.map((l) => l.codigo)).size > MAX_PRODUCTOS_POR_ARCHIVO) {
     return res.status(400).json({ ok: false, error: "El archivo tiene demasiados productos." });

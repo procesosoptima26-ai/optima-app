@@ -49,11 +49,21 @@ function normalizarEncabezado(texto: string): string {
   return sinTildes(texto).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/** Deja solo dígitos y quita ceros a la izquierda (igual que el servidor). */
+/**
+ * Códigos de balanza: etiqueta de 16 dígitos que empieza con 24; los dígitos 3 a 7 son el
+ * código del producto (2401002000222750 → 1002). Misma regla que lib/ventas-balanza.ts.
+ */
+export function codigoDeBalanza(codigo: string): string {
+  if (!/^24\d{14}$/.test(codigo)) return codigo;
+  const interno = codigo.slice(2, 7).replace(/^0+(?=\d)/, "");
+  return interno === "0" ? codigo : interno;
+}
+
+/** Deja solo dígitos, quita ceros a la izquierda y convierte las etiquetas de balanza. */
 export function normalizarCodigoVenta(valor: string): string {
   const limpio = valor.trim().replace(/\s+/g, "");
   if (!/^\d+$/.test(limpio)) return "";
-  return limpio.replace(/^0+(?=\d)/, "");
+  return codigoDeBalanza(limpio.replace(/^0+(?=\d)/, ""));
 }
 
 export function convertirCantidad(valor: string): number | null {

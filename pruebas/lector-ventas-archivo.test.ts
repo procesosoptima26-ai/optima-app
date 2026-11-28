@@ -75,6 +75,11 @@ test("normalización de códigos y cantidades", () => {
   assert.equal(normalizarCodigoVenta(" 0001023 "), "1023");
   assert.equal(normalizarCodigoVenta("77 90"), "7790");
   assert.equal(normalizarCodigoVenta("12a"), "");
+  // Etiquetas de balanza: los dígitos 3 a 7 son el código del producto.
+  assert.equal(normalizarCodigoVenta("2401002000222750"), "1002");
+  assert.equal(normalizarCodigoVenta(" 2401123000679000 "), "1123");
+  assert.equal(normalizarCodigoVenta("7790045002123"), "7790045002123");
+  assert.equal(normalizarCodigoVenta("2400000000123456"), "2400000000123456");
   assert.equal(convertirCantidad("1.234,56"), 1234.56);
   assert.equal(convertirCantidad("1,234.56"), 1234.56);
   assert.equal(convertirCantidad("0,1"), 0.1);

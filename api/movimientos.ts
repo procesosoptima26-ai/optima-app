@@ -899,7 +899,9 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
   });
   const relevantes = armados.filter(esRelevanteParaSucursal);
   const resultado = calcularComprasSugeridas(relevantes, { hoy });
-  const items = resultado.items.filter((i) => i.sugerido > 0).sort(ordenUrgencia);
+  // Venta muy lenta (2 u. o menos en 60 días): no entran al pedido, van en una lista aparte.
+  const items = resultado.items.filter((i) => i.sugerido > 0 && !i.ventaMuyLenta).sort(ordenUrgencia);
+  const ventaMuyLenta = resultado.items.filter((i) => i.sugerido > 0 && i.ventaMuyLenta).sort(ordenUrgencia);
   // Discontinuados que todavía tienen stock o vendieron: no se piden, pero conviene verlos.
   const discontinuadosConMovimiento = resultado.items
     .filter((i) => i.avisos.includes("DISCONTINUADO") && (i.stock > 0 || i.ventaDiaria > 0))
@@ -917,9 +919,11 @@ async function manejarComprasSugeridas(req: VercelRequest, res: VercelResponse) 
       excluidos: resultado.excluidos,
       conSugerencia: items.length,
       discontinuados: totalDiscontinuados,
+      ventaMuyLenta: ventaMuyLenta.length,
     },
     items,
     discontinuadosConMovimiento,
+    ventaMuyLenta,
   });
 }
 

@@ -29,7 +29,7 @@ function producto(extra: Partial<ProductoCompra> = {}): ProductoCompra {
     codigo: "7790000000001",
     nombre: "Producto de prueba",
     categoria: null,
-    proveedores: ["ARCOR"],
+    proveedores: ["Proveedor de prueba"],
     multiplo: 6,
     stock: 0,
     ventas: [],
@@ -271,4 +271,52 @@ test("sugeridoConUmbral: casos límite", () => {
   assert.equal(sugeridoConUmbral(2, 6, null), 6);
   assert.equal(sugeridoConUmbral(3, 6, 10), 6);
   assert.equal(sugeridoConUmbral(0.4, 1, 20), 1);
+});
+
+// --- Pedido real, formato por proveedor y venta muy lenta (27-11-2026) ---
+
+test("proveedor que vende por unidad: se pide la cantidad exacta, no la caja", () => {
+  // 120 u/60 días = 2 por día; objetivo 30; stock 10 → faltan 20. Pack 24.
+  const unidad = calcularComprasSugeridas([producto({ proveedores: ["ARCOR"], multiplo: 24, stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(unidad.formatoCompra, "UNIDAD");
+  assert.equal(unidad.necesidadReal, 20);
+  assert.equal(unidad.sugerido, 20);
+  const caja = calcularComprasSugeridas([producto({ proveedores: ["COCA COLA GOYA"], multiplo: 24, stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(caja.formatoCompra, "PACK");
+  assert.equal(caja.necesidadReal, 20);
+  assert.equal(caja.sugerido, 24);
+});
+
+test("media caja: redondea al medio pack; huevos: de a 12", () => {
+  const medio = calcularComprasSugeridas([producto({ proveedores: ["DINPRO S.A."], multiplo: 24, stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(medio.paso, 12);
+  assert.equal(medio.sugerido, 24); // faltan 20 → 2 medias cajas
+  const huevos = calcularComprasSugeridas([producto({ proveedores: ["HUEVOS VIOLA"], multiplo: 30, stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(huevos.sugerido, 24); // faltan 20 → 2 docenas
+});
+
+test("proveedor sin formato conocido: se mantiene la caja cerrada", () => {
+  const r = calcularComprasSugeridas([producto({ proveedores: ["Nuevo S.A."], multiplo: 6, stock: 10, ventas: ventasParejas(120, 60) })], { hoy: HOY }).items[0];
+  assert.equal(r.formatoCompra, "PACK");
+  assert.equal(r.sugerido, 24);
+});
+
+test("venta muy lenta: 1 o 2 unidades en 60 días se marcan; 3 o más no; 0 conserva su aviso", () => {
+  const lento = (u: number) => calcularComprasSugeridas([producto({ multiplo: 1, stock: 0, ventas: [{ fecha: HOY, cantidad: u }] })], { hoy: HOY }).items[0];
+  assert.equal(lento(1).ventaMuyLenta, true);
+  assert.equal(lento(2).ventaMuyLenta, true);
+  assert.equal(lento(3).ventaMuyLenta, false);
+  assert.equal(lento(2).unidadesVendidas, 2);
+  const cero = calcularComprasSugeridas([producto({ multiplo: 6, stock: 0, ventas: [] })], { hoy: HOY }).items[0];
+  assert.equal(cero.ventaMuyLenta, false);
+  assert.ok(cero.avisos.includes("SIN_VENTAS_RECIENTES"));
+});
+
+test("agruparPorProveedor deja afuera la venta muy lenta", () => {
+  const r = calcularComprasSugeridas([
+    producto({ productoId: "l", multiplo: 1, stock: 0, ventas: [{ fecha: HOY, cantidad: 2 }] }),
+    producto({ productoId: "n", multiplo: 1, stock: 0, ventas: ventasParejas(120, 60) }),
+  ], { hoy: HOY });
+  const ids = agruparPorProveedor(r.items).flatMap((g) => g.items.map((i) => i.productoId));
+  assert.deepEqual(ids, ["n"]);
 });

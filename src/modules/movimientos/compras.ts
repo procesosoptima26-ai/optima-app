@@ -27,10 +27,17 @@ export type ItemCompra = {
   coberturaDias: number;
   factorTemporada: number;
   multiplo: number;
+  formatoCompra: FormatoCompra;
+  paso: number;
   objetivo: number;
+  necesidadReal: number;
+  unidadesVendidas: number;
+  ventaMuyLenta: boolean;
   sugerido: number;
   avisos: readonly AvisoCompra[];
 };
+
+export type FormatoCompra = "UNIDAD" | "PACK" | "MEDIO_PACK" | "DOCENA";
 
 export const SIN_PROVEEDOR = "(sin proveedor)";
 
@@ -49,6 +56,33 @@ export function textoCriterio(item: Pick<ItemCompra, "grupoNombre" | "coberturaD
   if (f === 1) return base;
   const texto = String(f).replace(".", ",");
   return `${base} · temporada ${f > 1 ? "alta" : "baja"} (×${texto})`;
+}
+
+/** Cómo vende el proveedor, en palabras. */
+export function textoFormato(formato: FormatoCompra, pack: number): string {
+  const p = Math.round(pack * 100) / 100;
+  switch (formato) {
+    case "UNIDAD": return "se compra por unidad";
+    case "PACK": return `caja cerrada de ${p}`;
+    case "MEDIO_PACK": return `media caja (${Math.max(1, Math.ceil(pack / 2))}) o caja de ${p}`;
+    case "DOCENA": return "de a 12 unidades";
+  }
+}
+
+/**
+ * Línea "pedido real": la necesidad exacta en unidades junto a lo que se pide,
+ * para ver cuánto sobra por comprar en caja cerrada. Vacía si coinciden.
+ */
+export function textoPedidoReal(
+  item: Pick<ItemCompra, "necesidadReal" | "sugerido" | "formatoCompra" | "multiplo">,
+): string {
+  const n = (x: number) => String(Math.round(x * 10) / 10).replace(".", ",");
+  if (item.formatoCompra === "UNIDAD") return "Necesidad real: " + n(item.necesidadReal) + " u. (el proveedor vende por unidad)";
+  const como = textoFormato(item.formatoCompra, item.multiplo);
+  if (item.necesidadReal === item.sugerido) return "Necesidad real: " + n(item.necesidadReal) + " u. (" + como + ")";
+  const sobra = Math.round((item.sugerido - item.necesidadReal) * 10) / 10;
+  const resto = sobra > 0 ? ", sobran " + n(sobra) : "";
+  return "Necesidad real: " + n(item.necesidadReal) + " u. · se pide " + n(item.sugerido) + " (" + como + resto + ")";
 }
 
 export function textoAviso(aviso: string): string {
@@ -130,7 +164,7 @@ function num(n: number, decimales = 1): string {
 
 /** CSV para Excel en Argentina (separador ";" y coma decimal), un pedido agrupado por proveedor. */
 export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
-  const filas = ["Proveedor;Código;Producto;Stock actual;Venta diaria;Días que alcanza;Pack;Pedir (unidades);Grupo;Cobertura (días);Factor temporada;Avisos"];
+  const filas = ["Proveedor;Código;Producto;Stock actual;Venta diaria;Días que alcanza;Pack;Necesidad real (unidades);Cómo compra el proveedor;Pedir (unidades);Grupo;Cobertura (días);Factor temporada;Avisos"];
   for (const g of grupos) {
     for (const i of g.items) {
       filas.push([
@@ -141,6 +175,8 @@ export function pedidoACsv(grupos: readonly GrupoPedido[]): string {
         num(i.ventaDiaria, 2),
         i.diasAlcanza === null ? "" : num(i.diasAlcanza, 1),
         num(i.multiplo, 2),
+        num(i.necesidadReal, 0),
+        celda(textoFormato(i.formatoCompra, i.multiplo)),
         num(i.sugerido, 2),
         celda(i.grupoNombre),
         num(i.coberturaDias, 0),

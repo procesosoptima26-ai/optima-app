@@ -8,6 +8,7 @@ import {
   textoAviso,
   textoCriterio,
   textoDiasAlcanza,
+  textoPedidoReal,
   type ItemCompra,
 } from "./compras";
 
@@ -27,6 +28,7 @@ type Resumen = {
   excluidos: number;
   conSugerencia: number;
   discontinuados?: number;
+  ventaMuyLenta?: number;
 };
 
 type Discontinuado = { productoId: string; codigo: string; nombre: string; stock: number; ventaDiaria: number };
@@ -42,6 +44,7 @@ type Respuesta = {
   resumen?: Resumen;
   items?: ItemCompra[];
   discontinuadosConMovimiento?: Discontinuado[];
+  ventaMuyLenta?: ItemCompra[];
 };
 
 const ESPERA_ENTRE_CONSULTAS_MS = 2000;
@@ -54,6 +57,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   const [items, setItems] = useState<ItemCompra[]>([]);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [discontinuados, setDiscontinuados] = useState<Discontinuado[]>([]);
+  const [lentos, setLentos] = useState<ItemCompra[]>([]);
   const [hoy, setHoy] = useState("");
   const [cargando, setCargando] = useState(false);
   const [progreso, setProgreso] = useState<{ listos: number; total: number } | null>(null);
@@ -92,6 +96,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
         }
         setItems(datos.items ?? []);
         setDiscontinuados(datos.discontinuadosConMovimiento ?? []);
+        setLentos(datos.ventaMuyLenta ?? []);
         setResumen(datos.resumen ?? null);
         setHoy(datos.hoy ?? "");
         setProgreso(null);
@@ -110,6 +115,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
   useEffect(() => {
     setItems([]);
     setDiscontinuados([]);
+    setLentos([]);
     setResumen(null);
     setProveedor("");
     void cargar();
@@ -170,6 +176,9 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
             <div><span>Para comprar</span><strong>{items.length}</strong></div>
             <div><span>Con estos filtros</span><strong>{filtrados.length}</strong></div>
             <div><span>Productos evaluados</span><strong>{resumen.productosEvaluados}</strong></div>
+            {(resumen.ventaMuyLenta ?? 0) > 0 && (
+              <div><span>Venta muy lenta</span><strong>{resumen.ventaMuyLenta}</strong></div>
+            )}
             {(resumen.discontinuados ?? 0) > 0 && (
               <div><span>Discontinuados</span><strong>{resumen.discontinuados}</strong></div>
             )}
@@ -206,6 +215,7 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
                       <strong>{i.nombre}</strong>
                       <span>Código {i.codigo} · Pack {formatear(i.multiplo)} · Vende {formatear(i.ventaDiaria)} por día</span>
                       <p>Stock {formatear(i.stock)} u. ({textoDiasAlcanza(i)}) · Objetivo {formatear(i.objetivo)} u.</p>
+                      <p>{textoPedidoReal(i)}</p>
                       <p>{textoCriterio(i)}</p>
                       {i.avisos.map((a) => <small key={a} className="compras-aviso">{textoAviso(a)}</small>)}
                     </div>
@@ -217,6 +227,24 @@ export default function ComprasSugeridas({ usuario }: { usuario: UsuarioCompras 
               </div>
             </div>
           ))}
+
+          {lentos.length > 0 && (
+            <div className="compras-grupo">
+              <h4>Venta muy lenta <small>({lentos.length} · no están en el pedido; pedilos solo si querés tenerlos)</small></h4>
+              <div className="mov-history">
+                {lentos.map((i) => (
+                  <article key={`lento-${i.productoId}`} className="mov-history-item">
+                    <div>
+                      <strong>{i.nombre}</strong>
+                      <span>Código {i.codigo} · {i.proveedores.length > 0 ? i.proveedores.join(" / ") : "(sin proveedor)"}</span>
+                      <p>Vendió {formatear(i.unidadesVendidas)} u. en 60 días · Stock {formatear(i.stock)} u.</p>
+                      <p>{textoPedidoReal(i)}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </div>
+          )}
 
           {discontinuados.length > 0 && (
             <div className="compras-grupo">

@@ -21,11 +21,17 @@
  * - Sugerido = objetivo − stock, redondeado HACIA ARRIBA al pack de compra. Si lo que
  *   falta es menos de media caja y el stock todavía alcanza para una semana o más, se
  *   espera: no se pide una caja entera por una diferencia chica.
+ * - Cada proveedor vende de una forma (compras-proveedores.ts): por unidad, caja cerrada,
+ *   media caja o de a 12. El sugerido se redondea al escalón de ese proveedor, no siempre a la caja.
+ *   Además de lo que se pide, se informa la necesidad real (unidades exactas que faltan).
+ * - VENTA MUY LENTA (2 unidades o menos en 60 días): no se sugiere en la lista principal,
+ *   va a una lista aparte "pedir solo si querés tenerlo", para que no se venza mercadería.
  * - Producto DISCONTINUADO (pack "-" o "discontinuado" en Airtable): nunca se sugiere.
  * - Sin ventas recientes y sin stock: se sugiere un pack, marcado como tal,
  *   para que no se pase por alto un producto que se dejó de reponer.
  * - Se excluyen bolsas y productos "Ocupado".
  */
+import { formatoDeProveedor, pasoDeCompra, type FormatoCompra } from "./compras-proveedores.js";
 import { COBERTURA_POR_GRUPO, NOMBRE_GRUPO, clasificarGrupo, factorDeTemporada, type GrupoCompra } from "./compras-reglas.js";
 
 export const VENTANA_DIAS = 60;
@@ -35,6 +41,8 @@ export const VENTANA_RECIENTE_DIAS = 30;
 /** Si falta menos que esta fracción de una caja, y todavía alcanza el stock, no se pide. */
 export const FRACCION_MINIMA_DE_CAJA = 0.5;
 export const DIAS_PARA_ESPERAR = 7;
+/** Venta muy lenta: esta cantidad de unidades (o menos, pero más de 0) en los últimos 60 días. */
+export const UNIDADES_VENTA_MUY_LENTA = 2;
 
 /** Códigos que no son mercadería comprable (bolsas). Se compara sin ceros a la izquierda. */
 export const CODIGOS_EXCLUIDOS_POR_DEFECTO: readonly string[] = ["10002", "10004"];
@@ -102,9 +110,19 @@ export type ItemCompra = {
   grupoNombre: string;
   coberturaDias: number;
   factorTemporada: number;
+  /** Pack cargado en Airtable (1 si falta). */
   multiplo: number;
+  /** Cómo vende el proveedor (unidad, caja cerrada, media caja, de a 12) y su escalón en unidades. */
+  formatoCompra: FormatoCompra;
+  paso: number;
   objetivo: number;
-  /** Unidades a comprar (múltiplo del pack); 0 si no hace falta. */
+  /** Unidades exactas que faltan para llegar al objetivo (sin redondear a ninguna caja). */
+  necesidadReal: number;
+  /** Unidades vendidas en la ventana (60 días o desde el corte). */
+  unidadesVendidas: number;
+  /** Venta muy lenta: se muestra aparte y no entra en el pedido. */
+  ventaMuyLenta: boolean;
+  /** Unidades a comprar (múltiplo del escalón del proveedor); 0 si no hace falta. */
   sugerido: number;
   avisos: readonly AvisoCompra[];
 };
@@ -231,6 +249,9 @@ export function calcularComprasSugeridas(
     const multiplo = multiploValido ? (p.multiplo as number) : 1;
     const stock = Math.max(0, p.stock);
     const diasAlcanza = ventaDiaria > 0 ? redondear(stock / ventaDiaria, 1) : null;
+    // Con varios proveedores se usa el formato del primero (hasta que haya comparación de costos).
+    const formatoCompra = formatoDeProveedor(p.proveedores[0]);
+    const paso = pasoDeCompra(formatoCompra, multiplo);
 
     if (p.discontinuado) {
       // Ya no se compra: no se sugiere nada ni se muestran otros avisos.
@@ -238,6 +259,7 @@ export function calcularComprasSugeridas(
         productoId: p.productoId, codigo: p.codigo, nombre: p.nombre, categoria, proveedores: p.proveedores,
         stock: redondear(stock), ventaDiaria: redondear(ventaDiaria), diasAlcanza, diasSinVender,
         grupo, grupoNombre: NOMBRE_GRUPO[grupo], coberturaDias, factorTemporada, multiplo,
+        formatoCompra, paso, necesidadReal: 0, unidadesVendidas: redondear(unidades), ventaMuyLenta: false,
         objetivo: 0, sugerido: 0, avisos: ["DISCONTINUADO"],
       });
       continue;
@@ -247,13 +269,16 @@ export function calcularComprasSugeridas(
     if (p.proveedores.length === 0) avisos.push("SIN_PROVEEDOR");
 
     const objetivo = ventaDiaria * coberturaDias * factorTemporada;
-    let sugerido = sugeridoConUmbral(redondear(objetivo - stock), multiplo, diasAlcanza);
+    const faltante = redondear(objetivo - stock);
+    const necesidadReal = redondearAlPack(faltante, 1);
+    let sugerido = sugeridoConUmbral(faltante, paso, diasAlcanza);
 
     if (unidades === 0) {
       avisos.push("SIN_VENTAS_RECIENTES");
       // Sin ventas y sin stock: se sugiere un pack para no perder de vista el producto.
-      if (stock <= 0) sugerido = multiplo;
+      if (stock <= 0) sugerido = paso;
     }
+    const ventaMuyLenta = unidades > 0 && unidades <= UNIDADES_VENTA_MUY_LENTA;
 
     items.push({
       productoId: p.productoId,
@@ -270,7 +295,12 @@ export function calcularComprasSugeridas(
       coberturaDias,
       factorTemporada,
       multiplo,
+      formatoCompra,
+      paso,
       objetivo: redondear(objetivo),
+      necesidadReal,
+      unidadesVendidas: redondear(unidades),
+      ventaMuyLenta,
       sugerido,
       avisos
     });
@@ -309,7 +339,7 @@ export function agruparPorProveedor(
 ): GrupoProveedor[] {
   const grupos = new Map<string, ItemCompra[]>();
   for (const item of items) {
-    if (item.sugerido <= 0) continue;
+    if (item.sugerido <= 0 || item.ventaMuyLenta) continue;
     const nombres = item.proveedores.length > 0 ? item.proveedores : ["(sin proveedor)"];
     for (const nombre of nombres) {
       if (proveedor && nombre !== proveedor) continue;

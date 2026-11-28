@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoCriterio, textoDiasAlcanza, SIN_PROVEEDOR,
+  agruparPedido, filtrarCompras, pedidoACsv, proveedoresDisponibles, textoAviso, textoCriterio, textoDiasAlcanza, textoPedidoReal, SIN_PROVEEDOR,
   type ItemCompra,
 } from "../src/modules/movimientos/compras.js";
 
 function item(o: Partial<ItemCompra>): ItemCompra {
   return {
     productoId: "r", codigo: "1", nombre: "Prod", categoria: null, proveedores: [], stock: 0, ventaDiaria: 1,
-    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, objetivo: 15, sugerido: 12,
+    diasAlcanza: 0, diasSinVender: 0, grupo: "GENERAL", grupoNombre: "General", coberturaDias: 15, factorTemporada: 1, multiplo: 6, formatoCompra: "PACK", paso: 6, necesidadReal: 12, unidadesVendidas: 30, ventaMuyLenta: false, objetivo: 15, sugerido: 12,
     avisos: [], ...o,
   };
 }
@@ -45,6 +45,29 @@ test("pedidoACsv: encabezado, coma decimal y protección de fórmulas", () => {
   assert.match(filas[0], /;Grupo;Cobertura \(días\);Factor temporada;Avisos$/);
   assert.ok(filas[1].includes('"\'=SUMA(1)"'));
   assert.ok(filas[1].includes(";1,25;2,5;"));
+});
+
+test("textoPedidoReal: unidad exacta, caja cerrada con sobrante y coincidencia", () => {
+  assert.equal(
+    textoPedidoReal({ necesidadReal: 3, sugerido: 3, formatoCompra: "UNIDAD", multiplo: 12 }),
+    "Necesidad real: 3 u. (el proveedor vende por unidad)",
+  );
+  assert.equal(
+    textoPedidoReal({ necesidadReal: 3, sugerido: 12, formatoCompra: "PACK", multiplo: 12 }),
+    "Necesidad real: 3 u. · se pide 12 (caja cerrada de 12, sobran 9)",
+  );
+  assert.equal(
+    textoPedidoReal({ necesidadReal: 12, sugerido: 12, formatoCompra: "PACK", multiplo: 12 }),
+    "Necesidad real: 12 u. (caja cerrada de 12)",
+  );
+  assert.match(textoPedidoReal({ necesidadReal: 5, sugerido: 6, formatoCompra: "MEDIO_PACK", multiplo: 12 }), /media caja \(6\) o caja de 12/);
+});
+
+test("pedidoACsv incluye necesidad real y cómo compra el proveedor", () => {
+  const csv = pedidoACsv(agruparPedido([item({ proveedores: ["Alfa"], necesidadReal: 3, sugerido: 12 })]));
+  const filas = csv.replace(/^\uFEFF/, "").split("\r\n");
+  assert.match(filas[0], /;Pack;Necesidad real \(unidades\);Cómo compra el proveedor;Pedir \(unidades\);/);
+  assert.ok(filas[1].includes(';6;3;"caja cerrada de 6";12;'));
 });
 
 test("textos de avisos y de días", () => {

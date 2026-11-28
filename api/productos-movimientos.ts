@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, productoDeEmpresa } from "../lib/alcance-operativo.js";
 import { ErrorSolicitud, obtenerOpciones, prepararAltaProducto } from "../lib/producto-alta.js";
+import { avisarProveedorNuevo } from "../lib/aviso-proveedor-nuevo.js";
 import { limpiarOpcion } from "../lib/producto-opciones.js";
 
 dotenv.config({
@@ -236,6 +237,18 @@ async function crearProducto(payload: CrearProductoPayload, empresaId: string) {
   }
 
   alta.recordar();
+
+  // Si se creó un proveedor nuevo, se avisa a administración para que complete sus datos.
+  // Nunca frena el alta del producto (ya quedó guardado).
+  if (alta.proveedor?.creado) {
+    await avisarProveedorNuevo({
+      empresaId,
+      proveedorNombre: alta.proveedor.nombre,
+      pantalla: "Recepción / Ventas",
+      codigoProducto: busqueda.codigoNormalizado,
+      productoNombre: typeof alta.campos.PRODUCTO === "string" ? alta.campos.PRODUCTO : undefined,
+    });
+  }
 
   return {
     creado: true,

@@ -3,6 +3,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { exigirAutorizacion } from "../lib/autorizacion.js";
 import { configTablaOperativa, productoDeEmpresa, sucursalSolicitada, sucursalRealDeUbicacion } from "../lib/alcance-operativo.js";
 import { ErrorSolicitud, prepararAltaProducto } from "../lib/producto-alta.js";
+import { avisarProveedorNuevo } from "../lib/aviso-proveedor-nuevo.js";
 
 dotenv.config({
   path: ".env.local",
@@ -106,7 +107,7 @@ async function armarCamposProductoNuevo(payload: GuardarStockPayload, empresaId:
     ...alta.campos,
   };
 
-  return { fields, recordar: alta.recordar };
+  return { fields, recordar: alta.recordar, proveedor: alta.proveedor, campos: alta.campos };
 }
 
 async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: string) {
@@ -144,6 +145,18 @@ async function crearProductoSiEsNuevo(payload: GuardarStockPayload, empresaId: s
   }
 
   alta.recordar();
+
+  // Si se creó un proveedor nuevo, se avisa a administración para que complete sus datos.
+  // Nunca frena el alta del producto (ya quedó guardado).
+  if (alta.proveedor?.creado) {
+    await avisarProveedorNuevo({
+      empresaId,
+      proveedorNombre: alta.proveedor.nombre,
+      pantalla: "Stock",
+      codigoProducto: payload.codigo.trim(),
+      productoNombre: typeof alta.campos.PRODUCTO === "string" ? alta.campos.PRODUCTO : undefined,
+    });
+  }
 }
 
 /** Catálogo compartido: cada código consultado tiene que estar asignado
